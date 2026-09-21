@@ -48,12 +48,15 @@ export async function inferLabels(tabId: number, targets: Target[], note: (m: st
   try {
     res = await fetch(PROXY, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fields: payload }) });
   } catch (e) {
-    return { ok: false, error: `The BRIDGE proxy at localhost:8000 is not reachable. ${String(e)}` };
+    // The exception is for whoever debugs this; the applicant hears only the plain reason.
+    note(`request to ${PROXY} failed: ${String(e)}`);
+    return { ok: false, error: 'The BRIDGE proxy at localhost:8000 is not reachable.' };
   }
   if (!res.ok) return { ok: false, error: `The BRIDGE proxy answered ${res.status}.` };
   let reply: unknown;
   try { reply = await res.json(); } catch (e) {
-    return { ok: false, error: `The BRIDGE proxy sent a reply that is not valid JSON. ${String(e)}` };
+    note(`reply from ${PROXY} did not parse: ${String(e)}`);
+    return { ok: false, error: 'The BRIDGE proxy sent a reply that is not valid JSON.' };
   }
   const labels = (reply as { labels?: unknown })?.labels;
   if (!Array.isArray(labels) || !labels.every((l) => typeof l?.id === 'string' && typeof l?.label === 'string')) {

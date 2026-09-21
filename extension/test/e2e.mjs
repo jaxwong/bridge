@@ -98,6 +98,9 @@ try {
 
   // --- label inference, proxy not running (§6.4 failure path) --------------------------
   const down = await spoken(panel, /Label inference is unavailable/);
+  // Heard by hand with VoiceOver: "TypeError: Failed to fetch" is noise to an applicant.
+  check('proxy down: the raw exception goes to Diagnostics, not into the spoken sentence',
+    !/TypeError/.test(down) && /TypeError/.test(await panel.textContent('#diag')), `${down} | diag: ${(await panel.textContent('#diag')).slice(-160)}`);
   check('proxy down: said once, in plain words, and the question keeps a usable name',
     /so 2 questions have no name/.test(down) && (await panel.locator('#questions').textContent()).includes('Unlabelled text (label inferred)'), down);
 
@@ -537,6 +540,8 @@ try {
       await panel.getByRole('button', { name: 'Scan the page again' }).click();
       said = await spoken(panel, expected);
       check(`proxy reply is ${mode}: reported, not swallowed`, /Label inference is unavailable/.test(said), said);
+      if (mode === 'garbage') check('proxy reply is garbage: the raw exception goes to Diagnostics, not into the spoken sentence',
+        !/SyntaxError/.test(said) && /SyntaxError/.test(await panel.textContent('#diag')), said);
     }
     proxyMode = 'ok';
     await panel.getByRole('button', { name: 'Scan the page again' }).click();
