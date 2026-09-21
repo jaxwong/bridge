@@ -1,0 +1,15 @@
+{
+  "name": "bridge-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BRIDGE employer dashboard: loads barrier reports and shows what changed between scans",
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-strip-types test/compare.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "typescript": "5.9.3"
+  }
+}
