@@ -130,10 +130,16 @@ The monitor and the dashboard read the barrier report format defined in `bridge-
 That spec owns the format; change it there, not here.
 
 To compare two scans, the dashboard needs a key that stays the same across form versions.
-**Key: `rule` + field label.** The §6.7 example carries a `selector`, but `FieldDescriptor`
-(`extension/lib/types.ts`) has none, and generated selectors change between releases anyway.
-Barriers that belong to the page rather than a field (`pageBarriers`, e.g. `captcha`) use
-`rule` alone. Settle this in §6.7 before either side builds against it.
+**Key: `rule` + field label.** An earlier §6.7 example carried a `selector`, but
+`FieldDescriptor` (`extension/lib/types.ts`) has none, and generated selectors change
+between releases anyway. Barriers that belong to the page rather than a field
+(`pageBarriers`, e.g. `captcha`) use `rule` alone.
+
+**Settled.** §6.7 now requires `label` on every field-level barrier, drops `selector`, and
+defines `pageBarriers` and the `ScanResult` -> report mapping. Forms are identified across
+time by `portal` + `pagePath`, with the query string excluded, which is what lets the §6.5
+`?v=` fixtures stand in for one form changing between scans. Hand-written reports in this
+shape are in `fixtures/reports/`; the dashboard is built against them.
 
 ### 6.2 Monitor
 

@@ -1,0 +1,13 @@
+{
+  "portal": "boards.greenhouse.io",
+  "pagePath": "/example/jobs/0000000",
+  "generatedAt": "2026-09-21T09:00:00Z",
+  "barriers": [],
+  "pageBarriers": [
+    {
+      "rule": "captcha",
+      "severity": "blocking",
+      "impact": "This page has a CAPTCHA. BRIDGE cannot complete it, so you may need sighted help at that point."
+    }
+  ]
+}

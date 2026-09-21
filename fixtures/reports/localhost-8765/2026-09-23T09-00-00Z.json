@@ -1,0 +1,26 @@
+{
+  "portal": "localhost:8765",
+  "pagePath": "/",
+  "generatedAt": "2026-09-23T09:00:00Z",
+  "barriers": [
+    {
+      "rule": "group-not-labelled",
+      "severity": "blocking",
+      "label": "Will you now or in the future require sponsorship for employment visa status?",
+      "impact": "The question \"Will you now or in the future require sponsorship for employment visa status?\" is not tied to its options, so a screen reader reads the options without it."
+    },
+    {
+      "rule": "options-identically-named",
+      "severity": "blocking",
+      "label": "Will you now or in the future require sponsorship for employment visa status?",
+      "impact": "All 2 options for \"Will you now or in the future require sponsorship for employment visa status?\" sound identical to a screen reader. The words \"Yes\" and \"No\" are never spoken."
+    }
+  ],
+  "pageBarriers": [
+    {
+      "rule": "drag-drop-only",
+      "severity": "blocking",
+      "impact": "The CV uploader can only be used by dragging a file onto it."
+    }
+  ]
+}

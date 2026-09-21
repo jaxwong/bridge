@@ -537,7 +537,9 @@ found in VoiceOver is real; passing VoiceOver does not discharge the NVDA pass.
 
 ### 6.7 Barrier report (employer side, MVP)
 
-"Export barrier report" in the side panel produces Markdown + JSON:
+"Export barrier report" in the side panel produces Markdown + JSON. The monitor in
+[`bridge-business.md`](bridge-business.md) §6.2 writes the same JSON, so one scanned page
+produces one report whichever side produced it:
 
 ```json
 {
@@ -546,14 +548,47 @@ found in VoiceOver is real; passing VoiceOver does not discharge the NVDA pass.
   "generatedAt": "2026-09-24T10:00:00Z",
   "barriers": [
     { "rule": "drag-drop-only", "severity": "blocking",
-      "selector": "#cv-dropzone",
+      "label": "CV upload",
       "impact": "A screen reader user cannot attach a CV." }
+  ],
+  "pageBarriers": [
+    { "rule": "captcha", "severity": "blocking",
+      "impact": "A screen reader user cannot verify they are not a bot." }
   ]
 }
 ```
 
-Contains no field values and no applicant identity. Sending it anywhere is a manual user action in the MVP. This format is the contract with the
-employer dashboard and monitor in [`bridge-business.md`](bridge-business.md) §6; change it here, not there.
+It is a projection of one `ScanResult` (§6.1), flattened:
+
+| Report | Comes from |
+|---|---|
+| `portal` | `location.host` of the scanned page, port included |
+| `pagePath` | `location.pathname`. **The query string is excluded** — see below |
+| `generatedAt` | `ScanResult.scannedAt` |
+| `barriers[]` | Every `FieldDescriptor.barriers` entry, in page order, each carrying its field's `label` |
+| `barriers[].impact` | `Barrier.message`. The same sentence, renamed at the boundary: it is spoken to the applicant and read by the employer |
+| `pageBarriers[]` | `ScanResult.pageBarriers`, which belong to no field and so carry no `label` |
+
+Fields with no barriers do not appear. The report carries no field values, no applicant
+identity, and no `stepHint`.
+
+**`label` is required on every `barriers[]` entry, and there is no `selector`.** The
+dashboard compares two scans of the same form by `rule` + `label` for field-level barriers
+and by `rule` alone for `pageBarriers` (`bridge-business.md` §6.1). A generated selector
+changes whenever the vendor ships a release, which would report every barrier as
+simultaneously resolved and new; `FieldDescriptor` has no `selector` to emit in any case.
+An earlier draft of this example carried one. A producer may add `selector` for a human
+reading the JSON, but nothing may key on it.
+
+**Why `pagePath` drops the query string.** The comparison groups reports by
+`portal` + `pagePath`, so that is the identity of a form across time. Postings on the
+portals in §11 put the job in the path. It also lets the Acme fixture's `?v=2` / `?v=3`
+(`bridge-business.md` §6.5) stand in for the same form changing between scans, which is
+the employer demo.
+
+Sending the report anywhere is a manual user action in the MVP. This format is the contract
+with the employer dashboard and monitor in [`bridge-business.md`](bridge-business.md) §6;
+change it here, not there.
 
 ## 7. Test fixtures
 
