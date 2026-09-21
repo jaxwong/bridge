@@ -848,9 +848,9 @@ decisions above; `bridge-business.md` §6.1 marked settled.
 
 ### 8.8 Stays with a human
 
-These cannot be done by the build and are not claimed by it. Load the unpacked build from
-`extension/.output/chrome-mv3`, serve the fixture (`extension/README.md`), and run the
-proxy (`proxy/README.md`) for item 3.
+These cannot be done by the build and are not claimed by it. **Step-by-step instructions
+for each, with what to expect, what to write down and what each failure means, are in
+[`manual-checks.md`](manual-checks.md).**
 
 1. **Focus spike**, 10 minutes: README steps. Its answer sets the first line of §9.
 2. **Alt+Shift+S from the keyboard.** The command's wiring and whether `el.focus()` in the
