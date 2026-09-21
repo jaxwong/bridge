@@ -45,30 +45,39 @@ export default defineContentScript({
       try { return await work(); } finally { setTimeout(() => { busy--; }, 600); }
     }
 
-    /**
-     * Chrome does not let a page take keyboard focus from the side panel (measured by hand,
-     * manual-checks.md check 2), so "move the user to the button" cannot be done. With `act`,
-     * a button that only moves on is pressed for the user. A button that submits is never
-     * pressed (§6.5): it gets the page's focus, so Chrome's pane key lands on it.
-     */
-    function forwardAction(act: boolean): ForwardAction | null {
-      const scope = formScope();
-      const buttons = deepQueryAll<HTMLElement>(scope, 'button,input[type=submit],input[type=button],[role=button],a[href]')
+    /** The step's forward button: the last one in page order, where forms put it. */
+    function findForward(): { b: HTMLElement; name: string; submits: boolean } | null {
+      const buttons = deepQueryAll<HTMLElement>(formScope(), 'button,input[type=submit],input[type=button],[role=button],a[href]')
         .filter((b) => visible(b) && !(b as HTMLButtonElement).disabled)
         .map((b) => ({ b, name: accName(b).name || clean(b.textContent) || (b as HTMLInputElement).value || '' }))
         .filter(({ name }) => FORWARD.test(name) && !NOT_FORWARD.test(name));
-      // The last one in page order: forms put the forward action at the end.
       const hit = buttons[buttons.length - 1];
+      return hit ? { ...hit, submits: SUBMITS.test(hit.name) } : null;
+    }
+
+    /**
+     * Chrome does not let a page take keyboard focus from the side panel (measured by hand,
+     * manual-checks.md check 2), so "move the user to the button" cannot be done. With `act`,
+     * a button that only moves on is pressed for the user. One that submits is never pressed
+     * here, whatever the caller asks: submitting has its own message.
+     */
+    function forwardAction(act: boolean): ForwardAction | null {
+      const hit = findForward();
       if (!hit) return null;
-      const submits = SUBMITS.test(hit.name);
-      if (!act) return { name: hit.name, submits, pressed: false };
-      if (submits) {
-        hit.b.scrollIntoView({ block: 'center' });
-        hit.b.focus();
-        return { name: hit.name, submits, pressed: false };
-      }
+      if (act && !hit.submits) hit.b.click();
+      return { name: hit.name, submits: hit.submits, pressed: act && !hit.submits };
+    }
+
+    /**
+     * Submits the application. The panel sends this only from the user's own confirmation
+     * (§6.5). It presses a button only if its name says it submits; anything else is refused,
+     * so this message cannot be used to press Next.
+     */
+    function submitApplication(): ForwardAction | null {
+      const hit = findForward();
+      if (!hit?.submits) return null;
       hit.b.click();
-      return { name: hit.name, submits, pressed: true };
+      return { name: hit.name, submits: true, pressed: true };
     }
 
     async function handle(msg: Request): Promise<unknown> {
@@ -116,6 +125,9 @@ export default defineContentScript({
 
         case 'bridge/forward-action':
           return forwardAction(msg.act);
+
+        case 'bridge/submit':
+          return submitApplication();
 
         case 'bridge/rect': {
           // For a label-inference crop (§6.4). Field values never leave the device, so a

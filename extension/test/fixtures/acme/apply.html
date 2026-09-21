@@ -240,6 +240,8 @@
     document.getElementById('apply').addEventListener('submit', (e) => {
       e.preventDefault();
       document.getElementById('result').textContent = 'Submitted (test page, nothing sent).';
+      // Like a real site: a confirmation page follows.
+      location.href = 'received.html';
     });
   </script>
 </body>
