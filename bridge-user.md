@@ -891,7 +891,7 @@ for each, with what to expect, what to write down and what each failure means, a
 [`manual-checks.md`](manual-checks.md).**
 
 1. **Focus spike.** Answered for the keyboard on 2026-09-21 (§10). Still to do: what VoiceOver
-   speaks when the panel opens, and whether Alt+Shift+B on an open panel reopens it with focus inside.
+   speaks when the panel opens.
 2. **Alt+Shift+S from the keyboard.** The command's wiring and whether `el.focus()` in the
    page pulls keyboard focus out of the side panel cannot be tested headlessly. The suite
    proves the panel and page logic by sending the same message the shortcut sends.
@@ -982,8 +982,8 @@ user's password manager. Say this out loud in the pitch; it reads as judgement, 
   by hand** on Chrome 154, macOS, 2026-09-21. After Alt+Shift+B opens the panel, Tab moves
   inside it. A panel that is already open cannot take focus from the page: `window.focus()` in
   the panel was tried and did nothing. So Alt+Shift+B closes an open panel and shows it again.
-  The panel reloads, and answers typed but not written are lost. Whether the reopened panel
-  holds focus from a real keyboard is §8.8 item 1. F6 does nothing on macOS;
+  The panel reloads, and answers typed but not written are lost. Checked by hand the same
+  day: the panel reopens and Tab moves inside it. F6 does nothing on macOS;
   Cmd+Option+Down arrow reaches the panel in four presses.
 - Can a content script's `focus()` take keyboard focus *out of* the side panel (Alt+Shift+S)? Untested, §8.8 item 2.
 

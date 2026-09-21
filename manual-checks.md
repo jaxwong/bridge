@@ -113,6 +113,7 @@ back to the panel after working in the page.
    so the shortcut reopens it.
 7. Without touching the mouse, press **Tab**, then type `abc`. Read the result the same way
    as step 5: the focus ring should move inside the panel.
+   **Result, 2026-09-21, Chrome 154 on macOS: the panel reopens and Tab moves inside it.**
    If focus stays in the page, the fallback is Chrome's own pane key on macOS:
    **Cmd+Option+Down arrow**, four presses (address bar, tabs, extensions, panel). F6 is
    Chrome's pane key on Windows and Linux only; on a Mac it does nothing.
