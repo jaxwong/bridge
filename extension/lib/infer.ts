@@ -51,7 +51,14 @@ export async function inferLabels(tabId: number, targets: Target[], note: (m: st
     return { ok: false, error: `The BRIDGE proxy at localhost:8000 is not reachable. ${String(e)}` };
   }
   if (!res.ok) return { ok: false, error: `The BRIDGE proxy answered ${res.status}.` };
-  const { labels } = await res.json() as { labels: { id: string; label: string; confidence: number }[] };
+  let reply: unknown;
+  try { reply = await res.json(); } catch (e) {
+    return { ok: false, error: `The BRIDGE proxy sent a reply that is not valid JSON. ${String(e)}` };
+  }
+  const labels = (reply as { labels?: unknown })?.labels;
+  if (!Array.isArray(labels) || !labels.every((l) => typeof l?.id === 'string' && typeof l?.label === 'string')) {
+    return { ok: false, error: 'The BRIDGE proxy sent a reply that is not in the expected shape.' };
+  }
   note(`${labels.length} label${labels.length === 1 ? '' : 's'} inferred`);
   return { ok: true, labels };
 }

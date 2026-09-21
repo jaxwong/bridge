@@ -22,8 +22,17 @@ export type Response<T extends Request['type']> =
   T extends 'bridge/rect' ? CropRect | null :
   never;
 
+/** What the content script answers when a handler threw. Distinct from every Response. */
+export interface HandlerThrew { handlerThrew: string }
+
 export async function send<R extends Request>(tabId: number, frameId: number, req: R): Promise<Response<R['type']>> {
-  return browser.tabs.sendMessage(tabId, req, { frameId }) as Promise<Response<R['type']>>;
+  const res = await browser.tabs.sendMessage(tabId, req, { frameId }) as Response<R['type']> | HandlerThrew | undefined;
+  // The one place that turns a thrown handler back into an exception; without it a failed
+  // scan read as "no questions". A result that merely reports a refusal passes through.
+  if (res && typeof res === 'object' && 'handlerThrew' in res) {
+    throw new Error(`${req.type} failed in the page: ${res.handlerThrew}`);
+  }
+  return res as Response<R['type']>;
 }
 
 /** The step's primary forward control: Continue on steps 1..n-1, Submit on the last (§6.5). */

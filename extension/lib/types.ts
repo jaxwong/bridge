@@ -17,8 +17,7 @@ export interface FieldDescriptor {
   id: string;
   kind: ControlKind;
   label: string;
-  /** 'llm' is only ever set by the side panel, after label inference (§6.4). */
-  labelSource: 'aria' | 'label-element' | 'nearby-text' | 'none' | 'llm';
+  labelSource: 'aria' | 'label-element' | 'nearby-text' | 'none';
   required: boolean;
   /** Choices, in page order. Radio groups use each option's visible text, not its aria-label. */
   options?: string[];

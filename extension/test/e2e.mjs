@@ -35,6 +35,7 @@ await new Promise((r) => server.listen(8765, r));
 // the suite never calls a model. It records what the panel sends and names every field
 // "Preferred office". It is started part-way through, to cover "proxy not running" first.
 const proxyRequests = [];
+let proxyMode = 'ok'; // 'ok' | '502' | 'garbage' | 'wrong-shape'
 const proxyStub = createServer((q, s) => {
   const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'POST, OPTIONS' };
   if (q.method === 'OPTIONS') { s.writeHead(204, cors); s.end(); return; }
@@ -43,8 +44,13 @@ const proxyStub = createServer((q, s) => {
   q.on('end', () => {
     const { fields } = JSON.parse(body);
     proxyRequests.push(fields);
+    if (proxyMode === '502') { s.writeHead(502, cors); s.end('{"detail":"model returned empty content"}'); return; }
     s.writeHead(200, { ...cors, 'content-type': 'application/json' });
-    s.end(JSON.stringify({ labels: fields.map((f) => ({ id: f.id, label: 'Preferred office', confidence: 0.9 })) }));
+    if (proxyMode === 'garbage') { s.end('<html>not json</html>'); return; }
+    if (proxyMode === 'wrong-shape') { s.end(JSON.stringify({ labels: 'nope' })); return; }
+    // Named after what was asked, so a name that reaches the wrong question is recognisable.
+    const nameFor = (f) => (f.options?.includes('Hanoi') ? 'Preferred office' : 'Expected salary');
+    s.end(JSON.stringify({ labels: fields.map((f) => ({ id: f.id, label: nameFor(f), confidence: 0.9 })) }));
   });
 });
 
@@ -76,7 +82,15 @@ async function spoken(panel, re) {
 const pressForward = (tabId) => sw.evaluate((id) => chrome.runtime.sendMessage({ type: 'bridge/command-forward', tabId: id }), tabId);
 const pageFocus = (page) => page.evaluate(() => document.activeElement?.textContent?.trim() || document.activeElement?.tagName);
 
+/** One failure must not hide every later result: a section that throws is one FAIL. */
+async function section(name, fn) {
+  try { await fn(); } catch (e) { check(`${name}: ran to completion`, false, String(e).split('\n').slice(0, 3).join(' ')); }
+}
+/** For waits that ARE the assertion: a timeout is a FAIL, not a crash. */
+const arrives = (promise) => promise.then(() => true, () => false);
+
 try {
+  await section('single page', async () => {
   const { page, panel, tabId } = await open('');
   check('found the test tab', typeof tabId === 'number', `tabId=${tabId}`);
 
@@ -245,8 +259,8 @@ try {
   // the privacy rule is tested for real: nothing the applicant entered may be in the request.
   await new Promise((r) => proxyStub.listen(8000, '127.0.0.1', r));
   await panel.getByRole('button', { name: 'Scan the page again' }).click();
-  await panel.locator('#questions label', { hasText: 'Preferred office (label inferred)' }).waitFor({ timeout: 10000 });
-  check('inference: the unlabelled dropdown is renamed and marked as inferred', true);
+  check('inference: the unlabelled dropdown is renamed and marked as inferred',
+    await arrives(panel.locator('#questions label', { hasText: 'Preferred office (label inferred)' }).waitFor({ timeout: 10000 })));
   check('inference: its Write button uses the new name',
     await panel.getByRole('button', { name: 'Write Preferred office to page' }).count() === 1);
   const sent = proxyRequests[0];
@@ -259,10 +273,15 @@ try {
     await panel.locator('#questions label', { hasText: 'Unlabelled text (label inferred)' }).count() === 1);
   check('inference: the request carries structure only, none of the answers on the page',
     !/Zheng|8000 0000|Bachelor|resume\.pdf|ACME-42|01\/10\/2026/.test(JSON.stringify(proxyRequests)));
+  // The privacy rule itself (§6.4): a control may be photographed only while it is empty.
+  const rect = (fieldId) => sw.evaluate(({ id, fieldId }) => chrome.tabs.sendMessage(id, { type: 'bridge/rect', fieldId }, { frameId: 0 }), { id: tabId, fieldId });
+  const before = await rect('f3');
+  check('privacy: an empty control yields a crop rectangle', !!before && before.width > 0 && before.dpr > 0, JSON.stringify(before));
   await panel.getByLabel(/Preferred office/).selectOption('Hanoi');
   await panel.getByRole('button', { name: 'Write Preferred office to page' }).click();
   await status('Preferred office').filter({ hasText: /On the page|Could not/ }).waitFor();
   check('inference: the renamed question still writes to the right field', await page.locator('select[name=office]').inputValue() === 'Hanoi');
+  check('privacy: once it holds an answer, the same control is refused a rectangle', (await rect('f3')) === null);
   await panel.getByRole('button', { name: 'Scan the page again' }).click();
   await spoken(panel, /questions found/);
   check('inference: an inferred name is kept across rescans without asking again', proxyRequests.length === 1 &&
@@ -289,18 +308,20 @@ try {
 
   // --- a full page load (§4): the content script is gone, the panel notices by itself ---
   await page.reload();
-  await panel.waitForFunction(() => /page reloaded/.test(document.getElementById('live').textContent), null, { timeout: 15000 });
-  check('reload: the panel rescans without being asked and says so', true);
+  check('reload: the panel rescans without being asked and says so',
+    await arrives(panel.waitForFunction(() => /page reloaded/.test(document.getElementById('live').textContent), null, { timeout: 15000 })));
   check('reload: confirmations of the old document are cleared', await panel.locator('#questions .status.ok').count() === 0);
   check('reload: what the user typed in the panel is kept', await panel.getByLabel('Full name').inputValue() === 'Zheng Wei');
   await panel.getByRole('button', { name: 'Write Full name to page' }).click();
   await status('Full name').filter({ hasText: /On the page|Could not/ }).waitFor();
   check('reload: the fresh content script takes writes', await page.inputValue('#name') === 'Zheng Wei');
 
+  });
+
   // =====================================================================================
   // Multi-step, LinkedIn's shape: a native <dialog>, steps swapped in place, no URL change.
   // =====================================================================================
-  {
+  await section('dialog wizard', async () => {
     const { page, panel, tabId } = await open('modal.html');
     check('modal: a search page with one field makes no on-load announcement',
       (await page.textContent('#bridge-announcement')) === '');
@@ -387,12 +408,12 @@ try {
     check('export: no applicant data', !/resume\.pdf|zw@example|Zheng/.test(JSON.stringify(report)));
     const [md] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as Markdown' }).click()]);
     check('export: Markdown twin', /^# Accessibility barrier report: localhost:8765\/modal\.html/.test(readFileSync(await md.path(), 'utf8')));
-  }
+  });
 
   // =====================================================================================
   // Multi-step, Workday's shape: every step a full navigation that destroys the content script.
   // =====================================================================================
-  {
+  await section('full-navigation journey', async () => {
     const { page, panel, tabId } = await open('steps/1.html');
     let said = await spoken(panel, /Step 1 of 3/);
     check('full-nav: the journey is read from the page\'s stepper', /Step 1 of 3: My Information\. Next: My Experience\./.test(said), said);
@@ -414,12 +435,12 @@ try {
     said = await spoken(panel, /Focus is on the Submit button/);
     check('full-nav: forward command reaches Submit on the last step', await pageFocus(page) === 'Submit', said);
     check('full-nav: BRIDGE did not submit', (await page.textContent('#result')) === '');
-  }
+  });
 
   // =====================================================================================
   // Uploaders: a label names an input, it does not make it reachable (spec §6.2).
   // =====================================================================================
-  {
+  await section('uploaders', async () => {
     // The query string is how the employer demo versions one form (Acme ?v=2, ?v=3).
     const { page, panel } = await open('uploaders.html?v=3');
     const listed = await panel.locator('#barriers li').allTextContents();
@@ -438,7 +459,119 @@ try {
     check('export: a one-step form has pageBarriers, no steps, and no step numbers',
       report.pageBarriers.length === 1 && report.pageBarriers[0].rule === 'drag-drop-only' && !('steps' in report) && !('step' in report.pageBarriers[0]),
       JSON.stringify(report).slice(0, 300));
-  }
+  });
+
+  // =====================================================================================
+  // Failure and edge cases (AGENTS.md §7). Each check names the behaviour, not the code.
+  // =====================================================================================
+  await section('edge cases', async () => {
+    const { page, panel, tabId } = await open('edge.html');
+    await panel.getByLabel('Full list').check();
+    const names = await panel.locator('#questions .name').allTextContents();
+    check('a malformed iframe src does not take the scan down', names.some((n) => n === 'Full name'), (await panel.textContent('#summary')));
+    check('clickable divs whose class merely CONTAINS "date" are not fields',
+      !names.some((n) => /candidate|Why we ask|Update your profile/.test(n)), names.join(' | '));
+    check('an unlabelled input does not borrow the neighbouring field\'s label',
+      names.filter((n) => /^Full name/.test(n)).length === 1 && names.includes('Unlabelled text (label inferred)'), names.join(' | '));
+
+    const city = () => panel.locator('.q', { hasText: 'City' }).locator('option').allTextContents();
+    check('dependent dropdown: first scan reads Singapore\'s cities', (await city()).join() === 'Choose an answer,Jurong,Tampines', (await city()).join());
+    await page.selectOption('#country', 'Vietnam');
+    await panel.getByRole('button', { name: 'Scan the page again' }).click();
+    check('dependent dropdown: a rescan reads the options the page offers NOW',
+      await arrives(panel.waitForFunction(() => /Hanoi/.test(document.getElementById('questions').textContent), null, { timeout: 8000 })), (await city()).join());
+
+    const q = (label) => panel.locator('.q', { hasText: label });
+    const write = async (label, fillIn) => {
+      await fillIn(q(label));
+      await q(label).getByRole('button', { name: /^Write/ }).click();
+      await q(label).locator('.status').filter({ hasText: /On the page|Could not/ }).waitFor();
+      return q(label).locator('.status').textContent();
+    };
+    check('a dropdown that ignores synthetic events is offered as free text, with a note',
+      await q('Team').locator('input[type=text]').count() === 1 && /could not read this dropdown/.test(await q('Team').textContent()));
+    const team = await write('Team', (el) => el.locator('input').fill('Platform'));
+    check('…and writing to it fails loudly rather than pretending', /^Could not fill.*No option matching "Platform"/.test(team), team);
+    // A refusal decided in the page is an answer, not a lost connection. Saying "lost
+    // contact" would send the user to reload a page that is working.
+    check('…and a refusal from the page is not reported as lost contact', !/Lost contact|failed in the page/.test(team), team);
+
+    const conf = await write('Confidence', (el) => el.locator('input').fill('70'));
+    check('slider shape 1, input[type=range]: native setter', await page.inputValue('#confidence') === '70', conf);
+    const volume = await write('Volume', (el) => el.locator('input').fill('3'));
+    check('slider shape 2, focusable role=slider: Home then ArrowRight', await page.getAttribute('#volume', 'aria-valuenow') === '3', volume);
+    const rating = await write('Rating', (el) => el.locator('input').fill('3'));
+    check('slider shape 3 with no published range: refused with the reason, and nothing else',
+      rating === 'Could not fill: may need sighted help. The slider does not publish its range.', rating);
+    const dob = await write('Date of birth', (el) => el.locator('input').fill('1999-12-31'));
+    check('date: type=date is written as ISO', await page.inputValue('#dob') === '1999-12-31', dob);
+    const from = await write('Available from', (el) => el.locator('input').fill('2026-10-01'));
+    check('date: a text input asking mm/dd/yyyy gets month first', await page.inputValue('#from') === '10/01/2026', from);
+
+    await pressForward(tabId);
+    let said = await spoken(panel, /Your application contains/);
+    check('no forward button: VERIFY still reads back, and does not invent a button', /BRIDGE never submits\. Press the page's own submit button/.test(said), said);
+    await pressForward(tabId);
+    said = await spoken(panel, /could not find/);
+    check('no forward button: the second press says so', /BRIDGE could not find a Continue or Submit button/.test(said), said);
+
+    await page.close();
+    await q('Full name').locator('input').fill('X');
+    await q('Full name').getByRole('button', { name: /^Write/ }).click();
+    await q('Full name').locator('.status').filter({ hasText: /Could not|On the page/ }).waitFor();
+    const lost = await q('Full name').locator('.status').textContent();
+    check('the tab is gone: the write fails loudly', /^Could not fill.*Lost contact with the page/.test(lost), lost);
+  });
+
+  await section('label inference failures and page identity', async () => {
+    const before = proxyRequests.length;
+    proxyMode = '502';
+    const { page, panel } = await open('unnamed-a.html');
+    let said = await spoken(panel, /Label inference is unavailable/);
+    check('proxy answers 502: one plain sentence, the question keeps its honest name',
+      /proxy answered 502/.test(said) && (await panel.locator('#questions').textContent()).includes('Unlabelled select'), said);
+    for (const [mode, expected] of [['garbage', /not valid JSON/], ['wrong-shape', /not in the expected shape/]]) {
+      proxyMode = mode;
+      await panel.getByRole('button', { name: 'Scan the page again' }).click();
+      said = await spoken(panel, expected);
+      check(`proxy reply is ${mode}: reported, not swallowed`, /Label inference is unavailable/.test(said), said);
+    }
+    proxyMode = 'ok';
+    await panel.getByRole('button', { name: 'Scan the page again' }).click();
+    check('proxy recovers: the dropdown on page A is named for ITS options',
+      await arrives(panel.locator('#questions .name', { hasText: 'Preferred office (label inferred)' }).waitFor({ timeout: 8000 })));
+
+    await page.click('#go');
+    said = await spoken(panel, /New step/);
+    check('a step change with no stepper says so, and does not invent a total', /^New step: About the role\. Total number of steps unknown\./.test(said), said);
+    check('page B\'s dropdown gets its own name, never page A\'s',
+      await arrives(panel.locator('#questions .name', { hasText: 'Expected salary (label inferred)' }).waitFor({ timeout: 8000 })) &&
+      !(await panel.locator('#questions').textContent()).includes('Preferred office'),
+      (await panel.locator('#questions .name').allTextContents()).join(' | '));
+    check('…and that took a request of its own', proxyRequests.length - before >= 5, `${proxyRequests.length - before} requests`);
+  });
+
+  await section('no page to work on', async () => {
+    // Without ?tabId= the panel takes the active tab, which here is the panel itself: an
+    // extension page, where no content script can run.
+    const panel = await ctx.newPage();
+    await panel.goto(`chrome-extension://${extId}/sidepanel.html`);
+    const said = await spoken(panel, /BRIDGE cannot read this page/);
+    check('a page BRIDGE may not run in: said plainly, no questions invented',
+      /cannot read this page/.test(said) && await panel.locator('#questions .q').count() === 0, said);
+  });
+
+  await section('user-added site registration', async () => {
+    const panel = await ctx.newPage();
+    await panel.goto(`chrome-extension://${extId}/sidepanel.html?tabId=0`);
+    const register = () => panel.evaluate(() => chrome.runtime.sendMessage({ type: 'bridge/register-site', origin: 'https://example.com' }));
+    const first = await register();
+    const second = await register();
+    const registered = await sw.evaluate(() => chrome.scripting.getRegisteredContentScripts());
+    check('register-site: registers one all-frames content script for the origin, and a second call is a no-op',
+      first?.ok && second?.ok && registered.length === 1 && registered[0].matches.join() === 'https://example.com/*' && registered[0].allFrames === true,
+      JSON.stringify({ first, second, registered }));
+  });
 } finally {
   await ctx.close();
   server.close();

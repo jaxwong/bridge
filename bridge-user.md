@@ -72,8 +72,9 @@ same-origin navigation but is revoked on cross-origin navigation**, and it cover
 frame's origin only. So on a portal outside the list, a single-sign-on detour or a redirect
 to the employer's own ATS silently disconnects BRIDGE mid-application, and the user would
 have to press the shortcut again. Adding the site removes that. Even on the same origin, a
-full page load discards an injected content script, so the service worker re-injects on
-`tabs.onUpdated` while `activeTab` still holds.
+full page load discards an injected content script, so the service worker reports each
+completed load (`tabs.onUpdated`) and the side panel re-prepares the frames and rescans,
+which re-injects while `activeTab` still holds.
 
 Chrome's permission prompt appears when the user adds a site. Include it in the NVDA pass.
 
@@ -219,7 +220,7 @@ interface FieldDescriptor {
   id: string;               // positional within one scan of one frame, e.g. "f3"
   kind: ControlKind;
   label: string;
-  labelSource: "aria" | "label-element" | "nearby-text" | "none" | "llm";
+  labelSource: "aria" | "label-element" | "nearby-text" | "none";
   required: boolean;
   options?: string[];       // select / groups / custom dropdown (harvested by opening it)
   range?: { min: number; max: number; step: number };   // sliders that publish one
@@ -644,7 +645,7 @@ Status at the start of the night, measured on branch `implement-bridge-user`:
 Everything below was built in this order, each step ending with `npm run typecheck` and
 `npm run test:e2e` green and a commit.
 
-**Status: 8.1 to 8.7 are done.** `npm run test:e2e` is 98/98, typecheck is clean, the panel
+**Status: 8.1 to 8.7 are done.** `npm run test:e2e` is 125/125, typecheck is clean, the panel
 has zero axe violations. What remains is §8.8, which needs a person.
 
 | Step | Commit | Verified by |
@@ -654,6 +655,23 @@ has zero axe violations. What remains is §8.8, which needs a person.
 | 8.3 multi-step, 8.4 panel features | `53782a3` | e2e, except "always enable" (needs a real click) |
 | 8.5 proxy and label inference | `f825b69`, `a6e42f7` | proxy tests 16/16; e2e against a labelled stub; one live DeepSeek call with a crop (200, correct label); one live extension → proxy → DeepSeek call (200). The panel's own screenshot crop needs `activeTab` and is in §8.8 |
 | 8.6 live portal | `2d9214b` | the built extension on the live GitLab Greenhouse posting, §11 |
+| Audit against AGENTS.md | this commit | five defects reproduced, fixed test-first; `edge.html`, `unnamed-a/b.html` |
+
+**Found by the audit and deliberately not changed**, because each needs a decision or a
+refactor rather than a patch:
+
+- **The "BRIDGE is busy" guard is a timer**, not a structure: a counter with a 600 ms tail,
+  on top of the fixed waits in `lib/act.ts` (300 ms for a dropdown to open, 400 ms before
+  read-back). A slow page can outrun them. Failure is loud ("Could not fill", or a dropdown
+  offered as free text), never silent.
+- **A session never ends.** It is keyed by tab and origin, so a second application on the
+  same site in the same tab is recorded into the first one's steps, and the exported report
+  mixes them. Needs a rule for "a new application started" that Back-to-step-1 does not trip.
+- **One live region, last writer wins.** A write confirmation that lands after VERIFY
+  replaces the read-back summary before it may have been heard.
+- **A content-script handler that throws** is turned into "BRIDGE cannot read this page"
+  by `send()`. Verified twice by temporarily restoring a bug; no handler throws on any
+  fixture any more, so no permanent test pins it.
 
 ### Decisions this plan makes
 
@@ -737,13 +755,13 @@ range → panel shows a plain number input and ACT reports "Could not fill: no r
 
 ### 8.2 Frames
 
-Build: `bridge/frame-hello` and the per-tab registry in the service worker; the panel
-scans every registered frame and merges results in page order (top frame first);
-`fill` / `read-back` carry the frame; `cross-origin-frame-unreachable` derived in the
-panel from the top frame's visible iframe origins minus the registry; on
-`tabs.onUpdated` status `complete` the service worker re-injects while `activeTab`
-holds, treating "missing host permission" as the one expected failure, and broadcasts
-`bridge/page-loaded` so the panel rescans.
+Build: the service worker answers "which frames may BRIDGE run in" by running a one-line
+script with `allFrames: true` (see the decision above; there is no registry); the panel
+scans every such frame and merges results, top frame first; `fill` / `read-back` carry the
+frame; `cross-origin-frame-unreachable` derived in the panel from the top frame's visible
+iframe origins minus the reachable frames; on `tabs.onUpdated` status `complete` the
+service worker broadcasts `bridge/page-loaded`, and the panel re-prepares the frames and
+rescans when the document is a new one.
 
 Verify: the same-origin iframe's field appears in the panel and is filled and read back;
 the 127.0.0.1 iframe produces exactly one `cross-origin-frame-unreachable`; reloading the

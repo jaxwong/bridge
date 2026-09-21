@@ -3,7 +3,7 @@
 
 import { fill, harvestOptions, readValue } from '../lib/act';
 import { accName, clean, deepQueryAll, formScope, visible } from '../lib/dom';
-import type { CropRect, FormChanged, ForwardAction, Request } from '../lib/messages';
+import type { CropRect, FormChanged, ForwardAction, HandlerThrew, Request } from '../lib/messages';
 import { refind, scanPage, type FieldHandle } from '../lib/scan';
 import type { ReadBackResult, ScanResult } from '../lib/types';
 
@@ -35,9 +35,6 @@ export default defineContentScript({
     // While BRIDGE itself is changing the page (opening a dropdown to read it, writing
     // an answer), the watcher below must not mistake that for the page moving on.
     let busy = 0;
-    // Harvested once per document: reopening thirteen dropdowns on every rescan would
-    // flicker the page for no new information.
-    const optionCache = new Map<string, string[]>();
 
     const fingerprintOf = (r: ScanResult) =>
       `${r.stepHint?.index ?? ''}|${r.fields.map((f) => `${f.kind}:${f.label}`).sort().join('|')}`;
@@ -75,13 +72,13 @@ export default defineContentScript({
           return whileBusy(async () => {
             const { result, handles: h } = scanPage();
             // Custom dropdown options only exist once opened (§6.3): open, read, close.
+            // Read fresh on every scan: what a dropdown offers can depend on another answer
+            // (country -> city), and the page is the only source of truth for it.
             // The handle keeps them too, so read-back can tell "Select…" from a selection.
             for (const f of result.fields) {
               if (f.kind !== 'combobox') continue;
               const handle = h.get(f.id)!;
-              const key = `${handle.label}#${handle.ordinal}`;
-              if (!optionCache.has(key)) optionCache.set(key, await harvestOptions(handle.el));
-              handle.options = f.options = optionCache.get(key)!;
+              handle.options = f.options = await harvestOptions(handle.el);
             }
             handles = h;
             last = result;
@@ -126,7 +123,9 @@ export default defineContentScript({
 
     browser.runtime.onMessage.addListener((msg: Request, _sender, sendResponse) => {
       if (!msg || typeof msg.type !== 'string' || !msg.type.startsWith('bridge/')) return;
-      handle(msg).then(sendResponse, (e) => sendResponse({ error: String(e) }));
+      // A handler that threw. The key is deliberately not `error`: FillResult has an `error`
+      // of its own, and a refusal ("No option matching") is an answer, not a crash.
+      handle(msg).then(sendResponse, (e) => sendResponse({ handlerThrew: String(e) } satisfies HandlerThrew));
       return true;
     });
 
