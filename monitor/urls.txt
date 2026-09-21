@@ -1,0 +1,21 @@
+# URLs the monitor scans, one per line. Blank lines and # comments are ignored.
+#
+# Acme Careers, the local fixture. Serve it first, from the repo root:
+#   python3 -m http.server 8765 -d extension/test/fixtures/acme
+#
+# The three versions stand in for one form changing over time, which is why the dashboard
+# groups them as one form: pagePath excludes the query string (bridge-user.md §6.7).
+# Scan them on separate runs, not all in one — v1 today, v2 after the "fix", v3 after the
+# "regression". Scanning all three in one pass would write three scans of one form seconds
+# apart and the comparison would be meaningless.
+http://localhost:8765/
+
+# After Acme "fixes the dropdown" (needs extension/test/fixtures/acme v2, not built yet):
+# http://localhost:8765/?v=2
+
+# After the employer "adds a CV upload" (needs v3, not built yet):
+# http://localhost:8765/?v=3
+
+# At least one real public posting, for credibility (bridge-business.md §6.5).
+# NOT YET FILLED IN — a real Greenhouse posting URL goes here and must be verified to load
+# on the morning of the demo. Postings expire; §9 lists that as a known risk.
