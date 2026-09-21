@@ -46,21 +46,49 @@ would announce "BRIDGE is open. Press F6 to reach it" from the page instead.
 
 ## What the end-to-end test covers
 
-It loads the built extension, opens the side panel as an ordinary page pointed at the test
-tab (`sidepanel.html?tabId=…`), and drives SCAN → TRANSLATE → ACT → VERIFY against
-`test/fixtures/acme`. That page reproduces barriers measured on real portals: a custom
-dropdown with no role, label or tab stop whose options exist only when open, and
-LinkedIn's Yes/No radios that both carry the question as their accessible name. It also
-has a field that throws away BRIDGE's write, to prove failures are reported rather than
-hidden.
+`npm run test:e2e` loads the built extension, opens the side panel as an ordinary page
+pointed at a test tab (`sidepanel.html?tabId=…`), and drives it against the pages in
+`test/fixtures/acme`. 91 checks:
 
-It does **not** cover opening the panel, focus handling, or anything a screen reader
-says. Those need a person — see [`../probe/screen-reader-testing.md`](../probe/screen-reader-testing.md).
+- `index.html`: every barrier in spec §6.2 that a page can show, each write strategy in
+  §6.3 including the pointer-only slider, the Ashby-shaped uploader, a checkbox group, a
+  custom date picker, a field inside a closed shadow root, a field the page re-renders at a
+  new path, a field inside a same-origin iframe, an unreachable `127.0.0.1` iframe, a field
+  that throws the write away, a full page reload, both answer modes, the on-load
+  announcement, and zero axe violations on the panel.
+- `modal.html`: LinkedIn Easy Apply's shape. Steps swapped in place inside a native
+  `<dialog>`, conditional fields, step announcements, the Alt+Shift+S gate, CV reuse on a
+  later step, the session in `storage.session`, and the exported report.
+- `steps/1.html` to `3.html`: Workday's shape. Every step a full navigation that destroys
+  the content script.
+- Label inference against a **stub** of the proxy on port 8000, clearly labelled in the
+  test, including the check that nothing the applicant entered is in the request. The suite
+  fails at startup if something else is already listening on 8000, so stop the real proxy
+  first.
 
-## v0 limits
+It does **not** cover: opening the panel with the shortcut, where keyboard focus goes,
+anything a screen reader says, Chrome's permission prompt for "Always enable BRIDGE on
+this site", the screenshot crop for label inference (it needs the `activeTab` grant of a
+real shortcut press), or whether the exported file lands on disk. Those need a person; the
+list is in spec §8.8, and the method in
+[`../probe/screen-reader-testing.md`](../probe/screen-reader-testing.md).
 
-- Top frame only. Per-frame routing for embedded ATS iframes is day 2.
-- Full-list mode only; the one-question-at-a-time mode (§4.2) is not built yet.
-- No step detector, no "Step N of M" announcements, no barrier report export yet.
-- No "Always enable BRIDGE on this site" button yet (§4, third tier).
-- Plain DOM rather than Preact in the panel. It is small enough not to need it.
+## Label inference
+
+Fields that nothing on the page names are sent to the proxy in [`../proxy/`](../proxy/)
+at `http://localhost:8000`. Without it running, BRIDGE says once that label inference is
+unavailable and carries on with "Unlabelled text".
+
+```bash
+cd ../proxy && uv run --env-file ../.env uvicorn main:app --port 8000
+```
+
+## Known limits
+
+- The on-load announcement counts what the top frame can see. The panel may report one
+  more barrier: a cross-origin frame that only it can know is unreachable.
+- A slider that does not publish a range (`aria-valuemin/max`, `min/max` or `data-min/max`)
+  is offered as a plain number and reported as "Could not fill".
+- Group options are re-found by their own path only. A framework that re-renders a radio
+  group at a new path produces "Could not fill", never a wrong write.
+- Subframe fields are listed after the top frame's, not interleaved in visual order.

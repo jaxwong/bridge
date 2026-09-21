@@ -99,7 +99,8 @@ function summaryText() {
 }
 
 function journeyText(s: StepState) {
-  if (s.index && s.total) {
+  // "Step 1 of 1" is noise: a one-page form has no journey to describe.
+  if (s.index && s.total && s.total > 1) {
     const next = s.hint?.steps?.[s.index];
     return `Step ${s.index} of ${s.total}: ${s.heading}.${next ? ` Next: ${next}.` : ''}`;
   }
@@ -576,7 +577,7 @@ async function scanOnce(reason: Reason) {
     announce(`${journey ? `${journey} ` : ''}${summaryText()}`);
     if (mode === 'one' && fields.length && reason !== 'open') firstControl(fields[0].key)?.focus();
   } else if (verdict === 'new-step') {
-    const where = journey || `New step: ${now.heading}. Total number of steps unknown.`;
+    const where = journey || (now.total === 1 ? `New page: ${now.heading}.` : `New step: ${now.heading}. Total number of steps unknown.`);
     const lost = unwritten.length ? ` The page moved on before ${unwritten.join(', ')} was written; that answer was not saved.` : '';
     announce(`${where} ${summaryText()}${lost}`);
     if (fields.length) firstControl(fields[0].key)?.focus();

@@ -148,8 +148,8 @@ See §6.5.
 | Component | Owns | Does not own |
 |---|---|---|
 | Content script | Everything about the page: field discovery, barrier detection, writing values, reading values | UI, network calls |
-| Side panel | UI state, user's pending answers until ACT confirms them | Truth about what's on the page |
-| Service worker | Shortcut handling, ATS domain detection, opening the panel | Page or UI state |
+| Side panel | UI state, user's pending answers until ACT confirms them, the decision that the page moved to a new step (§6.5), the session in `chrome.storage.session` | Truth about what's on the page |
+| Service worker | Shortcut handling, opening the panel, injecting the content script, answering "which frames may BRIDGE run in", registering user-added sites | Page or UI state |
 | Proxy | API key, request shaping, stripping anything that isn't structure | Any persistence |
 
 **Source of truth for field values is the page DOM.** The side panel holds a pending value only until ACT reads it back successfully.
@@ -204,46 +204,46 @@ must be called from a user gesture (a button in the side panel). `debugger` perm
 
 ```ts
 type ControlKind =
-  | "text" | "textarea" | "select" | "slider"
-  | "file" | "date" | "checkbox" | "radio" | "unknown";
+  | "text" | "textarea" | "select" | "combobox" | "radio-group" | "checkbox-group"
+  | "checkbox" | "file" | "slider" | "date" | "unknown";
 
 type Severity = "blocking" | "usability" | "ok";
 
 interface Barrier {
-  rule: BarrierRule;
+  rule: string;
   severity: Severity;
   message: string;          // spoken to the user as-is
 }
 
 interface FieldDescriptor {
-  id: string;               // `${frameId}:${stablePath}`
-  frameId: number;
-  selector: string;         // resolvable inside that frame, pierces open shadow roots
+  id: string;               // positional within one scan of one frame, e.g. "f3"
   kind: ControlKind;
   label: string;
-  labelSource: "aria" | "label-element" | "nearby-text" | "llm";
+  labelSource: "aria" | "label-element" | "nearby-text" | "none" | "llm";
   required: boolean;
-  options?: string[];       // select / radio / custom dropdown
-  range?: { min: number; max: number; step: number };
+  options?: string[];       // select / groups / custom dropdown (harvested by opening it)
+  range?: { min: number; max: number; step: number };   // sliders that publish one
   barriers: Barrier[];
-}
-
-interface StepHint {
-  via: "workday-progressBar" | "aria-current=step" | "text" | "progressbar";
-  index?: number;           // 1-based, when the page publishes it
-  total?: number;
-  text?: string;            // e.g. "2/4 pages"
-  steps?: string[];         // full journey, when published (Workday)
 }
 
 interface ScanResult {
   url: string;
   scannedAt: string;
   fields: FieldDescriptor[];
-  pageBarriers: Barrier[];  // not tied to a field, e.g. CAPTCHA, closed shadow root
+  pageBarriers: Barrier[];  // not tied to a field, e.g. CAPTCHA
   stepHint: StepHint | null;
+  heading: string;          // the step's own name: the last heading before its first field
+  iframeOrigins: string[];  // visible cross-origin iframes; the panel reports unreachable ones
 }
 ```
+
+`StepHint` is as in §6.5. The authoritative definitions are in `extension/lib/types.ts`.
+
+There is no selector and no frame id in a `FieldDescriptor`. The element, its path and its
+name-and-ordinal stay in the content script as a `FieldHandle`; they never leave the page.
+The side panel adds the frame and a rescan-stable key
+(`${frameId}|${kind}|${label}|${ordinal}`) to each field it merges, because positional ids
+shift when a conditional field appears.
 
 ### 6.2 SCAN: barrier rules
 
@@ -256,10 +256,10 @@ interface ScanResult {
 | `focus-trap` | blocking | **Not detectable by SCAN.** Scripted Tab presses do not move focus, so tab order can only be observed from real keypresses. Checked manually with `bridge.watchTab()` in `probe/`. Note that focus looping from a dialog's last control back to its first is *correct* modal behaviour, not a trap |
 | `custom-dropdown-no-role` | blocking | Div/ul-based option list with no `listbox` / `combobox` roles |
 | `captcha` | blocking (page) | Known CAPTCHA iframes / widgets. BRIDGE cannot solve these; it tells the user in advance |
-| `closed-shadow-root` | blocking (page) | Custom element with no accessible shadow root. BRIDGE can't reach inside |
-| `cross-origin-frame-unreachable` | blocking (page) | Iframe BRIDGE has no permission for |
+| ~~`closed-shadow-root`~~ | retired | Content scripts can open closed roots with `chrome.dom.openOrClosedShadowRoot`. SCAN and ACT pierce every shadow root, so a field inside one is offered like any other. Verified on the fixture's closed root |
+| `cross-origin-frame-unreachable` | blocking (page) | A visible cross-origin iframe whose origin is not among the frames Chrome lets BRIDGE run in. Derived in the side panel: the top frame lists iframe origins, the service worker lists reachable frames |
 | `modal-without-dialog-role` | blocking (page) | A visible popup containing form controls, with no `role="dialog"` / `role="alertdialog"` / `aria-modal` on it or any ancestor. Nothing announces it opened |
-| `group-not-labelled` | blocking | Two or more checkboxes or radios sharing a `name`, with no `fieldset`+`legend` and no `role="group"`/`radiogroup"` carrying a name. The question itself is unreachable |
+| `group-not-labelled` | blocking | Radios in one group, or two or more checkboxes sharing a `name`, with no `fieldset`+`legend` and no `role="group"`/`radiogroup"` carrying a name. The question itself is unreachable |
 | `label-placeholder-only` | usability | The only name comes from `placeholder`. It vanishes on input and several screen readers skip it |
 | `options-identically-named` | blocking | Two or more options in one group compute to the **same** accessible name. `aria-label` overrides element contents, so a question stamped onto every option erases "Yes" and "No" |
 
@@ -281,9 +281,9 @@ the user to ignore it, and it makes the §6.7 employer report indefensible.
 | Native `<select>` | Set `value`, dispatch `change` | None needed | — |
 | Custom dropdown | Synthetic `mousedown` + `mouseup` on the control, wait for options, same on the option matching the text | None that works — see below | **verified** on Greenhouse (react-select) |
 | Native range | Native value setter + `input` / `change` | None needed | — |
-| Custom slider | `pointerdown` / `pointermove` / `pointerup` at the x-coordinate for the value on the track's bounding box | If `role="slider"` and focusable: Home, then ArrowRight × n | untested — no real portal in §11 had one |
+| Custom slider | Chosen by shape, never by failure: `input[type=range]` → native setter; focusable `role="slider"` → Home, then ArrowRight × n; anything else → pointer and mouse events at the x-coordinate for the value on the track | None | pointer strategy **verified on the fixture only**; no real portal in §11 had a slider |
 | Uploader (incl. drag-and-drop) | Build a `File`, set `input.files` from a `DataTransfer`, dispatch `change` | Dispatch `dragenter` / `dragover` / `drop` carrying the `DataTransfer` on the drop zone | **verified** on Greenhouse and Ashby; fallback unverified |
-| Date picker | Find the underlying input, native setter + events | Stretch: drive the calendar UI | untested |
+| Date picker | Find the underlying input, native setter + events. A text input is written in the order its placeholder asks for (`dd/mm/yyyy`), `type=date` as ISO | Stretch: drive the calendar UI | **verified on the fixture only** |
 
 **Synthetic events are good enough.** The `isTrusted: false` risk did not materialise on
 any portal measured in §11, across three unrelated component layers: React, react-select,
@@ -438,9 +438,15 @@ const verdict = indexMoved          ? 'new-step'        // the page said so
               : 'fields-changed';
 ```
 
-Fed by three sources collapsing into one evaluation: script load (full navigation), patched
-`history.pushState`/`replaceState` plus `popstate` (SPA routing), and a debounced
-`MutationObserver` (in-place swaps).
+**As built.** The content script does not decide. It watches the document with one
+debounced `MutationObserver` and tells the side panel only *that* the form changed, when
+the set of `kind:label` pairs or the step index differs from the last scan. A full
+navigation needs no watcher: the service worker reports the page load. Either way the
+panel rescans and makes the one decision above, comparing the previous scan with the new
+one. `history.pushState` is not patched: content scripts run in an isolated world and
+cannot intercept the page's calls, and every route change mutates the DOM anyway. A change
+that lands while BRIDGE is itself touching the page (reading a dropdown, writing an answer)
+is compared once that work ends, not dropped.
 
 Record which basis produced each verdict (`step-index` vs `field-similarity`). When the
 heuristic and the index disagree, the index is right and the threshold needs tuning.
@@ -635,9 +641,19 @@ Status at the start of the night, measured on branch `implement-bridge-user`:
 - Not built: every §8 day-2 and day-3 item, Alt+Shift+S, on-load announcement, per-frame
   routing, one-question mode, CV reuse across steps, export, "always enable", proxy.
 
-Everything below is done tonight, in this order. Each step ends with `npm run typecheck`
-and `npm run test:e2e` green and one commit. A step that fails verification stops the
-line; nothing after it starts on a red suite.
+Everything below was built in this order, each step ending with `npm run typecheck` and
+`npm run test:e2e` green and a commit.
+
+**Status: 8.1 to 8.7 are done.** `npm run test:e2e` is 91/91, typecheck is clean, the panel
+has zero axe violations. What remains is §8.8, which needs a person.
+
+| Step | Commit | Verified by |
+|---|---|---|
+| 8.1 fixture v2, SCAN/ACT breadth | `5c7cf1e` | e2e |
+| 8.2 frames, reload | `c6f13e3` | e2e |
+| 8.3 multi-step, 8.4 panel features | `53782a3` | e2e, except "always enable" (needs a real click) |
+| 8.5 proxy and label inference | `f825b69`, `a6e42f7` | proxy tests 16/16; e2e against a labelled stub; one live DeepSeek call with a crop (200, correct label); one live extension → proxy → DeepSeek call (200). The panel's own screenshot crop needs `activeTab` and is in §8.8 |
+| 8.6 live portal | `2d9214b` | the built extension on the live GitLab Greenhouse posting, §11 |
 
 ### Decisions this plan makes
 
@@ -669,13 +685,18 @@ These change earlier sections. They are listed once here so nothing is silent.
   announces the barrier count from an injected, visually hidden status region, and only
   when §6.5's `formScope()` finds a dialog or form with at least two controls. Otherwise
   a LinkedIn search page would announce on every load.
-- **Frame identity comes from the frames themselves.** Each frame's content script sends
-  `bridge/frame-hello` on load; the service worker keeps `frameId → origin` per tab in
-  `chrome.storage.session`. No `webNavigation` permission (it adds a browsing-history
-  install warning). A visible cross-origin iframe whose origin never said hello is
-  `cross-origin-frame-unreachable`.
-- **Field ids become `${frameId}:f${n}`.** The panel routes `fill` and `read-back` per
-  frame.
+- **Frames are discovered by asking Chrome, with no registry.** The service worker runs a
+  one-line script with `allFrames: true`; it executes only where the extension has
+  permission, and each result carries its `frameId`. That list *is* the set of reachable
+  frames, so there is nothing to keep in sync and nothing to go stale. No `webNavigation`
+  permission (it adds a browsing-history install warning). This replaced the first draft of
+  this plan, in which each frame announced itself and the service worker kept a map.
+- **The panel is the one decider of a step change.** See §6.5, "As built".
+- **Field ids become `${frameId}:f${n}`**, and each field gets a rescan-stable key. The
+  panel routes `fill` and `read-back` per frame.
+- **A field with nothing to infer from is not sent for label inference.** With no picture,
+  no options and no nearby text the model answers "Text field", measured live. BRIDGE's
+  own "Unlabelled text" is more honest.
 
 ### 8.1 Fixture v2 and SCAN/ACT breadth, single page
 
@@ -785,9 +806,10 @@ injected status region reads "BRIDGE found N barriers on this form" about a seco
 load. `permissions.request` needs a user gesture that headless cannot supply; it is
 covered by hand in §8.9.
 
-Paths. Happy: the demo runs in one-question mode. Failure: a blob download the side
-panel refuses is reported in the live region and the JSON is copied to the clipboard
-instead, announced as such. Edge: a stored CV from another tab is not offered (keyed by
+Paths. Happy: the demo runs in one-question mode. Failure: none is handled for the
+download itself. A page cannot observe whether the browser saved a file, so a clipboard
+fallback could never be triggered reliably and was not built; the download is checked by
+hand in §8.8. Edge: a stored CV from another tab is not offered (keyed by
 tab); export with zero barriers still produces a file, saying so.
 
 ### 8.5 Proxy and label inference
@@ -826,19 +848,27 @@ decisions above; `bridge-business.md` §6.1 marked settled.
 
 ### 8.8 Stays with a human
 
-These cannot be done by the build and are not claimed by it:
+These cannot be done by the build and are not claimed by it. Load the unpacked build from
+`extension/.output/chrome-mv3`, serve the fixture (`extension/README.md`), and run the
+proxy (`proxy/README.md`) for item 3.
 
-1. **Focus spike**, 10 minutes, can run now: README steps. Its answer sets the first
-   line of §9.
-2. **VoiceOver pass with Screen Curtain** on the fixture and the panel
-   (`probe/screen-reader-testing.md`), including "Always enable BRIDGE on this site" and
-   Chrome's permission prompt, and whether Alt+Shift+S moves keyboard focus into the page.
-3. **NVDA pass** on Windows. Not possible on this machine tonight; the video says
+1. **Focus spike**, 10 minutes: README steps. Its answer sets the first line of §9.
+2. **Alt+Shift+S from the keyboard.** The command's wiring and whether `el.focus()` in the
+   page pulls keyboard focus out of the side panel cannot be tested headlessly. The suite
+   proves the panel and page logic by sending the same message the shortcut sends.
+3. **The screenshot crop.** `captureVisibleTab` needs the `activeTab` grant of a real
+   Alt+Shift+B. With the proxy running, open the fixture, press the shortcut, and expect
+   the third question to become "LinkedIn profile URL (label inferred)" and Diagnostics to
+   say "2 labels inferred".
+4. **"Always enable BRIDGE on this site"** and Chrome's permission prompt, on any https
+   site outside the built-in list, with the screen reader on.
+5. **The exported file actually saves** from the real side panel.
+6. **VoiceOver pass with Screen Curtain** on the fixture and the panel
+   (`probe/screen-reader-testing.md`).
+7. **NVDA pass** on Windows. Not possible on this machine tonight; the video says
    "tested with VoiceOver; NVDA pending" until it is done.
-4. **LinkedIn Easy Apply by hand**: the visa question answered through BRIDGE.
-5. **`DEEPSEEK_API_KEY`** exported in the shell that runs the proxy, for one live call
-   with a crop attached.
-6. **Recording** per §9. QuickTime does not capture VoiceOver speech; use OBS with system
+8. **LinkedIn Easy Apply by hand**: the visa question answered through BRIDGE.
+9. **Recording** per §9. QuickTime does not capture VoiceOver speech; use OBS with system
    audio or keep the caption panel on screen.
 
 ### 8.9 Order of the night
@@ -855,10 +885,11 @@ slider itself, kept because it demos well (§7).
 
 1. Open Acme Careers. Tab through the form. The education dropdown is never reached, the
    Yes/No options both say the visa question, the CV control is not there at all.
-2. BRIDGE's status region says "BRIDGE found N barriers on this form. Press Alt+Shift+B."
-   N is whatever the §8.1 run reports; it is written in here once that run is green.
-   Press it. The panel opens, announces the pre-check summary, and asks the first
-   question.
+2. BRIDGE's status region says "BRIDGE found 12 accessibility barriers on this form. Press
+   Alt+Shift+B to open BRIDGE." The panel then says 13: the extra one is the cross-origin
+   frame, which only the panel can know is unreachable.
+   Press it. The panel opens, announces "13 questions found. 13 accessibility barriers, 9
+   blocking", and asks the first question.
 3. Answer "Full name". BRIDGE confirms from the page and moves to the next question.
 4. "Highest education completed, label inferred": choose Bachelor's. Split screen: the
    page's dropdown shows Bachelor's.
@@ -870,8 +901,8 @@ slider itself, kept because it demos well (§7).
 9. VERIFY: "Your application contains: Full name, Zheng Wei. …  1 question is empty:
    Notice period." Press Alt+Shift+S; BRIDGE names the Submit button. Press Enter
    yourself.
-10. Multi-step, 20 seconds: open `modal.html`, answer step 1, press Next. The page says
-    nothing; BRIDGE says "Step 2 of 3: Resume".
+10. Multi-step, 20 seconds: open `modal.html`, press Easy Apply, answer step 1, press Next.
+    The page says nothing; BRIDGE says "Step 2 of 3: Additional questions".
 11. Export barrier report. Hand over to the employer demo, `bridge-business.md` §7.
 
 ## 10. Risks and open questions
@@ -880,7 +911,7 @@ slider itself, kept because it demos well (§7).
 |---|---|---|
 | Widgets ignore untrusted events | **retired** | Measured across §11: synthetic mouse events drive react-select and React inputs. `debugger` stays out of the MVP |
 | Cross-origin iframes (common on Workday) | live | Confirmed on Workday, Lever, Ashby and LinkedIn. Host permissions for supported origins; otherwise report `cross-origin-frame-unreachable` |
-| Multi-step applications | **resolved** | §6.5. Workday publishes its whole 6-step journey up front, so the "entire application journey" claim holds — sourced from the page's stepper, not from scanning ahead |
+| Multi-step applications | **built** | §6.5. Workday publishes its whole 6-step journey up front, so the "entire application journey" claim holds — sourced from the page's stepper, not from scanning ahead |
 | Page re-renders wipe BRIDGE's writes | live | VERIFY reads from DOM, so this surfaces as a failed field instead of a silent error |
 | LLM infers a wrong label | live | Always marked "label inferred"; user can hear the nearby text themselves |
 | CAPTCHA at the end | live | Present on **every** real portal measured. Detected in SCAN and announced up front; out of scope to solve |
@@ -906,7 +937,8 @@ user's password manager. Say this out loud in the pitch; it reads as judgement, 
 - ~~Is LinkedIn Easy Apply worth supporting?~~ **Yes, and it is measured** (§11). Its controls
   work and BRIDGE can fill every type it uses; its labelling and step transitions do not. The
   identically-named Yes/No on the visa question is the headline demo.
-- Can an extension move keyboard focus into its side panel? Undocumented. Day-1 spike (§8).
+- Can an extension move keyboard focus into its side panel? Undocumented. Spike, §8.8 item 1.
+- Can a content script's `focus()` take keyboard focus *out of* the side panel (Alt+Shift+S)? Untested, §8.8 item 2.
 
 ## 11. Portal findings (measured)
 
@@ -922,6 +954,24 @@ trusting these numbers indefinitely.
 | Workday (NVIDIA) | SPA + hard navs | **6** | — (behind sign-in) | cross-origin frame |
 | VietnamWorks | SPA | 1 + login wall | 3 | **`modal-without-dialog-role`** |
 | LinkedIn Easy Apply | SPA, in-place modal | **4** | **0** on step 1 | cross-origin frames |
+
+### The built extension on live Greenhouse
+
+2026-09-21, the unpacked build driven headlessly against the GitLab posting, one page load,
+nothing submitted:
+
+```
+22 questions found. 2 accessibility barriers, 2 blocking.   (CAPTCHA, reCAPTCHA frame)
+SCAN took 6.7 s   (13 react-select dropdowns opened, read and closed)
+Country dropdown: 244 options harvested
+First Name  -> "On the page: Test"
+Country     -> "On the page: +1"     (the widget shows the dial code, see probe/README)
+```
+
+Noticed and not fixed: both file inputs compute to the accessible name **"Attach"**, so
+BRIDGE lists two questions called "Attach" (Resume/CV and Cover Letter). The group label
+that tells them apart is not part of the input's name. It is the same defect a screen
+reader user hears, and a candidate for the employer report.
 
 ### What actually works
 
