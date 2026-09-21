@@ -595,6 +595,26 @@ portals in §11 put the job in the path. It also lets the Acme fixture's `?v=2` 
 (`bridge-business.md` §6.5) stand in for the same form changing between scans, which is
 the employer demo.
 
+**One step or many.** The table above is `toReport()` in `extension/lib/report.ts`, the one
+conversion both producers use. The side panel's export is `buildReport()`: for an
+application with a single step it is exactly `toReport()` of that step, so it is the same
+JSON the monitor writes for the same page. When the applicant reached more than one step
+(§6.5), the two flat lists hold every step's barriers, each with a `step` number; the form
+is identified by its **first** step's `pagePath`; `generatedAt` is the most recent step's
+scan; and `steps: [{ index, label, pagePath, barriers, pageBarriers }]` keeps the grouping.
+A consumer that does not know `steps` or `step` ignores them, and the dashboard does.
+
+**`label` is always the name the page itself yields**, never one from label inference
+(§6.4): a model may word it differently on the next run, and the compare key must not move.
+
+**Two known differences between the producers**, both because the monitor runs in an
+ordinary page with no extension API: it cannot see inside a *closed* shadow root, and it
+cannot know which cross-origin frames the extension may reach, so
+`cross-origin-frame-unreachable` appears only in the side panel's export.
+
+The side panel also writes the Markdown twin, for a person to paste into an email. Both
+files are named like the monitor's: `<portal-and-path-slug>-<timestamp>`.
+
 Sending the report anywhere is a manual user action in the MVP. This format is the contract
 with the employer dashboard and monitor in [`bridge-business.md`](bridge-business.md) §6;
 change it here, not there.
@@ -645,17 +665,17 @@ Status at the start of the night, measured on branch `implement-bridge-user`:
 Everything below was built in this order, each step ending with `npm run typecheck` and
 `npm run test:e2e` green and a commit.
 
-**Status: 8.1 to 8.7 are done.** `npm run test:e2e` is 125/125, typecheck is clean, the panel
+**Status: 8.1 to 8.7 are done.** `npm run test:e2e` is 130/130, typecheck is clean, the panel
 has zero axe violations. What remains is §8.8, which needs a person.
 
 | Step | Commit | Verified by |
 |---|---|---|
-| 8.1 fixture v2, SCAN/ACT breadth | `5c7cf1e` | e2e |
-| 8.2 frames, reload | `c6f13e3` | e2e |
-| 8.3 multi-step, 8.4 panel features | `53782a3` | e2e, except "always enable" (needs a real click) |
-| 8.5 proxy and label inference | `f825b69`, `a6e42f7` | proxy tests 16/16; e2e against a labelled stub; one live DeepSeek call with a crop (200, correct label); one live extension → proxy → DeepSeek call (200). The panel's own screenshot crop needs `activeTab` and is in §8.8 |
-| 8.6 live portal | `2d9214b` | the built extension on the live GitLab Greenhouse posting, §11 |
-| Audit against AGENTS.md | this commit | five defects reproduced, fixed test-first; `edge.html`, `unnamed-a/b.html` |
+| 8.1 fixture v2, SCAN/ACT breadth | `2014eb6` | e2e |
+| 8.2 frames, reload | `f237056` | e2e |
+| 8.3 multi-step, 8.4 panel features | `515a5f9` | e2e, except "always enable" (needs a real click) |
+| 8.5 proxy and label inference | `27c99ea`, `7e60ffb` | proxy tests 16/16; e2e against a labelled stub; one live DeepSeek call with a crop (200, correct label); one live extension → proxy → DeepSeek call (200). The panel's own screenshot crop needs `activeTab` and is in §8.8 |
+| 8.6 live portal | `d31d643` | the built extension on the live GitLab Greenhouse posting, §11 |
+| Audit against AGENTS.md | `d2ecb6e` | five defects reproduced, fixed test-first; `edge.html`, `unnamed-a/b.html` |
 
 **Found by the audit and deliberately not changed**, because each needs a decision or a
 refactor rather than a patch:
@@ -896,7 +916,9 @@ built in parallel from the start because nothing depends on it until 8.5.
 
 ## 9. Demo script
 
-Acme Careers is the fixture in `extension/test/fixtures/acme`. VoiceOver on, Screen
+Acme Careers is `apply.html` in `extension/test/fixtures/acme`, served as
+`http://localhost:8765/apply.html`. (`index.html` there is the employer demo's small form in
+three versions; see `bridge-business.md` §6.5.) VoiceOver on, Screen
 Curtain on for the applicant beats, caption panel visible for the camera. Nothing here
 uses a slider strategy or a widget that was not found on a real portal, except the
 slider itself, kept because it demos well (§7).

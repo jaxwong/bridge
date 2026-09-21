@@ -1,5 +1,23 @@
 # Handover: linking the extension to the employer dashboard
 
+> **Status, 2026-09-21, from the extension side, after `implement-bridge-user` was rebased
+> onto this.** Left as written below; these points are now out of date:
+>
+> - **§2, the export button: built.** JSON and Markdown, announced, named like the monitor's
+>   files. `toReport()` is kept as the one conversion; the panel's `buildReport()` composes
+>   it per step (`bridge-user.md` §6.7, "One step or many"). A one-step export is the same
+>   JSON the monitor writes; `npm run test:e2e` checks that on `/`, `/?v=2` and `/?v=3`.
+> - **§4's numbers still hold** for `http://localhost:8765/`: 5 barriers, 4 blocking. The
+>   monitor's output for all three versions matches `fixtures/reports/` key for key.
+> - **§5, the scanner bug: fixed.** A `<label for>` no longer hides an unreachable file
+>   input, so `?v=3` could be labelled the ordinary way. It still works as it is.
+> - **The applicant demo page moved to `apply.html`.** `index.html` is yours again, exactly
+>   as you committed it. The two had collided: mine already had a CV uploader, so your v3
+>   regression would not have registered as new.
+> - **`extension/lib/` is still plain DOM code**, with one optional probe: `lib/dom.ts` uses
+>   `chrome.dom` to open closed shadow roots when it exists, and falls back to open roots in
+>   the monitor's ordinary page.
+
 For whoever owns the extension side. Written from the business side after building the
 monitor and dashboard on `feature/business-dashboard`.
 

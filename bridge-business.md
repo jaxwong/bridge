@@ -141,6 +141,14 @@ time by `portal` + `pagePath`, with the query string excluded, which is what let
 `?v=` fixtures stand in for one form changing between scans. Hand-written reports in this
 shape are in `fixtures/reports/`; the dashboard is built against them.
 
+**From the extension side, after both branches met.** The side panel's export is built
+(`buildReport()` in `extension/lib/report.ts`, composed from the same `toReport()` the
+monitor uses). Three things the dashboard should expect from it: a multi-step application
+adds `steps[]` and a `step` number per barrier, which `parseReport` ignores; two fields
+with the same label and rule share one key (live Greenhouse names both file inputs
+"Attach"); and `cross-origin-frame-unreachable` comes only from the side panel, so an
+export and a monitor scan of the same page can differ by that one page barrier.
+
 ### 6.2 Monitor
 
 - **Input:** a file of URLs.

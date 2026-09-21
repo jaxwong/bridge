@@ -66,7 +66,8 @@ extension is first installed, so a shortcut added in a later build is often left
 
 | Page | URL | Shape |
 |---|---|---|
-| Acme single page | `http://localhost:8765/` | every barrier on one form |
+| Acme single page | `http://localhost:8765/apply.html` | every barrier on one form |
+| Acme employer demo | `http://localhost:8765/`, `/?v=2`, `/?v=3` | one small form in three versions, for the monitor and dashboard. Not used by these checks |
 | Acme dialog | `http://localhost:8765/modal.html` | LinkedIn Easy Apply: steps swap in place |
 | Acme journey | `http://localhost:8765/steps/1.html` | Workday: each step is a full page load |
 
@@ -84,7 +85,7 @@ panel's console: right-click the panel, Inspect.
 **Question:** when Alt+Shift+B opens the panel, does keyboard focus move into it?
 Chrome's documentation does not say. The answer decides the first spoken line of the demo.
 
-1. Open `http://localhost:8765/`.
+1. Open `http://localhost:8765/apply.html`.
 2. Click once inside the page's **Full name** field, so focus is clearly in the page.
 3. Press **Alt+Shift+B**. Do not touch the mouse again.
 4. Type `abc`.
@@ -127,7 +128,7 @@ message the shortcut sends. It could not press keys or observe real keyboard foc
 The command has a gate. The **first** press on a step reads everything back. Only the
 **second** press moves focus. Any write in between closes the gate again.
 
-1. Open `http://localhost:8765/` and press **Alt+Shift+B**.
+1. Open `http://localhost:8765/apply.html` and press **Alt+Shift+B**.
 2. Put focus **in the panel**, by whatever check 1 found works.
 3. Press **Alt+Shift+S**.
 4. Expect the live region at the top of the panel to say either "Nothing has been filled
@@ -170,7 +171,7 @@ correctly, and the extension reaches DeepSeek through the proxy. What is unprove
 `captureVisibleTab` plus the crop inside the panel.
 
 1. Start the proxy in Terminal C. Wait for "Application startup complete".
-2. Open `http://localhost:8765/` in a **fresh tab**. Keep that tab in front.
+2. Open `http://localhost:8765/apply.html` in a **fresh tab**. Keep that tab in front.
 3. Open the panel with **Alt+Shift+B**. That press is what grants `activeTab` for this
    tab. The toolbar icon should grant it too, but only the shortcut is the path the demo
    uses, so test that one.
@@ -277,10 +278,10 @@ real side panel.
 3. Click **Next** on the page. Wait for "Step 2 of 3". This gives the report two steps.
 4. In the panel, scroll to **Barrier report**.
 5. Activate **"Export barrier report as JSON"**.
-6. Expect: "Barrier report saved as bridge-report-localhost… .json. N barriers. It contains
+6. Expect: "Barrier report saved as localhost-8765-modal-html-….json. N barriers. It contains
    none of your answers and nothing about you."
-7. Open your Downloads folder. The file name starts with `bridge-report-localhost`. macOS
-   replaces the colon before the port number, which is expected.
+7. Open your Downloads folder. The file name starts with `localhost-8765-modal-html-`, the
+   same naming the monitor uses.
 8. Open the file and check:
    - `portal` is `localhost:8765` and `pagePath` is `/modal.html`.
    - `steps` has two entries, each with its own `barriers`.
@@ -326,7 +327,7 @@ If a function-key shortcut does nothing, add **Fn**.
 
 ### Run A: the single page, following §9
 
-Open `http://localhost:8765/`. For each step write down what was spoken, or screenshot the
+Open `http://localhost:8765/apply.html`. For each step write down what was spoken, or screenshot the
 caption panel.
 
 1. **The page on its own.** Tab through the form without BRIDGE.
