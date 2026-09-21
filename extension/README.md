@@ -22,27 +22,25 @@ npm run dev          # WXT dev mode with reload
 4. Press **Alt+Shift+B**. If Chrome says the shortcut is taken, set it at
    `chrome://extensions/shortcuts`
 
-## Day-1 spike: does focus move into the side panel?
+## Keyboard focus and the side panel
 
-The spec (§4) assumes that opening the panel moves keyboard focus into it. Chrome's
-documentation does not say whether an extension can do that, and nothing automated can
-answer it. Please run this by hand:
+Measured by hand on 2026-09-21, Chrome 154 on macOS (`manual-checks.md`, check 1):
 
-1. Load the extension and open the Acme page as above. Click once in the page's
-   "Full name" field so focus is in the page.
-2. Press **Alt+Shift+B**.
-3. **Without touching the mouse**, start typing. Where do the characters go — into the
-   page's field, or nowhere?
-4. Open **Diagnostics** at the bottom of the panel and read the lines. "panel has keyboard
-   focus: yes/no" is the answer. They are also in the panel's console: right-click the
-   panel → Inspect.
-5. If focus stayed in the page, press **F6** repeatedly (on a Mac, **Fn+F6**). Chrome uses it
-   to cycle focus between the address bar, the page and other panes. Note whether it ever
-   lands in the panel, and after how many presses.
-6. Repeat with a screen reader on. What is spoken when the panel opens?
+- A panel opened by **Alt+Shift+B** receives keyboard focus. It lands on the BRIDGE heading.
+- A panel that is **already open** cannot take keyboard focus from the page. `sidePanel.open()`
+  leaves it alone, and `window.focus()` plus `element.focus()` inside the panel did nothing
+  (tried, measured, deleted).
+- So Alt+Shift+B closes an open panel and shows it again, in the one gesture
+  (`background.ts`). The panel reloads and rescans. Answers typed but not yet written to the
+  page are lost; everything written is on the page and is read back from there.
+  The API sequence was proven on Chrome for Testing 154 with a throwaway extension. That the
+  reopened panel holds real keyboard focus can only be checked by hand.
+- F6 does nothing in Chrome on macOS. Cmd+Option+Down arrow cycles address bar, tabs,
+  extensions, side panel, page: four presses to reach the panel.
+- Playwright cannot measure any of this: its clicks do not move native focus between the
+  page and the panel, and it emulates focus on the pages it drives.
 
-Record the answers in spec §10. If focus does not move, §4's opening flow changes: BRIDGE
-would announce "BRIDGE is open. Press F6 to reach it" from the page instead.
+Still open: what a screen reader speaks when the panel opens (check 1, step 8).
 
 ## What the end-to-end test covers
 

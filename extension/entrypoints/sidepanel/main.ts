@@ -679,20 +679,13 @@ function exportReport(format: 'json' | 'md') {
   announce(`Barrier report saved as ${name}. ${plural(report.barriers.length + report.pageBarriers.length, 'barrier')}. It contains none of your answers and nothing about you.`);
 }
 
-// --- day-1 spike: can the panel take keyboard focus when it opens? (§8) -----------------
-
-function recordFocus(label: string) {
-  const a = document.activeElement;
-  diag(label, `panel has keyboard focus: ${document.hasFocus() ? 'yes' : 'no'}; ` +
-    `active element: ${a ? a.tagName.toLowerCase() + (a.id ? `#${a.id}` : '') : 'none'}`);
-}
-
-function focusSpike() {
-  recordFocus('On load');
+// --- keyboard focus ------------------------------------------------------------------
+// A panel that is being shown receives keyboard focus from Chrome; this puts it on the
+// heading. An open panel cannot take focus back from the page, which is why Alt+Shift+B
+// reopens it (background.ts).
+function focusHeading() {
   window.focus();
   $('title').focus();
-  recordFocus('After focusing the heading');
-  window.addEventListener('focus', () => recordFocus('Panel received focus'), { once: true });
 }
 
 // --- boot -----------------------------------------------------------------------------
@@ -739,5 +732,5 @@ if (!fixedTab) {
   });
 }
 
-focusSpike();
+focusHeading();
 void runScan('open');

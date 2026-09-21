@@ -890,7 +890,8 @@ These cannot be done by the build and are not claimed by it. **Step-by-step inst
 for each, with what to expect, what to write down and what each failure means, are in
 [`manual-checks.md`](manual-checks.md).**
 
-1. **Focus spike**, 10 minutes: README steps. Its answer sets the first line of §9.
+1. **Focus spike.** Answered for the keyboard on 2026-09-21 (§10). Still to do: what VoiceOver
+   speaks when the panel opens, and whether Alt+Shift+B on an open panel reopens it with focus inside.
 2. **Alt+Shift+S from the keyboard.** The command's wiring and whether `el.focus()` in the
    page pulls keyboard focus out of the side panel cannot be tested headlessly. The suite
    proves the panel and page logic by sending the same message the shortcut sends.
@@ -977,7 +978,13 @@ user's password manager. Say this out loud in the pitch; it reads as judgement, 
 - ~~Is LinkedIn Easy Apply worth supporting?~~ **Yes, and it is measured** (§11). Its controls
   work and BRIDGE can fill every type it uses; its labelling and step transitions do not. The
   identically-named Yes/No on the visa question is the headline demo.
-- Can an extension move keyboard focus into its side panel? Undocumented. Spike, §8.8 item 1.
+- ~~Can an extension move keyboard focus into its side panel?~~ **Only by showing it, measured
+  by hand** on Chrome 154, macOS, 2026-09-21. After Alt+Shift+B opens the panel, Tab moves
+  inside it. A panel that is already open cannot take focus from the page: `window.focus()` in
+  the panel was tried and did nothing. So Alt+Shift+B closes an open panel and shows it again.
+  The panel reloads, and answers typed but not written are lost. Whether the reopened panel
+  holds focus from a real keyboard is §8.8 item 1. F6 does nothing on macOS;
+  Cmd+Option+Down arrow reaches the panel in four presses.
 - Can a content script's `focus()` take keyboard focus *out of* the side panel (Alt+Shift+S)? Untested, §8.8 item 2.
 
 ## 11. Portal findings (measured)
