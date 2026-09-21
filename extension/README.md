@@ -33,8 +33,7 @@ Measured by hand on 2026-09-21, Chrome 154 on macOS (`manual-checks.md`, check 1
 - So Alt+Shift+B closes an open panel and shows it again, in the one gesture
   (`background.ts`). The panel reloads and rescans. Answers typed but not yet written to the
   page are lost; everything written is on the page and is read back from there.
-  The API sequence was proven on Chrome for Testing 154 with a throwaway extension. That the
-  reopened panel holds real keyboard focus can only be checked by hand.
+  Checked by hand the same day: the panel closes, reopens, and Tab then moves inside it.
 - F6 does nothing in Chrome on macOS. Cmd+Option+Down arrow cycles address bar, tabs,
   extensions, side panel, page: four presses to reach the panel.
 - Playwright cannot measure any of this: its clicks do not move native focus between the
