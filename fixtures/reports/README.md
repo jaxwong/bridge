@@ -42,13 +42,24 @@ cover every state the compare logic has to produce:
   (`bridge-business.md` §6.3). A first scan must never read as a page full of regressions.
 - **Greenhouse** also gives the dashboard a form with zero field-level barriers to render.
 
-## Two things these files assume, which have to hold when the monitor runs
+## Confirmed against the real scanner
 
-**Acme v3's file input must carry an `aria-label` and no `<label for>`.** `pageBarriers()`
-in `scan.ts` skips any file input that has a `label[for]`, so an uploader labelled that way
-reports no `drag-drop-only` at all and the regression demo shows nothing. With an
+All three Acme reports were reproduced by running `monitor/run.mjs` against
+`extension/test/fixtures/acme` at `?v=1`, `?v=2` and `?v=3`. Every one came back
+**byte-identical to the file here apart from `generatedAt`**. The predictions above held,
+so the tests written against these fixtures were testing real scanner output all along.
+
+Re-check it the same way after any change to `scan.ts` or to the Acme fixture — a
+difference is a bug in one of the two, and this is the cheapest place to catch it.
+
+## One thing these files depend on
+
+**Acme v3's file input carries an `aria-label` and no `<label for>`.** `pageBarriers()` in
+`scan.ts` returns early on any file input that has a `label[for]`, so an uploader labelled
+that way reports no `drag-drop-only` at all and the regression demo shows nothing. With an
 `aria-label` and `tabindex="-1"` it produces exactly one new barrier, which is the clean
-version of the story. Worth saying to whoever writes the v3 fixture.
+version of the story. The v3 fixture is built that way on purpose; do not "fix" its
+labelling without re-reading this.
 
 **The Greenhouse report is a stand-in.** `boards.greenhouse.io/example/jobs/0000000` is not
 a real posting; the real URL goes into `monitor/urls.txt` in Phase 5 and its slug and
