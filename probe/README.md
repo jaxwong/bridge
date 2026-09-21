@@ -96,4 +96,4 @@ These are real employers' hiring systems.
 step transition and a visual-only progress bar both look fine to it. See
 [`screen-reader-testing.md`](screen-reader-testing.md) for the other half.
 
-Findings are written up in [`../bridge-spec.md`](../bridge-spec.md) §11.
+Findings are written up in [`../bridge-user.md`](../bridge-user.md) §11.
