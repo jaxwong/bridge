@@ -88,13 +88,20 @@ Chrome's documentation does not say. The answer decides the first spoken line of
 1. Open `http://localhost:8765/apply.html`.
 2. Click once inside the page's **Full name** field, so focus is clearly in the page.
 3. Press **Alt+Shift+B**. Do not touch the mouse again.
-4. Type `abc`.
-5. Look at where the letters went: into the page's Full name field, into the panel's first
-   question, or nowhere.
-6. Open **Diagnostics** and read the three lines named "On load", "After focusing the
-   heading" and "Panel received focus". Each says
-   `panel has keyboard focus: yes` or `no`, and which element is active.
-7. If the letters went into the page, press **F6** (on most Macs **Fn+F6**) one press at a
+4. Press **Tab** once, then type `abc`.
+5. Look at where focus went. BRIDGE puts focus on its own "BRIDGE" heading when it opens,
+   and a heading swallows typed letters, so typing alone cannot tell the two cases apart.
+   Tab can:
+   - **Panel has focus:** the focus ring moves to the first button in the panel's barrier
+     list, and the letters go nowhere.
+   - **Page has focus:** the ring moves to the page's Phone field, and `abc` appears in it.
+6. Open **Diagnostics**: scroll the side panel to the very bottom with the mouse wheel and
+   click the word **Diagnostics** to expand it. "On load" and "After focusing the heading"
+   were recorded when the panel opened, so clicking now does not spoil them. Each line says
+   `panel has keyboard focus: yes` or `no`, and which element is active. "Panel received
+   focus" is only written when focus arrives later: if it shows up only after your click,
+   the panel did not have focus before it.
+7. If focus stayed in the page, press **F6** (on most Macs **Fn+F6**) one press at a
    time. Chrome cycles focus through the address bar, the page and its other panes. Count
    the presses until typing lands in the panel. Try **Shift+F6** too, it cycles backwards.
 8. Close the panel. Turn VoiceOver on (**Cmd+F5**). Repeat steps 2 and 3.
@@ -102,7 +109,7 @@ Chrome's documentation does not say. The answer decides the first spoken line of
 
 **Write down**
 
-- Letters went to: page / panel / nowhere.
+- After Tab, focus was in: page / panel / neither.
 - The three Diagnostics lines, word for word.
 - Number of F6 presses to reach the panel, if it was needed.
 - What VoiceOver said when the panel opened.
