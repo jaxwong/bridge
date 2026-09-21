@@ -9,7 +9,16 @@ export default defineBackground(() => {
 
   browser.commands.onCommand.addListener((command, tab) => {
     if (!tab?.id) return;
-    // open() must run inside the user gesture, so it is called before anything is awaited.
+    // Measured by hand on Chrome 154 (manual-checks.md, check 1): a panel that is being shown
+    // receives keyboard focus, and a panel that is already open cannot take it from the page,
+    // by window.focus() or any other call. So Alt+Shift+B closes an open panel first. The panel
+    // reloads and rescans; answers typed but not yet written to the page are lost, and the
+    // page keeps everything that was written.
+    if (command === 'open-bridge') {
+      browser.sidePanel.setOptions({ enabled: false }).catch((e) => console.error('[BRIDGE] sidePanel.setOptions', e));
+      browser.sidePanel.setOptions({ enabled: true }).catch((e) => console.error('[BRIDGE] sidePanel.setOptions', e));
+    }
+    // open() must run inside the user gesture, so nothing above or below is awaited.
     // The panel prepares the frames itself once it has loaded.
     browser.sidePanel.open({ tabId: tab.id }).catch((e) => console.error('[BRIDGE] sidePanel.open', e));
     // Alt+Shift+S: the panel owns the VERIFY gate (§6.5), so it decides what this press does.

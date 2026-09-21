@@ -75,7 +75,8 @@ Always use `localhost`, not `127.0.0.1`. The single page embeds a `127.0.0.1` fr
 purpose, as the frame BRIDGE is not allowed to reach.
 
 **Where Diagnostics is.** At the very bottom of the side panel there is a collapsed
-**Diagnostics** section. Open it to read what BRIDGE recorded. The same lines are in the
+**Diagnostics** section. Scroll the panel down with the mouse wheel and click the word
+**Diagnostics** to expand it, then read what BRIDGE recorded. The same lines are in the
 panel's console: right-click the panel, Inspect.
 
 ---
@@ -85,9 +86,15 @@ panel's console: right-click the panel, Inspect.
 **Question:** when Alt+Shift+B opens the panel, does keyboard focus move into it?
 Chrome's documentation does not say. The answer decides the first spoken line of the demo.
 
-1. Open `http://localhost:8765/apply.html`.
+There are two cases, and they can have different answers. Run both.
+
+**Case A, the panel is closed.** This is the demo's opening.
+
+1. Open `http://localhost:8765/apply.html`. **Close the side panel** with its X if it is open.
+   Pressing the shortcut while the panel is already open shows nothing new, so it says
+   nothing about what happens on open.
 2. Click once inside the page's **Full name** field, so focus is clearly in the page.
-3. Press **Alt+Shift+B**. Do not touch the mouse again.
+3. Press **Alt+Shift+B**. Do not touch the mouse again. Wait for the panel to finish scanning.
 4. Press **Tab** once, then type `abc`.
 5. Look at where focus went. BRIDGE puts focus on its own "BRIDGE" heading when it opens,
    and a heading swallows typed letters, so typing alone cannot tell the two cases apart.
@@ -95,32 +102,36 @@ Chrome's documentation does not say. The answer decides the first spoken line of
    - **Panel has focus:** the focus ring moves to the first button in the panel's barrier
      list, and the letters go nowhere.
    - **Page has focus:** the ring moves to the page's Phone field, and `abc` appears in it.
-6. Open **Diagnostics**: scroll the side panel to the very bottom with the mouse wheel and
-   click the word **Diagnostics** to expand it. "On load" and "After focusing the heading"
-   were recorded when the panel opened, so clicking now does not spoil them. Each line says
-   `panel has keyboard focus: yes` or `no`, and which element is active. "Panel received
-   focus" is only written when focus arrives later: if it shows up only after your click,
-   the panel did not have focus before it.
-7. If focus stayed in the page, press **F6** (on most Macs **Fn+F6**) one press at a
-   time. Chrome cycles focus through the address bar, the page and its other panes. Count
-   the presses until typing lands in the panel. Try **Shift+F6** too, it cycles backwards.
-8. Close the panel. Turn VoiceOver on (**Cmd+F5**). Repeat steps 2 and 3.
+   **Result, 2026-09-21, Chrome 154 on macOS: the panel has focus.**
+
+**Case B, the panel is already open and focus is in the page.** This is how a user gets
+back to the panel after working in the page.
+
+6. Leave the panel open. Click in the page's **Full name** field. Press **Alt+Shift+B**.
+   *Expect:* the panel closes and opens again, and rescans. An open panel cannot take
+   keyboard focus from the page (measured 2026-09-21), only a panel that is being shown can,
+   so the shortcut reopens it.
+7. Without touching the mouse, press **Tab**, then type `abc`. Read the result the same way
+   as step 5: the focus ring should move inside the panel.
+   If focus stays in the page, the fallback is Chrome's own pane key on macOS:
+   **Cmd+Option+Down arrow**, four presses (address bar, tabs, extensions, panel). F6 is
+   Chrome's pane key on Windows and Linux only; on a Mac it does nothing.
+8. Close the panel. Turn VoiceOver on (**Cmd+F5**). Repeat steps 2 and 3 of case A.
 9. Listen to what is spoken when the panel opens.
 
 **Write down**
 
-- After Tab, focus was in: page / panel / neither.
-- The three Diagnostics lines, word for word.
-- Number of F6 presses to reach the panel, if it was needed.
+- Case A, after Tab, focus was in: page / panel / neither.
+- Case B, after Tab, focus was in: page / panel / neither. Whether Cmd+Option+arrows helped.
 - What VoiceOver said when the panel opened.
 
 **What the answer means**
 
-| Result | Demo opening |
+| Result | What follows |
 |---|---|
-| Diagnostics says `yes`, and VoiceOver reads "BRIDGE, heading level 1" then the summary | One keypress. §4 stands as written |
-| Diagnostics says `no`, F6 reaches the panel in N presses | "Press Alt+Shift+B, then F6 N times." Tell Claude the number: the page's on-load announcement should then say it, and §4 changes |
-| F6 never reaches the panel | Tell Claude. The opening flow needs a different design before recording |
+| Case A: Tab moves inside the panel, and VoiceOver reads "BRIDGE, heading level 1" then the summary | One keypress opens the demo. §4 stands as written |
+| Case A: Tab moves in the page | Tell Claude. The opening flow needs a different design before recording |
+| Case B: the panel does not reopen, or Tab still moves in the page | Tell Claude which. The way back is then Cmd+Option+Down arrow four times, and the panel has to say so |
 
 Record the result in `bridge-user.md` §10, under the open question about panel focus.
 
@@ -166,7 +177,7 @@ The command has a gate. The **first** press on a step reads everything back. Onl
 |---|---|
 | Nothing happens, or a text field gets an "Í" | The shortcut is not bound. Go back to `chrome://extensions/shortcuts` |
 | The panel opens but nothing is announced | That press opened the panel, which was closed. Press again once it has finished scanning |
-| Announcements are right but Enter does nothing on the page | `focus()` in the page cannot pull keyboard focus out of the side panel. Tell Claude. The announcement will then have to say "press F6 to reach the page", and §6.5 changes |
+| Announcements are right but Enter does nothing on the page | `focus()` in the page cannot pull keyboard focus out of the side panel. Tell Claude. The move to the page then needs a different design, and §6.5 changes. F6 is not an answer on macOS |
 
 ---
 
