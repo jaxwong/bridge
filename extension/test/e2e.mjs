@@ -5,14 +5,14 @@
 
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const EXT = path.resolve(here, '../.output/chrome-mv3');
-const FIXTURE = readFileSync(path.join(here, 'fixtures/acme/index.html'));
+const FIXTURES = path.join(here, 'fixtures/acme');
 const AXE = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8');
 
 const results = [];
@@ -21,7 +21,14 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);
 };
 
-const server = createServer((_q, s) => { s.writeHead(200, { 'content-type': 'text/html' }); s.end(FIXTURE); });
+// One listener, reached as localhost (in host_permissions) and as 127.0.0.1 (not).
+const server = createServer((q, s) => {
+  const rel = decodeURIComponent(new URL(q.url, 'http://x').pathname).replace(/\/$/, '/index.html');
+  const file = path.join(FIXTURES, rel);
+  if (!file.startsWith(FIXTURES) || !existsSync(file)) { s.writeHead(404); s.end('not found'); return; }
+  s.writeHead(200, { 'content-type': 'text/html' });
+  s.end(readFileSync(file));
+});
 await new Promise((r) => server.listen(8765, r));
 
 const ctx = await chromium.launchPersistentContext('', {
@@ -45,11 +52,23 @@ try {
 
   // --- SCAN -------------------------------------------------------------------------
   const summary = await panel.textContent('#summary');
-  check('SCAN finds 4 questions', /^4 questions found/.test(summary), summary);
+  check('SCAN finds the 10 questions of the top frame', /^10 questions found/.test(summary), summary);
   const barriers = await panel.textContent('#barriers');
   check('reports the identically-named Yes/No options', /sound identical/.test(barriers));
   check('reports the custom dropdown', /custom dropdown/.test(barriers));
-  check('reports the dropdown is not keyboard operable', /cannot be reached with the keyboard/.test(barriers));
+  check('reports the dropdown is not keyboard operable', /"Highest education completed" cannot be reached with the keyboard/.test(barriers));
+  check('reports the slider is not keyboard operable', /"Years of experience" cannot be reached with the keyboard/.test(barriers));
+  check('reports the drag-and-drop-only uploader', /can only be used by dragging/.test(barriers));
+  check('reports the unnamed uploader once, not twice', !/Drag and drop your CV here" has no label/.test(barriers));
+  check('reports the checkbox group with no question', /"Language skills" is not tied to its options/.test(barriers));
+  check('reports the popup that is not a dialog', /not announced as a dialog/.test(barriers));
+  check('a labelled checkbox group of one is not a group barrier', !/privacy notice" is not tied/.test(barriers));
+
+  // Before anything is written: a custom dropdown showing "Select…" is empty, not answered.
+  await panel.getByRole('button', { name: 'Read back everything from the page' }).click();
+  await panel.waitForFunction(() => document.querySelectorAll('#verify-results li').length > 0);
+  check('VERIFY reads an untouched custom dropdown as empty, not as its placeholder',
+    /Highest education completed: empty/.test(await panel.locator('#verify-results').textContent()));
 
   // --- TRANSLATE --------------------------------------------------------------------
   // The page names both radio options with the question. The panel must name them Yes / No.
@@ -71,12 +90,12 @@ try {
   await status('Full name').filter({ hasText: /On the page|Could not/ }).waitFor();
   check('text: written to the page', await page.inputValue('#name') === 'Zheng Wei');
   check('text: panel reports the DOM read-back', /On the page: Zheng Wei/.test(await status('Full name').textContent()));
-  // Page order: the question after "Full name" is the education dropdown.
+  // Page order: the question after "Full name" is Phone.
   const focusedLabel = await panel.evaluate(() => {
     const a = document.activeElement;
     return a?.id ? document.querySelector(`label[for="${a.id}"]`)?.textContent || '' : '';
   });
-  check('focus moves to the NEXT question on the page after an answer', /Highest education/.test(focusedLabel), focusedLabel);
+  check('focus moves to the NEXT question on the page after an answer', /Phone/.test(focusedLabel), focusedLabel);
 
   await panel.getByLabel(/Highest education/).selectOption("Bachelor's");
   await panel.getByRole('button', { name: /Write Highest education/ }).click();
@@ -88,27 +107,70 @@ try {
   await page.waitForTimeout(700);
   check('visa radio: "No" checked on the page', await page.isChecked('#visa-no') && !(await page.isChecked('#visa-yes')));
 
-  // A page that silently discards the write must produce a failure, never a success (§4.3).
-  await panel.getByLabel('Earliest start date').fill('1 October 2026');
+  // Filling "Full name" made the page replace the phone field with a new node at a new
+  // path. BRIDGE has to find it again by kind and name (§8.1).
+  await panel.getByLabel('Phone').fill('+65 8000 0000');
+  await panel.getByRole('button', { name: 'Write Phone to page' }).click();
+  await status('Phone').filter({ hasText: /On the page|Could not/ }).waitFor();
+  check('re-rendered field: found again by name and written', await page.inputValue('.rerendered input[name=phone]') === '+65 8000 0000',
+    await status('Phone').textContent());
+
+  await panel.getByLabel(/Years of experience/).fill('2');
+  await panel.getByRole('button', { name: /Write Years of experience/ }).click();
+  await status('Years of experience').filter({ hasText: /On the page|Could not/ }).waitFor();
+  check('slider: pointer strategy sets the page value', await page.getAttribute('#exp', 'data-value') === '2', await status('Years of experience').textContent());
+  check('slider: the thumb moved', await page.locator('.slider__thumb').evaluate((t) => t.style.left) === '20%');
+
+  const langs = panel.locator('fieldset', { hasText: 'Language skills' });
+  await langs.getByRole('checkbox', { name: 'English' }).check();
+  await langs.getByRole('checkbox', { name: 'Mandarin' }).check();
+  await panel.getByRole('button', { name: /Write Language skills/ }).click();
+  await status('Language skills').filter({ hasText: /On the page|Could not/ }).waitFor();
+  const langState = () => page.locator('input[name=lang]').evaluateAll((els) => els.map((e) => e.checked).join());
+  check('checkbox group: English and Mandarin ticked on the page', await langState() === 'true,false,true', await status('Language skills').textContent());
+  await langs.getByRole('checkbox', { name: 'Mandarin' }).uncheck();
+  await panel.getByRole('button', { name: /Write Language skills/ }).click();
+  await page.waitForFunction(() => !document.querySelector('input[name=lang][value=zh]').checked, null, { timeout: 5000 }).catch(() => {});
+  check('checkbox group: a second write unticks what was removed', await langState() === 'true,false,false');
+
+  await panel.getByLabel('Earliest start date').fill('2026-10-01');
   await panel.getByRole('button', { name: 'Write Earliest start date to page' }).click();
   await status('Earliest start date').filter({ hasText: /On the page|Could not/ }).waitFor();
-  const startStatus = await status('Earliest start date').textContent();
-  check('a write the page discards is reported as a failure', /^Could not fill/.test(startStatus), startStatus);
+  check('date: written in the order the page asks for', await page.inputValue('#start-date') === '01/10/2026', await status('Earliest start date').textContent());
+
+  await panel.locator('#questions input[type=file]').setInputFiles({ name: 'resume.pdf', mimeType: 'application/pdf', buffer: Buffer.alloc(300_000, 65) });
+  await panel.locator('.q:has(input[type=file])').getByRole('button', { name: /^Write/ }).click();
+  await panel.locator('.q:has(input[type=file]) .status').filter({ hasText: /On the page|Could not/ }).waitFor();
+  check('uploader: the page received and rendered the file', await page.textContent('#cv-name') === 'resume.pdf');
+
+  await panel.getByLabel('I agree to the privacy notice').check();
+  await panel.getByRole('button', { name: /Write I agree/ }).click();
+  await status('I agree to the privacy notice').filter({ hasText: /On the page|Could not/ }).waitFor();
+  check('closed shadow root: the checkbox inside it was ticked', await page.getAttribute('acme-consent', 'data-checked') === 'true',
+    await status('I agree to the privacy notice').textContent());
+
+  // A page that silently discards the write must produce a failure, never a success (§4.3).
+  await panel.getByLabel('Notice period').fill('One month');
+  await panel.getByRole('button', { name: 'Write Notice period to page' }).click();
+  await status('Notice period').filter({ hasText: /On the page|Could not/ }).waitFor();
+  const noticeStatus = await status('Notice period').textContent();
+  check('a write the page discards is reported as a failure', /^Could not fill/.test(noticeStatus), noticeStatus);
   await panel.waitForTimeout(150);
-  check('the failure is announced', /Could not fill Earliest start date/.test(await panel.textContent('#live')));
+  check('the failure is announced', /Could not fill Notice period/.test(await panel.textContent('#live')));
 
   // --- VERIFY -----------------------------------------------------------------------
   const order = await panel.locator('#questions .q').evaluateAll((qs) =>
-    qs.map((q) => q.querySelector('label, legend')?.textContent?.slice(0, 20)));
-  check('questions are asked in page order',
-    /Full name/.test(order[0]) && /Highest/.test(order[1]) && /Will you/.test(order[2]) && /Earliest/.test(order[3]),
-    order.join(' | '));
+    qs.map((q) => q.querySelector('label, legend')?.textContent?.slice(0, 14)));
+  const expectedOrder = ['Full name', 'Phone', 'Highest', 'Years of', 'Will you', 'Language', 'Earliest', 'Drag and', 'Notice', 'I agree'];
+  check('questions are asked in page order, shadow-root field included',
+    expectedOrder.every((t, i) => (order[i] || '').startsWith(t)), order.join(' | '));
   await panel.getByRole('button', { name: 'Read back everything from the page' }).click();
-  await panel.waitForFunction(() => document.querySelectorAll('#verify-results li').length > 0);
+  await panel.waitForFunction(() => /Zheng Wei/.test(document.getElementById('verify-results').textContent));
   const verified = await panel.locator('#verify-results').textContent();
   check('VERIFY reads every answer back from the page',
-    verified.includes('Zheng Wei') && verified.includes("Bachelor's") && verified.includes('No'), verified.replace(/\s+/g, ' '));
-  check('VERIFY reports the discarded field as empty', /Earliest start date: empty/.test(verified));
+    ['Zheng Wei', '+65 8000 0000', "Bachelor's", 'Years of experience: 2', ': No', 'Language skills: English', '01/10/2026', 'resume.pdf', 'privacy notice: checked']
+      .every((t) => verified.includes(t)), verified.replace(/\s+/g, ' '));
+  check('VERIFY reports the discarded field as empty', /Notice period: empty/.test(verified));
   await panel.waitForTimeout(150);
   check('VERIFY summary is announced', /Your application contains/.test(await panel.textContent('#live')));
 

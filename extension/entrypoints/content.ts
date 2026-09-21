@@ -1,9 +1,9 @@
 // Content script: owns everything about the page (spec §5.1). Disposable — it keeps no
 // state that must outlive the page, and re-derives everything from the DOM (§6.5).
 
-import { fill, harvestOptions, readValue, resolve } from '../lib/act';
+import { fill, harvestOptions, readValue } from '../lib/act';
 import type { Request } from '../lib/messages';
-import { scanPage, type FieldHandle } from '../lib/scan';
+import { refind, scanPage, type FieldHandle } from '../lib/scan';
 import type { ReadBackResult, ScanResult } from '../lib/types';
 
 export default defineContentScript({
@@ -36,9 +36,11 @@ export default defineContentScript({
         case 'bridge/scan': {
           const { result, handles: h } = scanPage();
           // Custom dropdown options only exist once opened (§6.3): open, read, close.
+          // The handle keeps them too, so read-back can tell "Select…" from a selection.
           for (const f of result.fields) {
-            if (f.kind !== 'combobox' || f.options) continue;
-            try { f.options = await harvestOptions(h.get(f.id)!.el); } catch { f.options = []; }
+            if (f.kind !== 'combobox') continue;
+            const handle = h.get(f.id)!;
+            handle.options = f.options = await harvestOptions(handle.el);
           }
           handles = h;
           last = result;
@@ -58,7 +60,7 @@ export default defineContentScript({
           if (!last) return [];
           return last.fields.map((f): ReadBackResult => {
             const h = handles.get(f.id)!;
-            const found = !!resolve(h.el, h.selector);
+            const found = !!refind(h);
             return { fieldId: f.id, label: f.label, value: found ? readValue(h) : '', found };
           });
         }

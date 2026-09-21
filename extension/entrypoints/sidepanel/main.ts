@@ -91,7 +91,7 @@ function renderQuestion(f: FieldDescriptor, index: number, total: number): HTMLE
 
   const hasOptions = (f.kind === 'select' || f.kind === 'combobox') && (f.options?.length ?? 0) > 0;
 
-  if (f.kind === 'radio-group' && f.options?.length) {
+  if ((f.kind === 'radio-group' || f.kind === 'checkbox-group') && f.options?.length) {
     // A real group: the question as the legend, each option named by its own text.
     const fs = document.createElement('fieldset');
     const lg = document.createElement('legend');
@@ -102,7 +102,7 @@ function renderQuestion(f: FieldDescriptor, index: number, total: number): HTMLE
       const lab = document.createElement('label');
       lab.className = 'choice';
       const r = document.createElement('input');
-      r.type = 'radio';
+      r.type = f.kind === 'radio-group' ? 'radio' : 'checkbox';
       r.name = controlId(f);
       r.value = opt;
       if (i === 0) r.id = controlId(f);
@@ -133,7 +133,12 @@ function renderQuestion(f: FieldDescriptor, index: number, total: number): HTMLE
       ctl.rows = 4;
     } else {
       const inp = document.createElement('input');
-      inp.type = f.kind === 'checkbox' ? 'checkbox' : f.kind === 'file' ? 'file' : 'text';
+      inp.type = ({ checkbox: 'checkbox', file: 'file', slider: 'number', date: 'date' } as Record<string, string>)[f.kind] || 'text';
+      if (f.kind === 'slider' && f.range) {
+        inp.min = String(f.range.min);
+        inp.max = String(f.range.max);
+        inp.step = String(f.range.step);
+      }
       ctl = inp;
     }
     ctl.id = controlId(f);
@@ -182,6 +187,10 @@ async function readAnswer(f: FieldDescriptor): Promise<string | null> {
   if (f.kind === 'radio-group') {
     const checked = q.querySelector<HTMLInputElement>('input[type=radio]:checked');
     return checked ? checked.value : null;
+  }
+  if (f.kind === 'checkbox-group') {
+    // None ticked is an answer too: it clears the group on the page.
+    return JSON.stringify([...q.querySelectorAll<HTMLInputElement>('input[type=checkbox]:checked')].map((c) => c.value));
   }
   const ctl = $(controlId(f)) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
   if (f.kind === 'checkbox') return (ctl as HTMLInputElement).checked ? 'checked' : 'not checked';
