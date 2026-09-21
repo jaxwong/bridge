@@ -125,7 +125,23 @@ Full method in `screen-reader-testing.md`. Short version: caption panel on
 (Control + Option + Shift + F11) for the Continue transitions specifically — that is where
 "was anything announced?" is the entire question.
 
+**Prerequisite:** macOS Keyboard navigation on (System Settings → Keyboard), and VoiceOver
+Hints on. Without the first, Tab skips LinkedIn's native `<select>`s and they look like
+barriers; without the second, linked help text looks missing. See
+`screen-reader-testing.md`.
+
 Reload the page first so the form starts clean.
+
+**If Tab skips a dropdown:** run `bridge.stop()`, then re-paste `console-snippet.js`.
+Pasting does not reload the page, so you stay on the same step. Run `bridge.watchTab()`,
+click the field just before the dropdown, and press Tab once. The `[Tab]` line says
+whether LinkedIn intercepted the key and names whatever it skipped. Record the verdict
+line exactly.
+
+**Do this one first — it confirms the headline finding by ear.** On step 3, focus the Yes
+radio of the sponsorship question, then the No radio. The DOM says both carry
+`aria-label` = the full question, which overrides their "Yes"/"No" text. Expect to hear
+the whole question twice and never the words "Yes" or "No". Record the exact captions.
 
 1. `Tab` to the Easy Apply button and activate it. **Is the dialog announced?** Record the
    exact caption text, or `SILENCE`.

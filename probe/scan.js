@@ -143,15 +143,30 @@ function SCAN() {
     }
   }
 
-  // --- uploaders: a drop zone whose file input is unreachable ---
+  // --- uploaders ---
+  // Keyboard reachability is about the tab order, not visibility. A visually hidden but
+  // focusable file input is the standard accessible pattern, so being invisible is not a
+  // barrier. Only tabindex=-1, disabled, display:none, visibility:hidden or inert remove
+  // it from the tab order. (An earlier version conflated the two and reported a
+  // tabIndex=0 input as "drag-drop-only".)
+  const keyboardReachable = (el) => {
+    const cs = getComputedStyle(el);
+    return el.tabIndex >= 0 && !el.disabled && cs.display !== 'none' &&
+      cs.visibility !== 'hidden' && !el.closest('[inert]');
+  };
   document.querySelectorAll('input[type=file]').forEach((inp) => {
     const { name } = accName(inp);
-    const reachable = inp.tabIndex !== -1 && visible(inp);
     const hasTrigger = inp.id && document.querySelector(`label[for="${CSS.escape(inp.id)}"]`);
-    if (!reachable && !hasTrigger) {
+    if (hasTrigger) return;
+    if (!keyboardReachable(inp)) {
       out.pageBarriers.push({
         rule: 'drag-drop-only', severity: 'blocking',
-        detail: `file input tabIndex=${inp.tabIndex}, accessible name=${name || 'none'}, no labelled trigger`,
+        detail: `file input is out of the tab order (tabIndex=${inp.tabIndex}) and has no labelled trigger`,
+      });
+    } else if (!name) {
+      out.pageBarriers.push({
+        rule: 'upload-unnamed', severity: 'usability',
+        detail: 'file input is keyboard-reachable but has no accessible name — heard only as a generic file button',
       });
     }
   });
