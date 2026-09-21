@@ -23,6 +23,10 @@ export default defineConfig({
         suggested_key: { default: 'Alt+Shift+B' },
         description: 'Open BRIDGE',
       },
+      'focus-submit': {
+        suggested_key: { default: 'Alt+Shift+S' },
+        description: 'Check the answers, then move to Continue or Submit',
+      },
     },
   },
 });

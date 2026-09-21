@@ -16,14 +16,25 @@
     <main>
       <section aria-labelledby="precheck-h">
         <h2 id="precheck-h">Application pre-check</h2>
+        <p id="journey"></p>
         <p id="summary">Scanning the page…</p>
         <ul id="barriers"></ul>
         <button type="button" id="rescan">Scan the page again</button>
+        <button type="button" id="always-enable" hidden>Always enable BRIDGE on this site</button>
       </section>
 
       <section aria-labelledby="questions-h">
         <h2 id="questions-h">Questions</h2>
+        <fieldset id="mode">
+          <legend>How to answer</legend>
+          <label class="choice"><input type="radio" name="mode" value="one" checked> One question at a time</label>
+          <label class="choice"><input type="radio" name="mode" value="list"> Full list</label>
+        </fieldset>
         <div id="questions"></div>
+        <div id="pager">
+          <button type="button" id="prev">Previous question</button>
+          <button type="button" id="next">Next question</button>
+        </div>
       </section>
 
       <section aria-labelledby="verify-h">
@@ -31,6 +42,13 @@
         <p>BRIDGE reads every answer back from the page itself, not from its own notes.</p>
         <button type="button" id="verify">Read back everything from the page</button>
         <ul id="verify-results"></ul>
+      </section>
+
+      <section aria-labelledby="report-h">
+        <h2 id="report-h">Barrier report</h2>
+        <p>For the employer: the accessibility barriers BRIDGE found, on every step you reached. It contains none of your answers and nothing about you.</p>
+        <button type="button" id="export-json">Export barrier report as JSON</button>
+        <button type="button" id="export-md">Export barrier report as Markdown</button>
       </section>
 
       <details id="diagnostics">

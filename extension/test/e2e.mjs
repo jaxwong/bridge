@@ -50,9 +50,13 @@ try {
   await panel.goto(`chrome-extension://${extId}/sidepanel.html?tabId=${tabId}`);
   await panel.waitForFunction(() => !document.getElementById('summary').textContent.startsWith('Scanning'), null, { timeout: 15000 });
 
+  // Most of this run answers questions out of order, so it uses the full list. The
+  // default, one question at a time, has its own section below.
+  await panel.getByLabel('Full list').check();
+
   // --- SCAN -------------------------------------------------------------------------
   const summary = await panel.textContent('#summary');
-  check('SCAN finds the 10 questions of the top frame', /^10 questions found/.test(summary), summary);
+  check('SCAN finds 11 questions: 10 in the page, 1 in the same-origin iframe', /^11 questions found/.test(summary), summary);
   const barriers = await panel.textContent('#barriers');
   check('reports the identically-named Yes/No options', /sound identical/.test(barriers));
   check('reports the custom dropdown', /custom dropdown/.test(barriers));
@@ -62,6 +66,8 @@ try {
   check('reports the unnamed uploader once, not twice', !/Drag and drop your CV here" has no label/.test(barriers));
   check('reports the checkbox group with no question', /"Language skills" is not tied to its options/.test(barriers));
   check('reports the popup that is not a dialog', /not announced as a dialog/.test(barriers));
+  check('reports the one frame it cannot reach, by host',
+    (barriers.match(/cannot reach/g) || []).length === 1 && /frame from 127\.0\.0\.1:8765 that BRIDGE cannot reach/.test(barriers));
   check('a labelled checkbox group of one is not a group barrier', !/privacy notice" is not tied/.test(barriers));
 
   // Before anything is written: a custom dropdown showing "Select…" is empty, not answered.
@@ -72,7 +78,7 @@ try {
 
   // --- TRANSLATE --------------------------------------------------------------------
   // The page names both radio options with the question. The panel must name them Yes / No.
-  const legend = await panel.locator('fieldset legend').first().textContent();
+  const legend = await panel.locator('#questions fieldset legend').first().textContent();
   check('visa question becomes a real group with the question as legend', /sponsorship/.test(legend), legend);
   check('options are named Yes and No, not the question',
     await panel.getByRole('radio', { name: 'Yes', exact: true }).count() === 1 &&
@@ -149,6 +155,12 @@ try {
   check('closed shadow root: the checkbox inside it was ticked', await page.getAttribute('acme-consent', 'data-checked') === 'true',
     await status('I agree to the privacy notice').textContent());
 
+  await panel.getByLabel('Referral code').fill('ACME-42');
+  await panel.getByRole('button', { name: 'Write Referral code to page' }).click();
+  await status('Referral code').filter({ hasText: /On the page|Could not/ }).waitFor();
+  check('iframe: the field inside the same-origin frame was written',
+    await page.frameLocator('#frame-same').locator('#referral').inputValue() === 'ACME-42', await status('Referral code').textContent());
+
   // A page that silently discards the write must produce a failure, never a success (§4.3).
   await panel.getByLabel('Notice period').fill('One month');
   await panel.getByRole('button', { name: 'Write Notice period to page' }).click();
@@ -161,14 +173,14 @@ try {
   // --- VERIFY -----------------------------------------------------------------------
   const order = await panel.locator('#questions .q').evaluateAll((qs) =>
     qs.map((q) => q.querySelector('label, legend')?.textContent?.slice(0, 14)));
-  const expectedOrder = ['Full name', 'Phone', 'Highest', 'Years of', 'Will you', 'Language', 'Earliest', 'Drag and', 'Notice', 'I agree'];
+  const expectedOrder = ['Full name', 'Phone', 'Highest', 'Years of', 'Will you', 'Language', 'Earliest', 'Drag and', 'Notice', 'I agree', 'Referral'];
   check('questions are asked in page order, shadow-root field included',
     expectedOrder.every((t, i) => (order[i] || '').startsWith(t)), order.join(' | '));
   await panel.getByRole('button', { name: 'Read back everything from the page' }).click();
   await panel.waitForFunction(() => /Zheng Wei/.test(document.getElementById('verify-results').textContent));
   const verified = await panel.locator('#verify-results').textContent();
   check('VERIFY reads every answer back from the page',
-    ['Zheng Wei', '+65 8000 0000', "Bachelor's", 'Years of experience: 2', ': No', 'Language skills: English', '01/10/2026', 'resume.pdf', 'privacy notice: checked']
+    ['Zheng Wei', '+65 8000 0000', "Bachelor's", 'Years of experience: 2', ': No', 'Language skills: English', '01/10/2026', 'resume.pdf', 'privacy notice: checked', 'Referral code: ACME-42']
       .every((t) => verified.includes(t)), verified.replace(/\s+/g, ' '));
   check('VERIFY reports the discarded field as empty', /Notice period: empty/.test(verified));
   await panel.waitForTimeout(150);
@@ -182,6 +194,16 @@ try {
   const axe = await panel.evaluate(async () => (await window.axe.run(document)).violations
     .map((v) => `${v.id} (${v.nodes.length})`));
   check('side panel: zero axe violations', axe.length === 0, axe.join(', ') || 'none');
+
+  // --- a full page load (§4): the content script is gone, the panel notices by itself ---
+  await page.reload();
+  await panel.waitForFunction(() => /page reloaded/.test(document.getElementById('live').textContent), null, { timeout: 15000 });
+  check('reload: the panel rescans without being asked and says so', true);
+  check('reload: confirmations of the old document are cleared', await panel.locator('#questions .status.ok').count() === 0);
+  check('reload: what the user typed in the panel is kept', await panel.getByLabel('Full name').inputValue() === 'Zheng Wei');
+  await panel.getByRole('button', { name: 'Write Full name to page' }).click();
+  await status('Full name').filter({ hasText: /On the page|Could not/ }).waitFor();
+  check('reload: the fresh content script takes writes', await page.inputValue('#name') === 'Zheng Wei');
 } finally {
   await ctx.close();
   server.close();
