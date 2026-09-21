@@ -401,6 +401,23 @@ try {
     check('full-nav: forward command reaches Submit on the last step', await pageFocus(page) === 'Submit', said);
     check('full-nav: BRIDGE did not submit', (await page.textContent('#result')) === '');
   }
+
+  // =====================================================================================
+  // Uploaders: a label names an input, it does not make it reachable (spec §6.2).
+  // =====================================================================================
+  {
+    const { page, panel } = await open('uploaders.html');
+    const listed = await panel.locator('#barriers li').allTextContents();
+    check('uploader: labelled but out of the tab order is still drag-drop-only',
+      listed.filter((t) => /can only be used by dragging/.test(t)).length === 1, JSON.stringify(listed));
+    check('uploader: the accessible patterns (tab stop, or a focusable label) report nothing',
+      listed.length === 1, JSON.stringify(listed));
+    // Ground truth for the rule, from real key presses: which uploaders can Tab reach?
+    await page.locator('#who').focus();
+    const stops = [];
+    for (let i = 0; i < 3; i++) { await page.keyboard.press('Tab'); stops.push(await page.evaluate(() => document.activeElement?.id || document.activeElement?.getAttribute('for') || 'none')); }
+    check('uploader: real Tab presses agree with the rule', stops.join() === 'cv-b,cv-c,none', stops.join());
+  }
 } finally {
   await ctx.close();
   server.close();

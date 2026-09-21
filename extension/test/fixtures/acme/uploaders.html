@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Acme Careers — uploader variants</title>
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; max-width: 640px; margin: 24px auto; padding: 0 16px; }
+    .row { margin: 20px 0; }
+    .dropzone { border: 2px dashed #888; padding: 20px; text-align: center; cursor: pointer; }
+    .hidden-input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  </style>
+</head>
+<body>
+  <!-- Three uploaders that differ only in whether a KEYBOARD can reach them (spec §6.2,
+       drag-drop-only). A label gives an input a name; it does not make it a tab stop. -->
+  <h1>Uploader variants</h1>
+  <form>
+    <div class="row"><label for="who">Full name</label><br><input id="who"></div>
+
+    <!-- A. Labelled, but out of the tab order, and the label is not focusable either.
+         Tab never reaches it: drag-drop-only, however well it is named. -->
+    <div class="row">
+      <label for="cv-a">CV</label>
+      <div class="dropzone">Drag and drop your CV here</div>
+      <input type="file" id="cv-a" class="hidden-input" tabindex="-1">
+    </div>
+
+    <!-- B. The standard accessible pattern: visually hidden, labelled, still a tab stop. No barrier. -->
+    <div class="row">
+      <label for="cv-b">Cover letter</label>
+      <input type="file" id="cv-b" class="hidden-input">
+    </div>
+
+    <!-- C. Out of the tab order, but its label was made a keyboard trigger. No barrier. -->
+    <div class="row">
+      <label for="cv-c" tabindex="0" role="button">Portfolio</label>
+      <input type="file" id="cv-c" class="hidden-input" tabindex="-1">
+    </div>
+  </form>
+  <script>
+    document.querySelector('label[for=cv-c]').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') document.getElementById('cv-c').click();
+    });
+  </script>
+</body>
+</html>

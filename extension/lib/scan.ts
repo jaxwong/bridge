@@ -286,9 +286,14 @@ function pageBarriers(): Barrier[] {
   deepQueryAll<HTMLInputElement>(document, 'input[type=file]').forEach((inp) => {
     if (ariaHidden(inp)) return;
     const root = inp.getRootNode() as Document | ShadowRoot;
-    if (inp.id && root.querySelector(`label[for="${CSS.escape(inp.id)}"]`)) return;
+    // A label gives the input a name. It is not a tab stop, so it only rescues an
+    // unreachable input if it was itself made a keyboard trigger. Treating any label[for]
+    // as "accessible" hid a labelled drag-drop-only uploader completely.
+    const label = inp.id ? root.querySelector<HTMLElement>(`label[for="${CSS.escape(inp.id)}"]`) : null;
+    const labelIsTrigger = !!label && (keyboardReachable(label) ||
+      [...label.querySelectorAll<HTMLElement>('button,[role=button],[tabindex]')].some(keyboardReachable));
     if (!keyboardReachable(inp)) {
-      out.push(barrier('drag-drop-only', 'blocking', 'The CV uploader can only be used by dragging a file onto it.'));
+      if (!labelIsTrigger) out.push(barrier('drag-drop-only', 'blocking', 'The CV uploader can only be used by dragging a file onto it.'));
     } else if (!accName(inp).name) {
       out.push(barrier('upload-unnamed', 'usability', 'The upload button has no label, so it is announced only as a generic file button.'));
     }
