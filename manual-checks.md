@@ -8,13 +8,17 @@ quoted text back into the session; most failures here have a known, small fix.
 
 | # | Check | Time | Blocks the video? |
 |---|---|---|---|
-| 1 | Focus spike | 10 min | Yes |
+| 1 | Keyboard focus and the panel | done, 2 min left | Yes |
 | 2 | Alt+Shift+S presses Next; submitting needs your confirmation | 10 min | Yes |
 | 3 | Screenshot crop for label inference | 10 min | Yes, if the demo shows inference |
 | 4 | "Always enable BRIDGE on this site" | 10 min | No |
 | 5 | Export saves a file | 5 min | Yes, it hands over to the employer demo |
 | 6 | VoiceOver pass with Screen Curtain | 60 min | Yes |
 | 7 | LinkedIn Easy Apply by hand | 20 min | No |
+
+**Status, 2026-09-22.** Check 1 is done apart from one VoiceOver step. Check 2 changed the
+design twice (BRIDGE now presses Next, and submits only after a confirmation in the panel),
+and its new steps have not been run by hand yet. Checks 3 to 7 have not been started.
 
 On a Mac, **Alt is the Option key**. So Alt+Shift+B is Option+Shift+B.
 
@@ -82,60 +86,41 @@ panel's console: right-click the panel, Inspect.
 
 ---
 
-## 1. Focus spike
+## 1. Keyboard focus and the panel
 
-**Question:** when Alt+Shift+B opens the panel, does keyboard focus move into it?
-Chrome's documentation does not say. The answer decides the first spoken line of the demo.
+**Done on 2026-09-21, Chrome 154 on macOS. One step is left, step 4.**
 
-There are two cases, and they can have different answers. Run both.
+What was found, by hand:
 
-**Case A, the panel is closed.** This is the demo's opening.
+| Question | Answer |
+|---|---|
+| Does a panel opened by Alt+Shift+B take keyboard focus? | **Yes.** Tab moves inside the panel. Focus starts on the "BRIDGE" heading, which swallows typed letters, so Tab is the way to tell |
+| Can a panel that is already open take focus back from the page? | **No**, not by any call BRIDGE can make. So Alt+Shift+B now closes an open panel and shows it again, which does take focus. Checked by hand: it reopens and Tab moves inside it |
+| Can the page take focus from the panel? | **No.** See check 2, which changed the design because of it |
+| Chrome's own pane key | F6 does nothing on macOS. Cmd+Option+Down arrow, or Up, reaches the other pane in four presses. Nothing in BRIDGE depends on it |
 
-1. Open `http://localhost:8765/apply.html`. **Close the side panel** with its X if it is open.
-   Pressing the shortcut while the panel is already open shows nothing new, so it says
-   nothing about what happens on open.
-2. Click once inside the page's **Full name** field, so focus is clearly in the page.
-3. Press **Alt+Shift+B**. Do not touch the mouse again. Wait for the panel to finish scanning.
-4. Press **Tab** once, then type `abc`.
-5. Look at where focus went. BRIDGE puts focus on its own "BRIDGE" heading when it opens,
-   and a heading swallows typed letters, so typing alone cannot tell the two cases apart.
-   Tab can:
-   - **Panel has focus:** the focus ring moves to the first button in the panel's barrier
-     list, and the letters go nowhere.
-   - **Page has focus:** the ring moves to the page's Phone field, and `abc` appears in it.
-   **Result, 2026-09-21, Chrome 154 on macOS: the panel has focus.**
+The cost of the reopen: the panel reloads and rescans. An answer typed in the panel but not
+yet written to the page is lost. Everything written is on the page and is read back from there.
 
-**Case B, the panel is already open and focus is in the page.** This is how a user gets
-back to the panel after working in the page.
+**To repeat the check after any change to the shortcuts**
 
-6. Leave the panel open. Click in the page's **Full name** field. Press **Alt+Shift+B**.
-   *Expect:* the panel closes and opens again, and rescans. An open panel cannot take
-   keyboard focus from the page (measured 2026-09-21), only a panel that is being shown can,
-   so the shortcut reopens it.
-7. Without touching the mouse, press **Tab**, then type `abc`. Read the result the same way
-   as step 5: the focus ring should move inside the panel.
-   **Result, 2026-09-21, Chrome 154 on macOS: the panel reopens and Tab moves inside it.**
-   If focus stays in the page, the fallback is Chrome's own pane key on macOS:
-   **Cmd+Option+Down arrow**, four presses (address bar, tabs, extensions, panel). F6 is
-   Chrome's pane key on Windows and Linux only; on a Mac it does nothing.
-8. Close the panel. Turn VoiceOver on (**Cmd+F5**). Repeat steps 2 and 3 of case A.
-9. Listen to what is spoken when the panel opens.
+1. Open `http://localhost:8765/apply.html`. Close the side panel with its X.
+2. Click in the page's **Full name** field. Press **Alt+Shift+B**, wait for the scan, then
+   press **Tab**. *Expect:* the focus ring is on the first button in the panel's barrier list.
+   If `abc` typed now lands in the page's Phone field, focus stayed in the page: tell Claude.
+3. Leave the panel open. Click in **Full name** again. Press **Alt+Shift+B**, then **Tab**.
+   *Expect:* the panel closes, reopens and rescans, and the focus ring is inside it.
+
+**Still to do**
+
+4. Close the panel. Turn VoiceOver on (**Cmd+F5**). Click in **Full name**, press
+   **Alt+Shift+B**, and listen. *Expect:* "BRIDGE, heading level 1", then the summary. With
+   VoiceOver's default settings it then reads the whole panel; **Control** stops it (check 6,
+   "Before you start", explains the setting).
 
 **Write down**
 
-- Case A, after Tab, focus was in: page / panel / neither.
-- Case B, after Tab, focus was in: page / panel / neither. Whether Cmd+Option+arrows helped.
 - What VoiceOver said when the panel opened.
-
-**What the answer means**
-
-| Result | What follows |
-|---|---|
-| Case A: Tab moves inside the panel, and VoiceOver reads "BRIDGE, heading level 1" then the summary | One keypress opens the demo. §4 stands as written |
-| Case A: Tab moves in the page | Tell Claude. The opening flow needs a different design before recording |
-| Case B: the panel does not reopen, or Tab still moves in the page | Tell Claude which. The way back is then Cmd+Option+Down arrow four times, and the panel has to say so |
-
-Record the result in `bridge-user.md` §10, under the open question about panel focus.
 
 ---
 
@@ -168,6 +153,7 @@ The command has a gate. The **first** press on a step reads everything back. Onl
    Press Space: "Nothing was submitted." Press "Submit my application" again, Tab back to
    **"Yes, submit now"**, press Space. *Expect:* "BRIDGE pressed the Submit application button
    on the page, as you confirmed.", and the page shows "Submitted (test page, nothing sent)."
+   (`modal.html` shows that line in place. `apply.html` goes to an "Application received" page.)
 8. Open `http://localhost:8765/stuck.html`, whose Next button refuses to advance. Press
    **Alt+Shift+B**, then **Alt+Shift+S** twice. *Expect:* "BRIDGE pressed the Next button on
    the page.", and three seconds later "The page has not moved on since BRIDGE pressed Next. …"
