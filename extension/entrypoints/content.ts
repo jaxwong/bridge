@@ -45,7 +45,13 @@ export default defineContentScript({
       try { return await work(); } finally { setTimeout(() => { busy--; }, 600); }
     }
 
-    function forwardAction(focus: boolean): ForwardAction | null {
+    /**
+     * Chrome does not let a page take keyboard focus from the side panel (measured by hand,
+     * manual-checks.md check 2), so "move the user to the button" cannot be done. With `act`,
+     * a button that only moves on is pressed for the user. A button that submits is never
+     * pressed (§6.5): it gets the page's focus, so Chrome's pane key lands on it.
+     */
+    function forwardAction(act: boolean): ForwardAction | null {
       const scope = formScope();
       const buttons = deepQueryAll<HTMLElement>(scope, 'button,input[type=submit],input[type=button],[role=button],a[href]')
         .filter((b) => visible(b) && !(b as HTMLButtonElement).disabled)
@@ -54,11 +60,15 @@ export default defineContentScript({
       // The last one in page order: forms put the forward action at the end.
       const hit = buttons[buttons.length - 1];
       if (!hit) return null;
-      if (focus) {
+      const submits = SUBMITS.test(hit.name);
+      if (!act) return { name: hit.name, submits, pressed: false };
+      if (submits) {
         hit.b.scrollIntoView({ block: 'center' });
         hit.b.focus();
+        return { name: hit.name, submits, pressed: false };
       }
-      return { name: hit.name, submits: SUBMITS.test(hit.name) };
+      hit.b.click();
+      return { name: hit.name, submits, pressed: true };
     }
 
     async function handle(msg: Request): Promise<unknown> {
@@ -105,7 +115,7 @@ export default defineContentScript({
         }
 
         case 'bridge/forward-action':
-          return forwardAction(msg.focus);
+          return forwardAction(msg.act);
 
         case 'bridge/rect': {
           // For a label-inference crop (§6.4). Field values never leave the device, so a

@@ -25,7 +25,7 @@ export default defineConfig({
       },
       'focus-submit': {
         suggested_key: { default: 'Alt+Shift+S' },
-        description: 'Check the answers, then move to Continue or Submit',
+        description: 'Check the answers, then press Continue or get Submit ready',
       },
     },
   },
