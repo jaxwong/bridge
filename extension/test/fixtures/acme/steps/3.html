@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Acme Careers — Review</title>
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; max-width: 640px; margin: 24px auto; padding: 0 16px; }
+    ol { display: flex; gap: 16px; padding: 0; list-style: none; }
+    li[data-automation-id=progressBarActiveStep] { font-weight: 700; }
+    .row { margin: 14px 0; }
+  </style>
+</head>
+<body>
+  <!-- Workday's shape (spec §6.5, §11): the whole journey published in a stepper, and every
+       step a FULL page navigation, which destroys the content script. Nothing is sent anywhere. -->
+  <h1>Junior Analyst — Apply</h1>
+  <div data-automation-id="progressBar"><ol><li>My Information</li><li>My Experience</li><li data-automation-id="progressBarActiveStep">Review</li></ol><p>step 3 of 3</p></div>
+  <form id="apply">
+    <h2>Review</h2>
+      <div class="row"><label><input type="checkbox" id="confirm" name="confirm"> I confirm that the information above is correct</label></div>
+      <div class="row"><label for="signature">Type your full name as a signature</label><br><input id="signature" name="signature"></div>
+    <div class="row"><button type="button" onclick="location.href='2.html'">Back</button> <button type="submit">Submit</button></div>
+    <p id="result" role="status"></p>
+  </form>
+  <script>
+    document.getElementById('apply').addEventListener('submit', (e) => {
+      e.preventDefault();
+      document.getElementById('result').textContent = 'Submitted (test page, nothing sent).';
+    });
+  </script>
+</body>
+</html>
