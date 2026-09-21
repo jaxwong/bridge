@@ -84,6 +84,12 @@ These are real employers' hiring systems.
   resolved the wrong element as the drop zone. Treat it as unverified, not as failed.
 - Easy Apply on LinkedIn is behind a login, so none of it was measured.
 
+## Test plans
+
+- [`linkedin-easy-apply-test.md`](linkedin-easy-apply-test.md) — the outstanding one:
+  can a blind applicant complete an Easy Apply application?
+- [`screen-reader-testing.md`](screen-reader-testing.md) — method for the listening pass.
+
 ## The probe is half the test
 
 `scan.js` reports what is in the DOM. It cannot tell you what a user is *told* — a silent

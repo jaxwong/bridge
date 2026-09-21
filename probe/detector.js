@@ -17,15 +17,11 @@
  * ground truth. The similarity heuristic is the fallback for pages that do not.
  */
 function createDetector({ scan, onEvent, threshold = 0.4, debounceMs = 350 }) {
-  // Only the region that actually swaps. A modal dialog wins over the form,
-  // because on LinkedIn the form behind it never goes away.
-  const scope = () =>
-    document.querySelector('[role=dialog][aria-modal="true"]') ||
-    document.querySelector('[role=dialog]') ||
-    document.querySelector('form') ||
-    document.body;
-
   const SEL = 'input,select,textarea,[role=combobox],[role=checkbox],[role=radio],[role=slider],[role=spinbutton]';
+
+  // Only the region that actually swaps — see scope.js for why this is not just
+  // "the first dialog".
+  const scope = () => formScope(SEL);
 
   const key = (e) => {
     const name = e.getAttribute('aria-label') || e.name || e.id || e.dataset.automationId || '';

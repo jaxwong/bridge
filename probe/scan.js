@@ -116,6 +116,33 @@ function SCAN() {
     if (!named) out.pageBarriers.push({ rule: 'group-not-labelled', severity: 'blocking', name, count: els.length });
   }
 
+  // --- options within one group that share an accessible name ---
+  // Measured on LinkedIn Easy Apply: a fieldset with no legend, "fixed" by putting the
+  // question into aria-label on every option. aria-label overrides element contents, so
+  // "Yes" and "No" are never spoken and both options announce identically. The group
+  // gained a name and the options lost theirs.
+  const optionGroups = new Map();
+  document.querySelectorAll('[role=radio],[role=checkbox],input[type=radio],input[type=checkbox]').forEach((el) => {
+    if (!visible(el) || ariaHidden(el)) return;
+    const container = el.closest('fieldset,[role=radiogroup],[role=group]');
+    const groupKey = container || (el.name ? `name:${el.name}` : null);
+    if (!groupKey) return;
+    if (!optionGroups.has(groupKey)) optionGroups.set(groupKey, []);
+    optionGroups.get(groupKey).push(el);
+  });
+  for (const [, opts] of optionGroups) {
+    if (opts.length < 2) continue;
+    const names = opts.map((el) => accName(el).name).filter(Boolean);
+    if (names.length < 2) continue;
+    if (new Set(names).size === 1) {
+      out.pageBarriers.push({
+        rule: 'options-identically-named', severity: 'blocking',
+        count: opts.length,
+        detail: `${opts.length} options all named "${names[0].slice(0, 60)}" — the choices cannot be told apart`,
+      });
+    }
+  }
+
   // --- uploaders: a drop zone whose file input is unreachable ---
   document.querySelectorAll('input[type=file]').forEach((inp) => {
     const { name } = accName(inp);

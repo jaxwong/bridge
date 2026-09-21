@@ -10,26 +10,28 @@ Testing with a screen reader while you can see the screen tells you almost nothi
 unconsciously use visual position, colour and layout to orient, and you will conclude a
 form is usable when it is not.
 
-**Turn the screen off.** VoiceOver has Screen Curtain (`VO + Shift + F11`): the display goes
+**Turn the screen off.** VoiceOver has Screen Curtain (Control + Option + Shift + F11): the display goes
 black, VoiceOver keeps speaking. If you cannot complete the step with the curtain on, a
 blind applicant cannot complete it either. That is the whole test.
 
 ## VoiceOver, minimum viable
 
-`VO` means **Control + Option**, held together with the listed key.
+Apple's docs write the VoiceOver modifier as **VO**. That is **Control + Option** held
+together — it is the letters V and O, not a version number. So `VO + A` means
+*Control + Option + A*, all three at once.
 
-| Key | Does |
-|---|---|
-| `Cmd + F5` | Toggle VoiceOver on/off |
-| `VO + Cmd + F8` | Built-in tutorial — worth 15 minutes if this is your first time |
-| `VO + Cmd + F10` | **Caption panel**: shows every announcement as text on screen |
-| `VO + Shift + F11` | Screen Curtain |
-| `Tab` | Next focusable control (what a form user actually does) |
-| `VO + →` / `VO + ←` | Next/previous item, including non-focusable text |
-| `VO + Space` | Activate the item |
-| `VO + A` | Read continuously from here |
-| `VO + U` | Rotor — jump by heading, form control, landmark |
-| `Control` | Shut it up |
+| Shortcut | Keys to press | Does |
+|---|---|---|
+| `Cmd + F5` | Command + F5 | Toggle VoiceOver on/off |
+| `VO + Cmd + F8` | Control + Option + Command + F8 | Built-in tutorial — worth 15 minutes if this is your first time |
+| `VO + Cmd + F10` | Control + Option + Command + F10 | **Caption panel**: shows every announcement as text on screen |
+| `VO + Shift + F11` | Control + Option + Shift + F11 | Screen Curtain |
+| `Tab` | Tab | Next focusable control (what a form user actually does) |
+| `VO + →` / `VO + ←` | Control + Option + Arrow | Next/previous item, including non-focusable text |
+| `VO + Space` | Control + Option + Space | Activate the item |
+| `VO + A` | Control + Option + A | Read continuously from here |
+| `VO + U` | Control + Option + U | Rotor — jump by heading, form control, landmark |
+| `Control` | Control | Shut it up |
 
 Two gotchas that waste everyone's first hour:
 
@@ -40,6 +42,34 @@ Two gotchas that waste everyone's first hour:
 
 Use the **caption panel**. It turns speech into text you can screenshot or copy into a
 findings write-up, which is far more useful evidence than "it sounded wrong".
+
+## Making it bearable
+
+Default VoiceOver is tuned for someone fluent in it, and it is exhausting if you are not.
+You are not obliged to work that way:
+
+- **Mute speech, keep captions.** Caption panel on (Control + Option + Command + F10), speech muted
+  (VoiceOver Utility → Speech, or Control + Option + S — confirm on your macOS version). You then read
+  every announcement as text instead of hearing it. Best change a sighted developer can
+  make, and captions are better evidence for a write-up anyway.
+- **Drop the verbosity** in VoiceOver Utility → Verbosity.
+- **Do not leave it running.** `Cmd + F5` for a focused session, then off.
+
+Screen Curtain is the exception: for the pass that actually decides whether a flow works,
+the screen goes off and the speech goes on. Everything else can be read.
+
+## What you do not need a screen reader for
+
+Most barrier detection is mechanical, and these are faster and silent:
+
+- **DevTools → Elements → Accessibility pane** — computed name, role and state per element.
+- **axe DevTools extension** — automated sweep.
+- **`probe/`** — `bridge.scan()`.
+
+Automated tooling catches roughly a third of real issues. What it structurally cannot
+catch is what this document is for: whether a change is announced, where focus goes,
+whether errors are spoken, whether the flow makes sense. Use the silent tools for the fast
+loop and spend the listening time only on that residue — and on the side panel.
 
 ## Method
 
