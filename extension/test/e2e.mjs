@@ -31,6 +31,23 @@ const server = createServer((q, s) => {
 });
 await new Promise((r) => server.listen(8765, r));
 
+// TEST STUB of the label-inference proxy (proxy/main.py). It stands in for the real one so
+// the suite never calls a model. It records what the panel sends and names every field
+// "Preferred office". It is started part-way through, to cover "proxy not running" first.
+const proxyRequests = [];
+const proxyStub = createServer((q, s) => {
+  const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'POST, OPTIONS' };
+  if (q.method === 'OPTIONS') { s.writeHead(204, cors); s.end(); return; }
+  let body = '';
+  q.on('data', (c) => { body += c; });
+  q.on('end', () => {
+    const { fields } = JSON.parse(body);
+    proxyRequests.push(fields);
+    s.writeHead(200, { ...cors, 'content-type': 'application/json' });
+    s.end(JSON.stringify({ labels: fields.map((f) => ({ id: f.id, label: 'Preferred office', confidence: 0.9 })) }));
+  });
+});
+
 const ctx = await chromium.launchPersistentContext('', {
   channel: 'chromium',
   headless: true,
@@ -63,6 +80,11 @@ try {
   const { page, panel, tabId } = await open('');
   check('found the test tab', typeof tabId === 'number', `tabId=${tabId}`);
 
+  // --- label inference, proxy not running (§6.4 failure path) --------------------------
+  const down = await spoken(panel, /Label inference is unavailable/);
+  check('proxy down: said once, in plain words, and the question keeps a usable name',
+    /so 2 questions have no name/.test(down) && (await panel.locator('#questions').textContent()).includes('Unlabelled text (label inferred)'), down);
+
   // --- on load, before the panel is opened (§4, built-in tier) ------------------------
   await page.waitForFunction(() => document.getElementById('bridge-announcement')?.textContent, null, { timeout: 5000 });
   const onLoad = await page.textContent('#bridge-announcement');
@@ -70,17 +92,17 @@ try {
 
   // --- one question at a time is the default (§4.2) -----------------------------------
   check('one-question mode: exactly one question is shown', await panel.locator('#questions .q:visible').count() === 1);
-  check('one-question mode: it says where you are', (await panel.locator('#questions .q:visible h3').textContent()) === 'Question 1 of 11');
+  check('one-question mode: it says where you are', (await panel.locator('#questions .q:visible h3').textContent()) === 'Question 1 of 13');
   await panel.getByRole('button', { name: 'Next question' }).click();
   check('one-question mode: Next shows the second question and focuses its control',
-    (await panel.locator('#questions .q:visible h3').textContent()) === 'Question 2 of 11' &&
-    await panel.evaluate(() => document.activeElement?.closest('.q')?.querySelector('h3')?.textContent) === 'Question 2 of 11');
+    (await panel.locator('#questions .q:visible h3').textContent()) === 'Question 2 of 13' &&
+    await panel.evaluate(() => document.activeElement?.closest('.q')?.querySelector('h3')?.textContent) === 'Question 2 of 13');
   await panel.getByRole('button', { name: 'Previous question' }).click();
   await panel.getByLabel('Full name').fill('Z. Wei');
   await panel.getByRole('button', { name: 'Write Full name to page' }).click();
   await spoken(panel, /Full name: Z\. Wei\. Confirmed on the page\. Next: Phone/);
   check('one-question mode: a confirmed answer advances to the next question',
-    (await panel.locator('#questions .q:visible h3').textContent()) === 'Question 2 of 11' &&
+    (await panel.locator('#questions .q:visible h3').textContent()) === 'Question 2 of 13' &&
     await panel.evaluate(() => document.activeElement?.tagName) === 'INPUT');
 
   // Most of this run answers questions out of order, so it uses the full list. The
@@ -89,7 +111,7 @@ try {
 
   // --- SCAN -------------------------------------------------------------------------
   const summary = await panel.textContent('#summary');
-  check('SCAN finds 11 questions: 10 in the page, 1 in the same-origin iframe', /^11 questions found/.test(summary), summary);
+  check('SCAN finds 13 questions: 12 in the page, 1 in the same-origin iframe', /^13 questions found/.test(summary), summary);
   const barriers = await panel.textContent('#barriers');
   check('reports the identically-named Yes/No options', /sound identical/.test(barriers));
   check('reports the custom dropdown', /custom dropdown/.test(barriers));
@@ -206,7 +228,7 @@ try {
   // --- VERIFY -----------------------------------------------------------------------
   const order = await panel.locator('#questions .q').evaluateAll((qs) =>
     qs.map((q) => q.querySelector('label, legend')?.textContent?.slice(0, 14)));
-  const expectedOrder = ['Full name', 'Phone', 'Highest', 'Years of', 'Will you', 'Language', 'Earliest', 'Drag and', 'Notice', 'I agree', 'Referral'];
+  const expectedOrder = ['Full name', 'Phone', 'Unlabelled', 'Unlabelled', 'Highest', 'Years of', 'Will you', 'Language', 'Earliest', 'Drag and', 'Notice', 'I agree', 'Referral'];
   check('questions are asked in page order, shadow-root field included',
     expectedOrder.every((t, i) => (order[i] || '').startsWith(t)), order.join(' | '));
   await panel.getByRole('button', { name: 'Read back everything from the page' }).click();
@@ -218,6 +240,33 @@ try {
   check('VERIFY reports the discarded field as empty', /Notice period: empty/.test(verified));
   await panel.waitForTimeout(150);
   check('VERIFY summary is announced', /Your application contains/.test(await panel.textContent('#live')));
+
+  // --- label inference with the proxy up (§6.4). Runs AFTER answers are on the page, so
+  // the privacy rule is tested for real: nothing the applicant entered may be in the request.
+  await new Promise((r) => proxyStub.listen(8000, '127.0.0.1', r));
+  await panel.getByRole('button', { name: 'Scan the page again' }).click();
+  await panel.locator('#questions label', { hasText: 'Preferred office (label inferred)' }).waitFor({ timeout: 10000 });
+  check('inference: the unlabelled dropdown is renamed and marked as inferred', true);
+  check('inference: its Write button uses the new name',
+    await panel.getByRole('button', { name: 'Write Preferred office to page' }).count() === 1);
+  const sent = proxyRequests[0];
+  check('inference: one request, carrying the dropdown and its options', proxyRequests.length === 1 && sent.length === 1 &&
+    sent[0].kind === 'select' && sent[0].options.join() === 'Singapore,Hanoi,Kuala Lumpur', JSON.stringify(sent).slice(0, 200));
+  // A picture needs the activeTab grant of a real Alt+Shift+B press, which headless Chrome
+  // cannot give. With no picture and no options there is nothing to infer from.
+  check('inference: a field with nothing to infer from is not sent, and keeps its honest name',
+    (await panel.locator('#diag').textContent()).includes('not sent (nothing to infer from)') &&
+    await panel.locator('#questions label', { hasText: 'Unlabelled text (label inferred)' }).count() === 1);
+  check('inference: the request carries structure only, none of the answers on the page',
+    !/Zheng|8000 0000|Bachelor|resume\.pdf|ACME-42|01\/10\/2026/.test(JSON.stringify(proxyRequests)));
+  await panel.getByLabel(/Preferred office/).selectOption('Hanoi');
+  await panel.getByRole('button', { name: 'Write Preferred office to page' }).click();
+  await status('Preferred office').filter({ hasText: /On the page|Could not/ }).waitFor();
+  check('inference: the renamed question still writes to the right field', await page.locator('select[name=office]').inputValue() === 'Hanoi');
+  await panel.getByRole('button', { name: 'Scan the page again' }).click();
+  await spoken(panel, /questions found/);
+  check('inference: an inferred name is kept across rescans without asking again', proxyRequests.length === 1 &&
+    await panel.locator('#questions label', { hasText: 'Preferred office (label inferred)' }).count() === 1);
 
   // --- never submits ----------------------------------------------------------------
   check('BRIDGE did not submit the form', (await page.textContent('#result')) === '');
@@ -355,6 +404,7 @@ try {
 } finally {
   await ctx.close();
   server.close();
+  proxyStub.close();
 }
 
 const failed = results.filter((r) => !r.ok).length;

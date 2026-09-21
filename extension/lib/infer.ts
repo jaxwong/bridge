@@ -37,8 +37,13 @@ export async function inferLabels(tabId: number, targets: Target[], note: (m: st
   for (const f of targets) {
     let crop: string | undefined;
     try { crop = await cropPng(tabId, f, note); } catch (e) { note(`${f.id}: no crop (${String(e)})`); }
-    payload.push({ id: f.id, kind: f.kind, nearbyText: [] as string[], ...(f.options ? { options: f.options } : {}), ...(crop ? { cropPng: crop } : {}) });
+    // These fields are here because no text names them. Without a picture or a list of
+    // options the model has nothing to read and answers "Text field", which is worse than
+    // BRIDGE's honest "Unlabelled text". So such a field is not sent at all.
+    if (!crop && !f.options?.length) { note(`${f.id}: not sent (nothing to infer from)`); continue; }
+    payload.push({ id: f.id, kind: f.kind, nearbyText: [] as string[], ...(f.options?.length ? { options: f.options } : {}), ...(crop ? { cropPng: crop } : {}) });
   }
+  if (!payload.length) return { ok: true, labels: [] };
   let res: Response;
   try {
     res = await fetch(PROXY, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fields: payload }) });
