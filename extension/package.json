@@ -1,0 +1,20 @@
+{
+  "name": "bridge-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BRIDGE: accessibility compatibility layer for inaccessible job applications",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "postinstall": "wxt prepare",
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "npm run build && node test/e2e.mjs"
+  },
+  "devDependencies": {
+    "axe-core": "^4.13.0",
+    "playwright": "1.56.0",
+    "typescript": "5.9.3",
+    "wxt": "0.21.4"
+  }
+}

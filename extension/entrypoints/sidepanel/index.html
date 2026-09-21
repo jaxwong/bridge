@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BRIDGE</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header>
+      <h1 id="title" tabindex="-1">BRIDGE</h1>
+      <!-- The one live region (spec §6.6). Everything spoken goes through it. -->
+      <p id="live" role="status" aria-live="polite"></p>
+    </header>
+
+    <main>
+      <section aria-labelledby="precheck-h">
+        <h2 id="precheck-h">Application pre-check</h2>
+        <p id="summary">Scanning the page…</p>
+        <ul id="barriers"></ul>
+        <button type="button" id="rescan">Scan the page again</button>
+      </section>
+
+      <section aria-labelledby="questions-h">
+        <h2 id="questions-h">Questions</h2>
+        <div id="questions"></div>
+      </section>
+
+      <section aria-labelledby="verify-h">
+        <h2 id="verify-h">Check what the page contains</h2>
+        <p>BRIDGE reads every answer back from the page itself, not from its own notes.</p>
+        <button type="button" id="verify">Read back everything from the page</button>
+        <ul id="verify-results"></ul>
+      </section>
+
+      <details id="diagnostics">
+        <summary>Diagnostics</summary>
+        <dl id="diag"></dl>
+      </details>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

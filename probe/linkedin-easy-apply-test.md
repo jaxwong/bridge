@@ -6,7 +6,7 @@ application, and what BRIDGE must do where they cannot.
 **Status:** step 1 of 4 measured (5 fields, 0 barriers, native `<select>`s). Steps 2–4 and
 all announcement behaviour are unmeasured. This plan closes that gap.
 
-Results go into `../bridge-spec.md` §11.
+Results go into `../bridge-user.md` §11.
 
 ---
 

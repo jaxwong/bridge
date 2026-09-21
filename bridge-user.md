@@ -1,6 +1,9 @@
-# BRIDGE: Spec
+# BRIDGE: User spec
 
 An accessibility compatibility layer for inaccessible job applications.
+
+This spec covers the applicant side: the extension. The employer side (business model, monitor,
+dashboard) is in [`bridge-business.md`](bridge-business.md).
 
 **Competition focus:** Stage 2, Job Search & Application
 **Form factor:** Chrome / Edge extension (Manifest V3)
@@ -22,14 +25,14 @@ Screen readers can read accessible pages. They cannot make a badly built control
 - Give them an accessible way to fill those parts through their existing screen reader.
 - Write their input into the real page, then verify it landed by reading it back from the page.
 - Keep the applicant in control: BRIDGE never submits.
-- Produce an exportable barrier report (accessibility failures only, no applicant data) for the employer side of the pitch.
+- Produce an exportable barrier report (accessibility failures only, no applicant data) for the employer side ([`bridge-business.md`](bridge-business.md)).
 
 ### Non-goals
 
 - Applying on the user's behalf, auto-filling from a profile, or writing answers.
 - Fixing the page for all users (that is the employer's job; BRIDGE reports it).
 - Mobile support. Chrome on Android has no extensions; desktop-first is explicit.
-- A hosted employer dashboard. The MVP exports a report; the dashboard is a mock for the pitch.
+- Anything employer-facing beyond the report export. That is [`bridge-business.md`](bridge-business.md).
 - Scanning steps of a multi-page application that have not been reached yet (see §6.5). BRIDGE reads the page's own step indicator to describe the journey; it does not fetch ahead.
 
 ## 3. Users
@@ -37,7 +40,7 @@ Screen readers can read accessible pages. They cannot make a badly built control
 | User | Needs |
 |---|---|
 | Blind / low-vision applicant using NVDA, JAWS, or Narrator | Know what's broken up front; fill every field without sighted help; confirm what will be submitted |
-| Employer / recruitment platform (pitch only) | A concrete list of barriers in their application journey and why each blocks candidates |
+| Employer / recruitment platform (see [`bridge-business.md`](bridge-business.md)) | A concrete list of barriers in their application journey and why each blocks candidates |
 
 ## 4. User flow
 
@@ -52,7 +55,27 @@ VERIFY    BRIDGE re-reads every value from the page DOM and reads it back
   → User presses Submit on the real page themselves
 ```
 
-On pages outside the supported ATS list, nothing is announced. The shortcut still works via `activeTab`.
+BRIDGE works on **any** page. What differs by site is whether it runs by itself:
+
+| Tier | Mechanism | Behaviour |
+|---|---|---|
+| Built-in ATS list | Static `host_permissions` + declared content scripts | Scans on load and announces the barrier count. Also reaches an ATS iframe embedded in a company careers page |
+| Any page, on demand | `activeTab`, granted by the Alt+Shift+B shortcut | Scans when the user asks. Silent until then |
+| User-added site | `optional_host_permissions` + `chrome.permissions.request` + `chrome.scripting.registerContentScripts` | "Always enable BRIDGE on this site" in the side panel. From then on behaves like the built-in list |
+
+No `<all_urls>`: its install warning, *"Read and change all your data on all websites"*, is the
+wrong first impression for a tool asking blind applicants to trust it, and scanning every
+page would announce barriers on pages that are not applications.
+
+Why the third tier matters. Per Chrome's documentation, `activeTab` access **survives
+same-origin navigation but is revoked on cross-origin navigation**, and it covers the main
+frame's origin only. So on a portal outside the list, a single-sign-on detour or a redirect
+to the employer's own ATS silently disconnects BRIDGE mid-application, and the user would
+have to press the shortcut again. Adding the site removes that. Even on the same origin, a
+full page load discards an injected content script, so the service worker re-injects on
+`tabs.onUpdated` while `activeTab` still holds.
+
+Chrome's permission prompt appears when the user adds a site. Include it in the NVDA pass.
 
 ### 4.1 SCAN
 
@@ -154,6 +177,7 @@ See §6.5.
     "https://www.linkedin.com/*",
     "http://localhost/*"
   ],
+  "optional_host_permissions": ["https://*/*"],
   "commands": {
     "open-bridge":   { "suggested_key": { "default": "Alt+Shift+B" } },
     "focus-submit":  { "suggested_key": { "default": "Alt+Shift+S" } }
@@ -167,7 +191,10 @@ See §6.5.
 }
 ```
 
-No `<all_urls>`. Other sites work through `activeTab` when the user presses the shortcut. `debugger` permission is **not** in the MVP (see §6.3 fallbacks).
+No `<all_urls>`; see the tiers in §4. User-added sites are registered at runtime with
+`chrome.scripting.registerContentScripts` after `chrome.permissions.request` succeeds, which
+must be called from a user gesture (a button in the side panel). `debugger` permission is
+**not** in the MVP (see §6.3 fallbacks).
 
 ## 6. Components
 
@@ -199,11 +226,20 @@ interface FieldDescriptor {
   barriers: Barrier[];
 }
 
+interface StepHint {
+  via: "workday-progressBar" | "aria-current=step" | "text" | "progressbar";
+  index?: number;           // 1-based, when the page publishes it
+  total?: number;
+  text?: string;            // e.g. "2/4 pages"
+  steps?: string[];         // full journey, when published (Workday)
+}
+
 interface ScanResult {
   url: string;
   scannedAt: string;
   fields: FieldDescriptor[];
   pageBarriers: Barrier[];  // not tied to a field, e.g. CAPTCHA, closed shadow root
+  stepHint: StepHint | null;
 }
 ```
 
@@ -215,7 +251,7 @@ interface ScanResult {
 | `not-keyboard-operable` | blocking | Element looks interactive (`cursor: pointer`, known widget class patterns, custom slider thumb) but has no focusable descendant and no ARIA role |
 | `drag-drop-only` | blocking | File input is **out of the tab order** — `tabindex=-1`, `disabled`, `display:none`, `visibility:hidden` or `inert` — and has no labelled trigger. Visually hidden is *not* out of the tab order; that is the standard accessible pattern |
 | `upload-unnamed` | usability | File input is keyboard-reachable but has no accessible name, so it is heard only as a generic file button |
-| `focus-trap` | blocking | Programmatically step focus through the region; flag if focus cycles inside it with no path out |
+| `focus-trap` | blocking | **Not detectable by SCAN.** Scripted Tab presses do not move focus, so tab order can only be observed from real keypresses. Checked manually with `bridge.watchTab()` in `probe/`. Note that focus looping from a dialog's last control back to its first is *correct* modal behaviour, not a trap |
 | `custom-dropdown-no-role` | blocking | Div/ul-based option list with no `listbox` / `combobox` roles |
 | `captcha` | blocking (page) | Known CAPTCHA iframes / widgets. BRIDGE cannot solve these; it tells the user in advance |
 | `closed-shadow-root` | blocking (page) | Custom element with no accessible shadow root. BRIDGE can't reach inside |
@@ -516,7 +552,8 @@ found in VoiceOver is real; passing VoiceOver does not discharge the NVDA pass.
 }
 ```
 
-Contains no field values and no applicant identity. Sending it anywhere is a manual user action in the MVP. Continuous monitoring and ATS integration stay in the pitch as the roadmap.
+Contains no field values and no applicant identity. Sending it anywhere is a manual user action in the MVP. This format is the contract with the
+employer dashboard and monitor in [`bridge-business.md`](bridge-business.md) §6; change it here, not there.
 
 ## 7. Test fixtures
 
@@ -536,6 +573,14 @@ widgets do exist in the wild — but do not let it crowd out the two barriers th
 on real applications and are not in the list at all: a **popup that is not a dialog**, and
 **checkbox groups whose question has no programmatic name**.
 
+The fixture also needs a **multi-step mode**, or §6.5 has nothing to be tested against:
+
+- an in-place step swap inside a native `<dialog>` with a "1/3 pages" indicator (LinkedIn's shape)
+- a full-page-navigation variant with a "step 1 of 3" stepper (Workday's shape)
+- on one step, a Yes/No radio group whose options both carry the question as `aria-label`
+  (`options-identically-named`, the headline LinkedIn finding)
+- a dropdown whose options are only rendered after it is opened (react-select's shape)
+
 Plus at least **one real portal** posting for credibility. Never submit to a real employer
 during testing; stop at VERIFY. `probe/` scans live portals without submitting and is the
 tool for keeping §11 honest as postings expire.
@@ -543,27 +588,38 @@ tool for keeping §11 honest as postings expire.
 ## 8. Build plan
 
 **Day 1: tracer bullet**
+- **First: the side panel focus spike.** §4 assumes focus moves into the panel when it opens.
+  Chrome's documentation does not say whether an extension can do that. If it cannot, the
+  user has to reach the panel themselves (F6 cycles browser panes), and the opening flow
+  changes. Settle it before building on it
 - WXT skeleton, side panel opens on Alt+Shift+B, content script in all frames
-- On Acme Careers: detect the slider and one text field, fill both from the side panel, read both back
-- The text-input and file-upload strategies are already proven against real portals (§11),
-  so port them from `probe/act.js` rather than rediscovering them
-- The custom slider is the one ACT strategy no real portal validated. If it does not work
-  by end of day, cut it from the fixture rather than reaching for `chrome.debugger`
+- On Acme Careers: SCAN, then fill **one custom dropdown** from the side panel and read it
+  back. A dropdown rather than the slider, because the dropdown strategy is proven on real
+  portals (§11) and the slider was found on none
+- Port SCAN from `probe/scan.js` and the write strategies from `probe/act-inpage.js`
+  rather than rediscovering them
+- The side panel takes its target `tabId` explicitly instead of querying the active tab, so
+  the whole loop can be driven headlessly with the panel opened as an ordinary page
 
 **Day 2: breadth**
-- All §6.2 rules on the fixture, including `modal-without-dialog-role` and `group-not-labelled`
-- Custom dropdown ACT — including **opening each widget during SCAN to harvest options**,
-  which is the step that does not exist yet and will take longer than it sounds (§6.3)
-- Proxy + LLM label inference for the unlabelled dropdown
-- Per-step VERIFY read-back and focus-to-forward-action (§6.5)
+- **Field identity across re-renders.** A `FieldDescriptor` must be re-resolved when the
+  framework replaces the element, not held as a node reference. Re-find by selector, then by
+  accessible name and position as a fallback, and report "Could not fill" if both fail
+- **Harvest options from custom dropdowns during SCAN** (open, read, close), §6.3
+- All §6.2 rules on the fixture, including `options-identically-named`, `group-not-labelled`
+  and `modal-without-dialog-role`
+- The fixture's multi-step mode, the step detector, and "Step N of M" announcements (§6.5)
+- Per-step VERIFY and focus-to-forward-action
+- "Always enable BRIDGE on this site" (§4, third tier)
 
 **Day 3: reality and polish**
-- Greenhouse end to end (stop before submit). Re-run `probe/` first — the preset posting
-  may have expired
-- VietnamWorks as the barrier demo: SCAN announces the login wall it cannot get past
+- Greenhouse end to end, stopping before submit. Re-run `probe/` first; postings expire
+- LinkedIn Easy Apply by hand: the visa question answered through BRIDGE
+- Proxy + LLM label inference, if time allows. It is not on the critical path: every
+  demo field has a label or a derivable one
 - Full NVDA pass on the side panel; fix everything it finds
-- Barrier report export + employer dashboard mock for the pitch
-- Record a fallback demo video in case live demo breaks
+- Barrier report export (§6.7). The dashboard and monitor are in `bridge-business.md` §8
+- Record a fallback demo video
 
 ## 9. Demo script
 
@@ -573,7 +629,7 @@ tool for keeping §11 honest as postings expire.
 4. Answer "Years of experience: 2". Split screen: the real slider moves.
 5. Pick a CV in the side panel. The drop zone on the page shows it attached.
 6. VERIFY summary read aloud. Focus moves to Submit. User submits.
-7. Export barrier report. Show the employer view.
+7. Export barrier report. Hand over to the employer demo, `bridge-business.md` §7.
 
 ## 10. Risks and open questions
 
@@ -604,14 +660,10 @@ user's password manager. Say this out loud in the pitch; it reads as judgement, 
   demonstrated against a real employer.
 - Do judges need to install it themselves? If yes, submit an unlisted Chrome Web Store build on day 1.
 - Is conversational voice input (speech-to-text in the panel) worth it, or does the screen reader's own input suffice? Default: skip.
-- **LinkedIn Easy Apply is a supported target.** An earlier draft deprioritised it on the
-  strength of step 1 measuring 0 barriers. That was one step out of four, and a label-and-role
-  scan cannot see the things that actually break modal wizards: whether a step change is
-  announced, where focus lands after Continue, whether errors are spoken. Steps 2–4 and the
-  announcement behaviour are **unmeasured**, not clean. Architecturally it is the *easiest*
-  multi-step target — single origin, no iframe, no hard navigation, so the content script
-  survives the whole flow (§6.5). Open: do BRIDGE's ACT strategies work against LinkedIn's
-  own component library, which is neither react-select nor a native widget?
+- ~~Is LinkedIn Easy Apply worth supporting?~~ **Yes, and it is measured** (§11). Its controls
+  work and BRIDGE can fill every type it uses; its labelling and step transitions do not. The
+  identically-named Yes/No on the visa question is the headline demo.
+- Can an extension move keyboard focus into its side panel? Undocumented. Day-1 spike (§8).
 
 ## 11. Portal findings (measured)
 
@@ -791,20 +843,18 @@ reads `index` / `total` from the page's stepper, so the side panel announces
 "Step 2 of 4: Resume" through its single live region. This is cheap and clearly audible,
 and it belongs in the demo.
 
-**Still unmeasured, and this is the gap that matters.** Step 1 being clean says nothing about the
-rest, and a label-and-role scan is blind to the failure modes that actually stop people in a
-modal wizard:
+**Status of the modal-wizard questions** a label-and-role scan cannot answer on its own:
 
-| Open question | Why a DOM scan cannot answer it |
+| Question | Answer |
 |---|---|
-| Is the step change announced? | **Answered by ear: no.** VoiceOver confirms focus on Next, then says nothing when the new step loads. The user finds out by reaching new fields |
-| Where does focus go after Continue? | Focus can land on a removed node or reset to the document top; both scan clean |
-| Is `1/4 pages` exposed, or visual-only? | The text is in the DOM either way |
-| Does the resume radio list name its question? | Measured shape suggests `group-not-labelled`, the Lever failure — needs confirming on step 2 |
-| Are validation errors spoken? | Requires submitting an invalid step and listening |
-| Do ACT writes land on LinkedIn's own components? | **Text inputs: yes.** `Mobile phone number` filled via prototype value setter, DOM read-back confirmed. Step 2 radios and step 3 custom widgets still untested |
+| Is the step change announced? | **No** — by ear, VoiceOver |
+| Where does focus go after Next? | Stays on Next, or drops to `BODY`. Never into the new step |
+| Is "1/4 pages" spoken? | Not on step change. Whether it can be reached by reading is untested |
+| Does the resume list name its question? | **No** — `group-not-labelled` |
+| Do BRIDGE's writes land? | **Yes** — text, native select and ARIA radio all pass ACT with DOM read-back |
+| Are validation errors spoken? | **Untested.** Needs an invalid step submitted and listened to |
+| Tab skipping dropdowns (reported on Windows) | Not reproduced on macOS. Windows re-run pending, starting from the control *before* the dropdown |
 
-Steps 2–4 need a pass with `probe/` **and** a screen reader (`probe/screen-reader-testing.md`).
 Nothing was submitted.
 
 **Positioning.** BRIDGE is assistive technology, not automation: the user drives every

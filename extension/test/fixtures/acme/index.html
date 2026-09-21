@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Acme Careers — Apply</title>
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; max-width: 640px; margin: 24px auto; padding: 0 16px; }
+    .row { margin: 16px 0; }
+    .q { font-weight: 600; margin-bottom: 6px; }
+    /* A custom dropdown with none of the semantics of one. react-select's shape without
+       react-select's ARIA: no role, no label, no tabindex, options rendered only on open. */
+    .dropdown { border: 1px solid #888; padding: 8px; cursor: pointer; position: relative; user-select: none; }
+    .dropdown__menu { position: absolute; left: 0; right: 0; top: 100%; background: #fff; border: 1px solid #888; z-index: 2; }
+    .dropdown__option { padding: 6px 8px; cursor: pointer; }
+    .dropdown__option:hover { background: #eee; }
+    fieldset { border: 0; padding: 0; margin: 0; }
+    [role=radio] { display: inline-flex; gap: 6px; margin-right: 16px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>Junior Analyst — Apply</h1>
+  <p>Acme Careers. A deliberately inaccessible test form for BRIDGE. Nothing is sent anywhere.</p>
+
+  <form id="apply">
+    <!-- Accessible, for contrast: a properly labelled text field. -->
+    <div class="row">
+      <label for="name">Full name</label><br>
+      <input id="name" name="name" required>
+    </div>
+
+    <!-- Barrier: custom dropdown. missing-label, custom-dropdown-no-role, not-keyboard-operable. -->
+    <div class="row">
+      <div class="q">Highest education completed</div>
+      <div class="dropdown" id="edu"><span class="dropdown__value">Select…</span></div>
+    </div>
+
+    <!-- Barrier: LinkedIn Easy Apply's shape, measured 2026-09-21. The fieldset has no
+         legend; the question is stamped onto every option's aria-label, which overrides
+         "Yes" and "No". options-identically-named + group-not-labelled. -->
+    <div class="row">
+      <fieldset>
+        <div class="q">Will you now or in the future require sponsorship for employment visa status?</div>
+        <div role="radio" tabindex="0" aria-checked="false"
+             aria-label="Will you now or in the future require sponsorship for employment visa status?">
+          <input type="radio" name="visa" id="visa-yes" value="yes"><span>Yes</span>
+        </div>
+        <div role="radio" tabindex="0" aria-checked="false"
+             aria-label="Will you now or in the future require sponsorship for employment visa status?">
+          <input type="radio" name="visa" id="visa-no" value="no"><span>No</span>
+        </div>
+      </fieldset>
+    </div>
+
+    <!-- Accessible, but hostile: wipes its own value after a change, the way a framework
+         re-render can discard a write (spec §10). BRIDGE must say so, not claim success. -->
+    <div class="row">
+      <label for="start">Earliest start date</label><br>
+      <input id="start" name="start">
+    </div>
+
+    <div class="row">
+      <button type="submit">Submit application</button>
+    </div>
+    <p id="result" role="status"></p>
+  </form>
+
+  <script>
+    // --- custom dropdown: options exist only while open; mousedown toggles ---
+    const EDU = ['Secondary', 'Diploma', "Bachelor's", "Master's", 'PhD'];
+    const edu = document.getElementById('edu');
+    let menu = null;
+    function closeMenu() { if (menu) { menu.remove(); menu = null; } }
+    edu.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.dropdown__option')) return;
+      if (menu) return closeMenu();
+      menu = document.createElement('div');
+      menu.className = 'dropdown__menu';
+      for (const t of EDU) {
+        const o = document.createElement('div');
+        o.className = 'dropdown__option';
+        o.textContent = t;
+        o.addEventListener('click', () => {
+          edu.querySelector('.dropdown__value').textContent = t;
+          edu.dataset.value = t;
+          closeMenu();
+        });
+        menu.append(o);
+      }
+      edu.append(menu);
+    });
+    document.addEventListener('mousedown', (e) => { if (!edu.contains(e.target)) closeMenu(); });
+
+    // --- LinkedIn-style radios: the wrapper mirrors the native input's state ---
+    document.querySelectorAll('[role=radio]').forEach((w) => {
+      const input = w.querySelector('input');
+      const sync = () => document.querySelectorAll('[role=radio]').forEach((x) =>
+        x.setAttribute('aria-checked', String(x.querySelector('input').checked)));
+      input.addEventListener('change', sync);
+      w.addEventListener('click', (e) => { if (e.target !== input) { input.checked = true; sync(); } });
+    });
+
+    const start = document.getElementById('start');
+    start.addEventListener('change', () => setTimeout(() => { start.value = ''; }, 50));
+
+    document.getElementById('apply').addEventListener('submit', (e) => {
+      e.preventDefault();
+      document.getElementById('result').textContent = 'Submitted (test page, nothing sent).';
+    });
+  </script>
+</body>
+</html>
