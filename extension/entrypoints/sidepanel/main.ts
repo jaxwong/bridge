@@ -14,7 +14,12 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 
 /** A field as the panel knows it: which frame it is in, and a key that survives a rescan
  *  (the content script's ids are positional and shift when fields appear). */
-export type PanelField = FieldDescriptor & { frameId: number; localId: string; key: string };
+export type PanelField = FieldDescriptor & {
+  frameId: number; localId: string; key: string;
+  /** What the page itself yielded, before any inferred name replaced it. The barrier
+   *  report keys on this: an inferred name can differ from one run to the next. */
+  pageLabel: string; pageLabelSource: FieldDescriptor['labelSource'];
+};
 
 type Reason = 'open' | 'manual' | 'tab' | 'page-loaded' | 'form-changed';
 
@@ -428,7 +433,7 @@ async function recordStep(s: StepState, scannedAt: string, newStep: boolean) {
   if (!session || session.origin !== s.origin) await loadSession(s.origin);
   const sn = session!;
   const index = s.index ?? (newStep || !sn.steps.length ? sn.steps.length + 1 : sn.currentStepIndex);
-  const scan = { url: s.url, scannedAt, fields: fields.map(({ frameId: _f, localId: _l, key: _k, ...d }) => d), pageBarriers, stepHint: s.hint };
+  const scan = { url: s.url, scannedAt, fields: fields.map(({ frameId: _f, localId: _l, key: _k, pageLabel, pageLabelSource, ...d }) => ({ ...d, label: pageLabel, labelSource: pageLabelSource })), pageBarriers, stepHint: s.hint };
   const existing = sn.steps.find((r) => r.index === index);
   if (existing) Object.assign(existing, { url: s.url, label: s.heading, scan });
   else sn.steps.push({ index, url: s.url, label: s.heading, scan, status: 'current', filledFieldIds: [] });
@@ -504,7 +509,7 @@ async function scanOnce(reason: Reason) {
       seen.set(nameKey, n + 1);
       const key = `${frame.frameId}|${nameKey}|${n}`;
       const label = inferred.get(key);
-      merged.push({ ...f, frameId: frame.frameId, localId: f.id, id: `${frame.frameId}:${f.id}`, key, ...(label ? { label, labelSource: 'llm' as const } : {}) });
+      merged.push({ ...f, frameId: frame.frameId, localId: f.id, id: `${frame.frameId}:${f.id}`, key, pageLabel: f.label, pageLabelSource: f.labelSource, ...(label ? { label, labelSource: 'llm' as const } : {}) });
     }
   }
   const reached = new Set(scans.map((s) => s.frame.origin));
@@ -650,7 +655,7 @@ function exportReport(format: 'json' | 'md') {
   const name = `bridge-report-${report.portal}-${report.generatedAt.replace(/[:.]/g, '-')}.${format}`;
   if (format === 'json') download(name, 'application/json', JSON.stringify(report, null, 2));
   else download(name, 'text/markdown', reportMarkdown(report));
-  announce(`Barrier report saved as ${name}. ${plural(report.barriers.length, 'barrier')}. It contains none of your answers and nothing about you.`);
+  announce(`Barrier report saved as ${name}. ${plural(report.barriers.length + report.pageBarriers.length, 'barrier')}. It contains none of your answers and nothing about you.`);
 }
 
 // --- day-1 spike: can the panel take keyboard focus when it opens? (§8) -----------------

@@ -48,7 +48,7 @@ would announce "BRIDGE is open. Press F6 to reach it" from the page instead.
 
 `npm run test:e2e` loads the built extension, opens the side panel as an ordinary page
 pointed at a test tab (`sidepanel.html?tabId=…`), and drives it against the pages in
-`test/fixtures/acme`. 91 checks:
+`test/fixtures/acme`. 98 checks:
 
 - `index.html`: every barrier in spec §6.2 that a page can show, each write strategy in
   §6.3 including the pointer-only slider, the Ashby-shaped uploader, a checkbox group, a
@@ -61,6 +61,8 @@ pointed at a test tab (`sidepanel.html?tabId=…`), and drives it against the pa
   later step, the session in `storage.session`, and the exported report.
 - `steps/1.html` to `3.html`: Workday's shape. Every step a full navigation that destroys
   the content script.
+- `uploaders.html`: three file inputs that differ only in whether a keyboard can reach
+  them. The rule's verdicts are checked against real Tab presses.
 - Label inference against a **stub** of the proxy on port 8000, clearly labelled in the
   test, including the check that nothing the applicant entered is in the request. The suite
   fails at startup if something else is already listening on 8000, so stop the real proxy

@@ -268,6 +268,16 @@ try {
   check('inference: an inferred name is kept across rescans without asking again', proxyRequests.length === 1 &&
     await panel.locator('#questions label', { hasText: 'Preferred office (label inferred)' }).count() === 1);
 
+  // The dashboard keys on rule + label, so the report must not pick up a name that a model
+  // made up and could word differently tomorrow.
+  {
+    const [dl] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as JSON' }).click()]);
+    const report = JSON.parse(readFileSync(await dl.path(), 'utf8'));
+    check('export: labels are the page-derived ones, never the inferred name',
+      report.barriers.some((b) => b.rule === 'missing-label' && b.label === 'Unlabelled select') &&
+      !JSON.stringify(report).includes('Preferred office'), report.barriers.map((b) => b.label).join(' | '));
+  }
+
   // --- never submits ----------------------------------------------------------------
   check('BRIDGE did not submit the form', (await page.textContent('#result')) === '');
 
@@ -366,10 +376,14 @@ try {
     const report = JSON.parse(readFileSync(await dl.path(), 'utf8'));
     check('export: §6.7 shape, grouped by step', report.portal === 'localhost:8765' && report.pagePath === '/modal.html' &&
       report.steps?.length === 3 && Array.isArray(report.barriers), Object.keys(report).join(','));
-    check('export: every barrier has rule, severity, field, impact and no selector',
-      report.barriers.length > 0 && report.barriers.every((b) => b.rule && b.severity && 'field' in b && b.impact && !('selector' in b)));
+    check('export: every field barrier has rule, severity, a non-empty label, impact, and no selector',
+      report.barriers.length > 0 && report.barriers.every((b) => b.rule && b.severity && typeof b.label === 'string' && b.label && b.impact && !('selector' in b) && !('field' in b)));
+    check('export: page barriers are their own list, keyed by rule alone',
+      Array.isArray(report.pageBarriers) && report.pageBarriers.some((b) => b.rule === 'upload-unnamed') &&
+      report.pageBarriers.every((b) => b.rule && b.severity && b.impact && !('label' in b)) &&
+      report.steps.every((st) => Array.isArray(st.pageBarriers)));
     check('export: the visa question\'s barrier is on step 2',
-      report.steps[1].barriers.some((b) => b.rule === 'options-identically-named' && /sponsorship/.test(b.field)));
+      report.steps[1].barriers.some((b) => b.rule === 'options-identically-named' && /sponsorship/.test(b.label)));
     check('export: no applicant data', !/resume\.pdf|zw@example|Zheng/.test(JSON.stringify(report)));
     const [md] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as Markdown' }).click()]);
     check('export: Markdown twin', /^# Accessibility barrier report: localhost:8765\/modal\.html/.test(readFileSync(await md.path(), 'utf8')));
@@ -406,7 +420,8 @@ try {
   // Uploaders: a label names an input, it does not make it reachable (spec §6.2).
   // =====================================================================================
   {
-    const { page, panel } = await open('uploaders.html');
+    // The query string is how the employer demo versions one form (Acme ?v=2, ?v=3).
+    const { page, panel } = await open('uploaders.html?v=3');
     const listed = await panel.locator('#barriers li').allTextContents();
     check('uploader: labelled but out of the tab order is still drag-drop-only',
       listed.filter((t) => /can only be used by dragging/.test(t)).length === 1, JSON.stringify(listed));
@@ -417,6 +432,12 @@ try {
     const stops = [];
     for (let i = 0; i < 3; i++) { await page.keyboard.press('Tab'); stops.push(await page.evaluate(() => document.activeElement?.id || document.activeElement?.getAttribute('for') || 'none')); }
     check('uploader: real Tab presses agree with the rule', stops.join() === 'cv-b,cv-c,none', stops.join());
+    const [dl] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as JSON' }).click()]);
+    const report = JSON.parse(readFileSync(await dl.path(), 'utf8'));
+    check('export: pagePath is the pathname only, so ?v=2 and ?v=3 compare as one form', report.pagePath === '/uploaders.html', report.pagePath);
+    check('export: a one-step form has pageBarriers, no steps, and no step numbers',
+      report.pageBarriers.length === 1 && report.pageBarriers[0].rule === 'drag-drop-only' && !('steps' in report) && !('step' in report.pageBarriers[0]),
+      JSON.stringify(report).slice(0, 300));
   }
 } finally {
   await ctx.close();

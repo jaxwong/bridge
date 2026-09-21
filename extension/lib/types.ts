@@ -88,20 +88,26 @@ export interface ApplicationSession {
 
 // --- barrier report, spec §6.7. The contract with bridge-business.md. ---
 
+/** A barrier on one field. `rule` + `label` is the key the dashboard compares scans by,
+ *  so `label` is always present and always the page-derived one, never an inferred name. */
 export interface ReportBarrier {
   rule: string;
   severity: Severity;
-  /** The field's label, or null for a page-level barrier. With `rule`, the compare key. */
-  field: string | null;
+  label: string;
   impact: string;
   /** Present only when the application has more than one step. */
   step?: number;
 }
 
+/** A barrier on the page as a whole (CAPTCHA, unreachable frame). Keyed by `rule` alone. */
+export type ReportPageBarrier = Omit<ReportBarrier, 'label'>;
+
 export interface BarrierReport {
   portal: string;
+  /** Pathname only, no query string: Acme ?v=2 and ?v=3 are the same form over time. */
   pagePath: string;
   generatedAt: string;
   barriers: ReportBarrier[];
-  steps?: { index: number; label: string; pagePath: string; barriers: ReportBarrier[] }[];
+  pageBarriers: ReportPageBarrier[];
+  steps?: { index: number; label: string; pagePath: string; barriers: ReportBarrier[]; pageBarriers: ReportPageBarrier[] }[];
 }

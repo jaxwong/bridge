@@ -251,7 +251,7 @@ shift when a conditional field appears.
 |---|---|---|
 | `missing-label` | usability | axe-core `label`, `aria-input-field-name` |
 | `not-keyboard-operable` | blocking | Element looks interactive (`cursor: pointer`, known widget class patterns, custom slider thumb) but has no focusable descendant and no ARIA role |
-| `drag-drop-only` | blocking | File input is **out of the tab order** — `tabindex=-1`, `disabled`, `display:none`, `visibility:hidden` or `inert` — and has no labelled trigger. Visually hidden is *not* out of the tab order; that is the standard accessible pattern |
+| `drag-drop-only` | blocking | File input is **out of the tab order** — `tabindex=-1`, `disabled`, `display:none`, `visibility:hidden` or `inert` — and has no keyboard trigger. A `<label for>` names the input but is not a tab stop, so it only counts as a trigger when the label itself (or a button inside it) is focusable. Visually hidden is *not* out of the tab order; that is the standard accessible pattern. Known limit: a separate button that opens the input from script cannot be recognised statically |
 | `upload-unnamed` | usability | File input is keyboard-reachable but has no accessible name, so it is heard only as a generic file button |
 | `focus-trap` | blocking | **Not detectable by SCAN.** Scripted Tab presses do not move focus, so tab order can only be observed from real keypresses. Checked manually with `bridge.watchTab()` in `probe/`. Note that focus looping from a dialog's last control back to its first is *correct* modal behaviour, not a trap |
 | `custom-dropdown-no-role` | blocking | Div/ul-based option list with no `listbox` / `combobox` roles |
@@ -644,7 +644,7 @@ Status at the start of the night, measured on branch `implement-bridge-user`:
 Everything below was built in this order, each step ending with `npm run typecheck` and
 `npm run test:e2e` green and a commit.
 
-**Status: 8.1 to 8.7 are done.** `npm run test:e2e` is 91/91, typecheck is clean, the panel
+**Status: 8.1 to 8.7 are done.** `npm run test:e2e` is 98/98, typecheck is clean, the panel
 has zero axe violations. What remains is §8.8, which needs a person.
 
 | Step | Commit | Verified by |
@@ -673,8 +673,8 @@ These change earlier sections. They are listed once here so nothing is silent.
   debounced `MutationObserver` is the one source; it records `basis: "url-change"` when
   `location.href` differs from the previous evaluation. §6.5's three sources collapse to
   two: script load and mutation.
-- **Export key is `rule` + field label, no selector.** Resolves `bridge-business.md`
-  §6.1. `FieldDescriptor` carries no selector, and generated selectors are not stable
+- **Export key is `rule` + `label`, no selector, page barriers in their own list.** Resolves
+  `bridge-business.md` §6.1; the shape is §6.7. `FieldDescriptor` carries no selector, and generated selectors are not stable
   across releases.
 - **Alt+Shift+S is gated by VERIFY, in the panel.** First press on a step runs VERIFY
   and announces the summary plus "press Alt+Shift+S again to move to Continue". Second
@@ -792,7 +792,7 @@ Build: one-question-at-a-time mode as the default with "Question 2 of 8", Next a
 Previous, auto-advance on a confirmed write, and a full-list toggle; CV bytes stored in
 `chrome.storage.session` after the first confirmed write, so a later file question
 offers "Write resume.pdf, chosen earlier, to page" beside the file input; "Export barrier
-report" producing JSON per §6.7 (with `field` label and, when the session has more than
+report" producing JSON per §6.7 (with a required `label`, a separate `pageBarriers` list and, when the session has more than
 one step, `steps[]` grouping) and a Markdown twin, downloaded from the panel; "Always
 enable BRIDGE on this site", shown only when the origin is not in the built-in list,
 calling `permissions.request` synchronously inside the click and then asking the service
