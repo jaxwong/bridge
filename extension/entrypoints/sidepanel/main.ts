@@ -75,6 +75,17 @@ let step: StepState | null = null;
 let session: ApplicationSession | null = null;
 /** True once VERIFY has run since the last write on this step: the gate on Alt+Shift+S. */
 let verified = false;
+/** Set only while the gate is open on a step whose forward button submits (§6.5). */
+let submitOffer: { name: string; empty: number } | null = null;
+
+/** The one place the VERIFY gate opens or closes. The panel's submit button exists only
+ *  while the gate is open, so anything that changes the page withdraws it. */
+function setVerified(open: boolean, submit: typeof submitOffer = null) {
+  verified = open;
+  submitOffer = open ? submit : null;
+  $('submit-app').hidden = !submitOffer;
+  $('submit-confirm').hidden = true;
+}
 let mode: 'one' | 'list' = 'one';
 let current = 0;
 /**
@@ -342,7 +353,7 @@ async function write(key: string, given: string | null) {
     res = { fieldId: f.localId, ok: false, strategy: '', readBack: '', error: `Lost contact with the page. ${String(e)}` };
   }
   // The page changed, so the last read-back no longer describes it.
-  verified = false;
+  setVerified(false);
 
   if (!res.ok) {
     // Never fail silently (§4.3).
@@ -402,8 +413,6 @@ async function verifyAll(): Promise<boolean> {
     if (r?.found && r.value && r.value !== 'not checked') filled.push(`${nameOf(f)}, ${r.value}`);
     else empty.push(nameOf(f));
   }
-  verified = true;
-
   let forward = null;
   try {
     forward = step ? await send(id, step.mainFrame, { type: 'bridge/forward-action', act: false }) : null;
@@ -411,14 +420,15 @@ async function verifyAll(): Promise<boolean> {
     // The read-back above is still true and still worth hearing; only the button's name is missing.
     diag('Forward action', String(e));
   }
+  setVerified(true, forward?.submits ? { name: forward.name, empty: empty.length } : null);
   announce(
     (filled.length ? `Your application contains: ${filled.join('. ')}.` : 'Nothing has been filled yet.') +
     (empty.length ? ` ${empty.length} ${empty.length === 1 ? 'question is' : 'questions are'} empty: ${empty.join(', ')}.` : '') +
     (forward
       ? (forward.submits
-          ? ` BRIDGE never submits for you. Press Alt+Shift+S again to put the ${forward.name} button in reach.`
+          ? ' BRIDGE submits only when you tell it to. Press Alt+Shift+S again to move to the Submit my application button in BRIDGE.'
           : ` Press Alt+Shift+S again and BRIDGE presses the ${forward.name} button, which moves to the next step.`)
-      : ' BRIDGE never submits. Press the page\'s own submit button when you are ready.'),
+      : ' BRIDGE found no Continue or Submit button on this step.'),
   );
   return true;
 }
@@ -429,15 +439,30 @@ async function verifyAll(): Promise<boolean> {
 const PANE_KEY = /Mac/.test(navigator.platform) ? 'Command+Option+Down arrow' : 'F6';
 const PAGE_MOVES_ON_WITHIN_MS = 3000;
 
+/** A new step announces itself (runScan). A page that rejects the press says nothing a
+ *  screen reader user would hear from the panel, so its silence is reported. */
+async function reportIfPageStays(pressed: string, from: { session: ApplicationSession | null; index: number | undefined }) {
+  await new Promise((r) => setTimeout(r, PAGE_MOVES_ON_WITHIN_MS));
+  if (session !== from.session || session?.currentStepIndex !== from.index) return;
+  announce(`The page has not moved on since BRIDGE pressed ${pressed}. It may be asking for an answer it does not have yet. ` +
+    `Press ${PANE_KEY} to reach the page and hear what it says.`);
+}
+
 /** Alt+Shift+S (§6.5): the first press on a step reads everything back; only the press
  *  after that acts. A button that moves on is pressed for the user, because Chrome does
- *  not let the page take keyboard focus from the panel. A button that submits never is. */
+ *  not let the page take keyboard focus from the panel. On a step that submits, the press
+ *  only moves focus to the panel's own submit button. The shortcut never submits. */
 async function forwardCommand() {
   if (!step) return;
   if (!verified) { await verifyAll(); return; }
+  if (submitOffer) {
+    $('submit-app').focus();
+    announce('Focus is on the Submit my application button in BRIDGE. Pressing it asks you to confirm before anything is sent.');
+    return;
+  }
   // The gate closes before anything is pressed, so an impatient second press reads back
   // again instead of pressing Next twice and skipping a step.
-  verified = false;
+  setVerified(false);
   const from = { session, index: session?.currentStepIndex };
   let forward;
   try {
@@ -448,19 +473,52 @@ async function forwardCommand() {
   }
   if (!forward) { announce('BRIDGE could not find a Continue or Submit button on this step.'); return; }
   diag('Forward action', `${forward.name}: ${forward.pressed ? 'pressed' : 'not pressed, it submits'}`);
-  if (!forward.pressed) {
-    announce(`${forward.name} submits your application, so BRIDGE does not press it. It is selected on the page. ` +
-      `Press ${PANE_KEY} until you hear ${forward.name}, then press Enter.`);
+  // The button became a submitting one since the read-back: read the step back again.
+  if (!forward.pressed) { await verifyAll(); return; }
+  announce(`BRIDGE pressed the ${forward.name} button on the page.`);
+  await reportIfPageStays(forward.name, from);
+}
+
+// --- submitting (§6.5) --------------------------------------------------------------------
+// The invariant: BRIDGE never submits unintentionally. The only path to bridge/submit is the
+// user activating "Yes, submit now", which exists only after they activated "Submit my
+// application", which exists only while this step's read-back is current. No shortcut,
+// scan or message leads here.
+
+function askBeforeSubmitting() {
+  if (!submitOffer || !step) return;
+  const empty = submitOffer.empty ? `${submitOffer.empty} ${submitOffer.empty === 1 ? 'question is' : 'questions are'} empty. ` : '';
+  const question = `Submit your application to ${new URL(step.origin).host}? ${empty}This cannot be undone.`;
+  $('submit-question').textContent = question;
+  $('submit-confirm').hidden = false;
+  $('submit-cancel').focus();
+  announce(`${question} Choose Yes, submit now, or Cancel.`);
+}
+
+function cancelSubmitting() {
+  $('submit-confirm').hidden = true;
+  $('submit-app').focus();
+  announce('Nothing was submitted.');
+}
+
+async function submitConfirmed() {
+  if (!verified || !submitOffer || !step) {
+    announce('The page changed after it was read back, so nothing was submitted. Read it back again first.');
     return;
   }
-  announce(`BRIDGE pressed the ${forward.name} button on the page.`);
-  // A new step announces itself (runScan). A page that rejects the step says nothing a
-  // screen reader user would hear from the panel, so its silence is reported.
-  await new Promise((r) => setTimeout(r, PAGE_MOVES_ON_WITHIN_MS));
-  if (session === from.session && session?.currentStepIndex === from.index) {
-    announce(`The page has not moved on since BRIDGE pressed ${forward.name}. It may be asking for an answer it does not have yet. ` +
-      `Press ${PANE_KEY} to reach the page and hear what it says.`);
+  setVerified(false);
+  const from = { session, index: session?.currentStepIndex };
+  let done;
+  try {
+    done = await send(await targetTab(), step.mainFrame, { type: 'bridge/submit' });
+  } catch (e) {
+    announce(`BRIDGE could not reach the page, so nothing was submitted. ${String(e)}`);
+    return;
   }
+  if (!done) { announce('BRIDGE could not find the submit button any more, so nothing was submitted.'); return; }
+  diag('Submit', `${done.name}: pressed after the user confirmed`);
+  announce(`BRIDGE pressed the ${done.name} button on the page, as you confirmed.`);
+  await reportIfPageStays(done.name, from);
 }
 
 // --- session (§6.5) ---------------------------------------------------------------------
@@ -606,7 +664,7 @@ async function scanOnce(reason: Reason) {
   fields = merged;
   pageBarriers = barriers;
   step = now;
-  if (verdict !== 'fields-changed') { verified = false; current = 0; inferred.clear(); }
+  if (verdict !== 'fields-changed') { setVerified(false); current = 0; inferred.clear(); }
 
   await recordStep(now, topScan.scannedAt, verdict === 'new-step');
   const journey = journeyText(now);
@@ -618,7 +676,7 @@ async function scanOnce(reason: Reason) {
   // every "On the page" confirmation describes a document that no longer exists.
   const reloaded = verdict === 'fields-changed' && prev!.pageId !== now.pageId;
   if (reloaded) {
-    verified = false;
+    setVerified(false);
     document.querySelectorAll('#questions .status').forEach((st) => { st.className = 'status'; st.textContent = ''; });
     $('verify-results').replaceChildren();
   }
@@ -717,6 +775,9 @@ function focusHeading() {
 
 $('rescan').addEventListener('click', () => void runScan('manual'));
 $('verify').addEventListener('click', () => void verifyAll());
+$('submit-app').addEventListener('click', askBeforeSubmitting);
+$('submit-cancel').addEventListener('click', cancelSubmitting);
+$('submit-yes').addEventListener('click', () => void submitConfirmed());
 $('export-json').addEventListener('click', () => exportReport('json'));
 $('export-md').addEventListener('click', () => exportReport('md'));
 $('prev').addEventListener('click', () => { if (current > 0) goTo(fields[current - 1].key); });

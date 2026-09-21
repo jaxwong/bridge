@@ -24,7 +24,7 @@ Screen readers can read accessible pages. They cannot make a badly built control
 - Tell the applicant, before they start, which parts of the current application page they will not be able to operate.
 - Give them an accessible way to fill those parts through their existing screen reader.
 - Write their input into the real page, then verify it landed by reading it back from the page.
-- Keep the applicant in control: BRIDGE never submits.
+- Keep the applicant in control: BRIDGE never submits unintentionally. It submits only when the applicant, having heard the page read back, tells it to and confirms (§6.5).
 - Produce an exportable barrier report (accessibility failures only, no applicant data) for the employer side ([`bridge-business.md`](bridge-business.md)).
 
 ### Non-goals
@@ -120,10 +120,10 @@ Triggered when the user reaches the end of the list or requests it.
 
 - Re-read every mapped field **from the page DOM**, not from BRIDGE's own state. This is what catches ACT failures and anything the page reset (e.g. a framework re-render).
 - Read back as a structured summary: "Your application contains: Name, Zheng Wei. Years of experience, 2. CV, resume.pdf. 1 field could not be filled: Start date."
-- Then the way forward. **Changed 2026-09-21 after testing by hand:** Chrome does not let the page take keyboard focus from the side panel, so BRIDGE cannot "move focus to Submit". A button that only moves on (Next, Continue) is pressed by BRIDGE on the second Alt+Shift+S. A button that submits is never pressed: BRIDGE selects it on the page and says how to reach it with Chrome's pane key. See §6.5.
+- Then the way forward. **Changed 2026-09-21 after testing by hand:** Chrome does not let the page take keyboard focus from the side panel, so BRIDGE cannot "move focus to Submit". A button that only moves on (Next, Continue) is pressed by BRIDGE on the second Alt+Shift+S. Submitting is never done by the shortcut: the panel offers its own "Submit my application" button, which asks for confirmation. See §6.5.
 
 On a multi-step application this runs **before every forward move**, not only at the end,
-and `Alt+Shift+S` presses Continue on every step but the last, where it readies Submit. Once
+and `Alt+Shift+S` presses Continue on every step but the last, where it moves to the panel's submit button. Once
 Continue is pressed the previous step's DOM is gone and read-back is no longer possible.
 See §6.5.
 
@@ -515,8 +515,10 @@ the end. Generalise `Alt+Shift+S` from "focus Submit" to **"the primary forward
 action"** — Continue on steps 1..n-1, Submit on step n — and gate it behind that step's
 VERIFY.
 
-**BRIDGE never submits. It does press Continue** (decided 2026-09-21). The original rule was
-"BRIDGE never presses it", with the shortcut moving keyboard focus to the button. Measured by
+**BRIDGE never submits unintentionally. It presses Continue, and it submits on the user's
+confirmed instruction** (decided 2026-09-21). The original rule was "BRIDGE never presses
+it", with the shortcut moving keyboard focus to the button. The rule's purpose is that the
+applicant decides, knowing what the page holds; whose finger lands on Enter is not the point. Measured by
 hand on Chrome 154: nothing moves keyboard focus from the side panel to the page. Not
 `focus()` in the page, not `tabs.update`, not `windows.update`, not closing the panel.
 Chrome's pane key does, in four presses on the test machine, and the count depends on the
@@ -526,10 +528,18 @@ user's toolbars. Four chords per step is not a usable flow, so:
   the second Alt+Shift+S. The user stays in the panel, the new step is announced, and focus
   goes to its first question. The page side owns this rule and refuses to click a submitting
   name whatever the panel asks.
-- A button that submits is **never pressed**. BRIDGE gives it the page's focus, so the pane
-  key lands on it, and says: "Press Command+Option+Down arrow until you hear Submit
-  application, then press Enter." (F6 on Windows and Linux, from Chrome's documentation,
-  not tried.)
+- A button that submits is **never pressed by the shortcut**. While the step's read-back is
+  current, the panel shows **"Submit my application"**; the second Alt+Shift+S only moves
+  focus to it. Activating it asks "Submit your application to <site>? N questions are empty.
+  This cannot be undone.", with focus on Cancel. Only "Yes, submit now" sends `bridge/submit`.
+  Any write, step change or reload withdraws the button until the step is read back again.
+- Two locks, one on each side. The panel has a single path to `bridge/submit`, the confirm
+  button's handler. The page side presses only a button whose name says it submits, so that
+  message cannot press Next, and `bridge/forward-action` cannot press Submit.
+- A submit the page rejects (a required answer missing) changes nothing the panel can see, so
+  it falls under the three-second rule below. The pane key, Command+Option+Down arrow on
+  macOS, is named there as the way to hear the page's own message. (F6 on Windows and Linux,
+  from Chrome's documentation, not tried.)
 - The gate closes the moment BRIDGE presses, so a second impatient press reads back again
   instead of skipping a step. If the step has not changed three seconds after the press,
   BRIDGE says the page has not moved on.
@@ -737,8 +747,8 @@ These change earlier sections. They are listed once here so nothing is silent.
   across releases.
 - **Alt+Shift+S is gated by VERIFY, in the panel.** First press on a step runs VERIFY
   and announces the summary plus what the second press will do. The second press asks the
-  content script to act on the forward action: press it if it only moves on, select it if
-  it submits (§6.5). The manual pass settled the open question: `el.focus()` in the page
+  content script to press the forward action if it only moves on; if it submits, the press
+  moves focus to the panel's own submit button instead (§6.5). The manual pass settled the open question: `el.focus()` in the page
   does not take keyboard focus away from the side panel.
 - **On-load announcement only on application pages.** The built-in tier's content script
   announces the barrier count from an injected, visually hidden status region, and only
@@ -835,7 +845,9 @@ Verify, both shapes: after Next the panel's live region holds "Step 2 of 3" and 
 step's questions replace the old ones; answering Yes on step 1 announces "2 new
 questions" without a step announcement; first Alt+Shift+S press runs VERIFY and presses
 nothing; second press presses Next and the new step is announced, and on the last step
-makes the Submit button the page's `activeElement` without pressing it; a Next that refuses
+moves focus to the panel's submit button, which no number of shortcut presses activates;
+Cancel submits nothing; a write withdraws the offer; "Yes, submit now" submits once; the page
+side refuses to submit through a button that does not say submit; a Next that refuses
 to advance is reported, and is not pressed twice; the session holds three `StepRecord`s with no values; the
 form is never submitted by the test.
 
@@ -962,9 +974,11 @@ slider itself, kept because it demos well (§7).
 8. "Notice period": BRIDGE says "Could not fill: may need sighted help" because the page
    discards it. Say the line: BRIDGE never claims a success it did not read back.
 9. VERIFY: "Your application contains: Full name, Zheng Wei. …  1 question is empty:
-   Notice period." Press Alt+Shift+S again; BRIDGE says Submit application submits, so it
-   does not press it. Press Command+Option+Down arrow until the Submit button is spoken,
-   then press Enter yourself.
+   Notice period." Press Alt+Shift+S again; focus lands on "Submit my application" in the
+   panel. Press it: BRIDGE asks "Submit your application to localhost:8765? 1 question is
+   empty. This cannot be undone." and puts focus on Cancel. Choose "Yes, submit now". BRIDGE
+   says it pressed Submit application as you confirmed, then "Application received". Say the
+   line: BRIDGE never submits unless you tell it to, after reading everything back.
 10. Multi-step, 20 seconds: open `modal.html`, press Easy Apply, answer step 1, press
     Alt+Shift+S twice. BRIDGE reads the step back, presses Next, and says "Step 2 of 3:
     Additional questions". The page itself says nothing.
@@ -1224,7 +1238,9 @@ and it belongs in the demo.
 Nothing was submitted.
 
 **Positioning.** BRIDGE is assistive technology, not automation: the user drives every
-action and BRIDGE never submits (§2). That distinction matters on LinkedIn specifically,
-which restricts automated access and has a history of acting against extensions. Keep it
-true — no auto-advance, no bulk apply, no background activity — and say it plainly in the
-pitch.
+action. Since 2026-09-21 BRIDGE presses Next, and Submit after a confirmation, but each press
+is one explicit command from the user for that one button (§6.5), the way a screen reader or
+a switch device activates a control for its user. That distinction matters on LinkedIn
+specifically, which restricts automated access and has a history of acting against
+extensions. Keep it true — nothing advances or submits on its own, no bulk apply, no
+background activity — and say it plainly in the pitch.

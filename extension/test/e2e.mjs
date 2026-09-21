@@ -364,6 +364,7 @@ try {
     said = await spoken(panel, /Press Alt\+Shift\+S again and BRIDGE presses the Next button/);
     check('forward command: first press runs VERIFY and names the button', /Your application contains: .*resume\.pdf/.test(said), said);
     check('forward command: first press does not press Next', /Step 2 of 3/.test(await panel.textContent('#journey')), await panel.textContent('#journey'));
+    check('submit: not offered on a step whose forward button only moves on', await panel.locator('#submit-app').isHidden());
     await pressForward(tabId);
     said = await spoken(panel, /Step 3 of 3/);
     check('forward command: second press presses Next, and the new step is announced', /Step 3 of 3: Work experience/.test(said), said);
@@ -374,12 +375,35 @@ try {
     await page.waitForFunction(() => document.getElementById('portfolio-name').textContent === 'resume.pdf', null, { timeout: 5000 }).catch(() => {});
     check('CV reuse: the file chosen on step 2 is written on step 3 without asking again', await page.textContent('#portfolio-name') === 'resume.pdf');
 
+    // Submitting (§6.5): only the user's own confirmation in the panel can do it. The shortcut
+    // reads back, then moves focus to the panel's button. It never presses anything.
+    const panelFocus = () => panel.evaluate(() => document.activeElement?.id);
+    const submitted = async () => (await page.textContent('#result')) !== '';
+    check('submit: not offered before this step has been read back', await panel.locator('#submit-app').isHidden());
     await pressForward(tabId);
-    await spoken(panel, /BRIDGE never submits for you\. Press Alt\+Shift\+S again to put the Submit application button in reach/);
+    said = await spoken(panel, /Press Alt\+Shift\+S again to move to the Submit my application button in BRIDGE/);
+    check('submit: offered once the step is read back and its forward button submits', await panel.locator('#submit-app').isVisible(), said);
     await pressForward(tabId);
-    said = await spoken(panel, /submits your application, so BRIDGE does not press it/);
-    check('forward command: a button that submits is selected on the page, never pressed, and the way to it is said',
-      await pageFocus(page) === 'Submit application' && /until you hear Submit application, then press Enter/.test(said), said);
+    said = await spoken(panel, /Focus is on the Submit my application button/);
+    check('submit: the shortcut only moves focus to the panel button, and says it will ask first',
+      await panelFocus() === 'submit-app' && /asks you to confirm/.test(said) && !(await submitted()), said);
+    await pressForward(tabId);
+    await pressForward(tabId);
+    check('submit: no number of shortcut presses submits', !(await submitted()));
+
+    await panel.click('#submit-app');
+    said = await spoken(panel, /Submit your application to localhost/);
+    check('submit: the button asks first, names the site and the empty questions, and puts focus on Cancel',
+      await panelFocus() === 'submit-cancel' && /cannot be undone/.test(said) && /\d+ questions? (is|are) empty/.test(said) && !(await submitted()), said);
+    await panel.click('#submit-cancel');
+    said = await spoken(panel, /Nothing was submitted/);
+    check('submit: Cancel submits nothing, closes the question, and returns focus',
+      !(await submitted()) && await panel.locator('#submit-confirm').isHidden() && await panelFocus() === 'submit-app', said);
+
+    await panel.getByLabel(/Notice period/).selectOption('One month');
+    await panel.getByRole('button', { name: /^Write Notice period/ }).click();
+    await spoken(panel, /Notice period: One month\. Confirmed/);
+    check('submit: a write after the read-back withdraws the offer until the step is read back again', await panel.locator('#submit-app').isHidden());
     check('modal: BRIDGE did not submit', (await page.textContent('#result')) === '');
 
     await page.getByRole('button', { name: 'Back' }).click();
@@ -392,6 +416,18 @@ try {
     check('session: one record per step reached, in storage.session', session?.steps.length === 3 && session.journey?.total === 3,
       session?.steps.map((r) => `${r.index}:${r.label}:${r.status}`).join(' | '));
     check('session: step 2 is current again after Back', session?.currentStepIndex === 2 && session.steps.find((r) => r.index === 2)?.status === 'current');
+    await pressForward(tabId);
+    await spoken(panel, /BRIDGE presses the Next button/);
+    await pressForward(tabId);
+    await spoken(panel, /Step 3 of 3/);
+    await panel.getByRole('button', { name: 'Read back everything from the page' }).click();
+    await panel.locator('#submit-app').waitFor({ state: 'visible' });
+    await panel.click('#submit-app');
+    await panel.click('#submit-yes');
+    said = await spoken(panel, /BRIDGE pressed the Submit application button/);
+    check('submit: confirmed by the user, BRIDGE presses the page\'s submit button and says so',
+      await arrives(page.waitForFunction(() => document.getElementById('result').textContent.startsWith('Submitted'), null, { timeout: 5000 })), said);
+
     check('session: filled fields are recorded by key, never by value',
       session?.steps.find((r) => r.index === 2)?.filledFieldIds.length === 1 && !/resume\.pdf|zw@example/.test(JSON.stringify(session)));
 
@@ -434,10 +470,10 @@ try {
     await pressForward(tabId);
     check('full-nav: BRIDGE presses Save and Continue, and the page it loads is announced', await arrives(spoken(panel, /Step 3 of 3: Review/)));
     await pressForward(tabId);
-    await spoken(panel, /put the Submit button in reach/);
+    await spoken(panel, /move to the Submit my application button in BRIDGE/);
     await pressForward(tabId);
-    said = await spoken(panel, /so BRIDGE does not press it/);
-    check('full-nav: forward command selects Submit on the last step and does not press it', await pageFocus(page) === 'Submit', said);
+    said = await spoken(panel, /Focus is on the Submit my application button/);
+    check('full-nav: on the last step the shortcut offers the panel\'s submit button', await panel.evaluate(() => document.activeElement?.id) === 'submit-app', said);
     check('full-nav: BRIDGE did not submit', (await page.textContent('#result')) === '');
   });
 
@@ -514,7 +550,7 @@ try {
 
     await pressForward(tabId);
     let said = await spoken(panel, /Your application contains/);
-    check('no forward button: VERIFY still reads back, and does not invent a button', /BRIDGE never submits\. Press the page's own submit button/.test(said), said);
+    check('no forward button: VERIFY still reads back, and does not invent a button', /BRIDGE found no Continue or Submit button on this step\.$/.test(said), said);
     await pressForward(tabId);
     said = await spoken(panel, /could not find/);
     check('no forward button: the second press says so', /BRIDGE could not find a Continue or Submit button/.test(said), said);
@@ -600,8 +636,37 @@ try {
       JSON.stringify({ first, second, registered }));
   });
 
+  await section('submitting the single page', async () => {
+    // open() finds its tab by URL, and the first section's apply.html tab is still open.
+    const { page, panel } = await open('apply.html?submitting');
+    const confirmSubmit = async () => {
+      await panel.getByRole('button', { name: 'Read back everything from the page' }).click();
+      await panel.locator('#submit-app').waitFor({ state: 'visible' });
+      await panel.click('#submit-app');
+      await panel.click('#submit-yes');
+    };
+    // Full name is required and empty, so the browser blocks the submit and says so only visually.
+    await confirmSubmit();
+    let said = await spoken(panel, /has not moved on/);
+    check('a confirmed submit the page rejects: nothing was sent, and BRIDGE says the page has not moved on',
+      (await page.textContent('#result')) === '' && /has not moved on since BRIDGE pressed Submit application/.test(said), said);
+    check('a confirmed submit the page rejects: the offer is withdrawn until the page is read back again', await panel.locator('#submit-app').isHidden());
+
+    await panel.getByLabel('Full name').fill('Zheng Wei');
+    await panel.getByRole('button', { name: 'Write Full name to page' }).click();
+    await spoken(panel, /Full name: Zheng Wei\. Confirmed/);
+    await confirmSubmit();
+    said = await spoken(panel, /Application received/);
+    check('a confirmed submit the page accepts: the page\'s confirmation is what the user hears', /Application received/.test(said), said);
+    check('a confirmed submit the page accepts: the page was submitted', page.url().endsWith('/received.html'), page.url());
+    await panel.waitForTimeout(3500);
+    check('a confirmed submit the page accepts: BRIDGE does not then claim the page stayed', !/has not moved on/.test(await panel.textContent('#live')), await panel.textContent('#live'));
+  });
+
   await section('a forward button that does not advance', async () => {
     const { page, panel, tabId } = await open('stuck.html');
+    const asked = await panel.evaluate((id) => chrome.tabs.sendMessage(id, { type: 'bridge/submit' }, { frameId: 0 }), tabId);
+    check('the page side refuses to submit through a button that does not say submit', asked === null && await page.textContent('#clicks') === '0', JSON.stringify(asked));
     await pressForward(tabId);
     await spoken(panel, /BRIDGE presses the Next button/);
     await pressForward(tabId);

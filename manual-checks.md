@@ -9,7 +9,7 @@ quoted text back into the session; most failures here have a known, small fix.
 | # | Check | Time | Blocks the video? |
 |---|---|---|---|
 | 1 | Focus spike | 10 min | Yes |
-| 2 | Alt+Shift+S presses Next, never Submit | 10 min | Yes |
+| 2 | Alt+Shift+S presses Next; submitting needs your confirmation | 10 min | Yes |
 | 3 | Screenshot crop for label inference | 10 min | Yes, if the demo shows inference |
 | 4 | "Always enable BRIDGE on this site" | 10 min | No |
 | 5 | Export saves a file | 5 min | Yes, it hands over to the employer demo |
@@ -144,8 +144,9 @@ Record the result in `bridge-user.md` §10, under the open question about panel 
 **Settled on 2026-09-21, Chrome 154 on macOS:** the shortcut fires, and nothing moves
 keyboard focus from the side panel to the page. Not `focus()` in the page, not the tabs or
 windows APIs, not closing the panel. Chrome's pane key does, in four presses. So the design
-changed (`bridge-user.md` §6.5): BRIDGE presses a Next or Continue button itself, and never
-a button that submits. This check is now about that behaviour.
+changed (`bridge-user.md` §6.5): BRIDGE presses a Next or Continue button itself. It submits
+only from its own "Submit my application" button, after a confirmation. The shortcut never
+submits. This check is now about that behaviour.
 
 The command has a gate. The **first** press on a step reads everything back. Only the
 **second** press acts. Any write in between closes the gate again.
@@ -159,12 +160,14 @@ The command has a gate. The **first** press on a step reads everything back. Onl
 4. Press **Alt+Shift+S** again. *Expect:* the page moves to step 2, BRIDGE says "Step 2 of 3:
    Additional questions. …", and focus is on the first question in the panel.
 5. Repeat steps 3 and 4 to reach step 3.
-6. On step 3 press **Alt+Shift+S** twice. *Expect after the second press:* "Submit
-   application submits your application, so BRIDGE does not press it. It is selected on the
-   page. Press Command+Option+Down arrow until you hear Submit application, then press Enter."
-   The page must **not** show "Submitted".
-7. Press **Cmd+Option+Down arrow** until focus is on the page's Submit application button,
-   then **Enter**. *Expect:* "Submitted (test page, nothing sent)." Count the presses.
+6. On step 3 press **Alt+Shift+S** twice. *Expect after the second press:* "Focus is on the
+   Submit my application button in BRIDGE. Pressing it asks you to confirm before anything
+   is sent." Press **Alt+Shift+S** a few more times: the page must **never** show "Submitted".
+7. Press **Space** on "Submit my application". *Expect:* "Submit your application to
+   localhost:8765? N questions are empty. This cannot be undone.", with focus on **Cancel**.
+   Press Space: "Nothing was submitted." Press "Submit my application" again, Tab back to
+   **"Yes, submit now"**, press Space. *Expect:* "BRIDGE pressed the Submit application button
+   on the page, as you confirmed.", and the page shows "Submitted (test page, nothing sent)."
 8. Open `http://localhost:8765/stuck.html`, whose Next button refuses to advance. Press
    **Alt+Shift+B**, then **Alt+Shift+S** twice. *Expect:* "BRIDGE pressed the Next button on
    the page.", and three seconds later "The page has not moved on since BRIDGE pressed Next. …"
@@ -172,8 +175,8 @@ The command has a gate. The **first** press on a step reads everything back. Onl
 **Write down**
 
 - Whether each second press moved the page on, and what was announced.
-- On step 3: that nothing was submitted until you pressed Enter yourself.
-- The number of pane-key presses in step 7.
+- On step 3: that nothing was submitted until you chose "Yes, submit now".
+- Whether the confirmation question was spoken, and where focus was.
 
 **If it fails**
 
@@ -182,7 +185,7 @@ The command has a gate. The **first** press on a step reads everything back. Onl
 | Nothing happens, or a text field gets an "Í" | The shortcut is not bound. Go back to `chrome://extensions/shortcuts` |
 | The panel opens but nothing is announced | That press opened the panel, which was closed. Press again once it has finished scanning |
 | The second press announces "BRIDGE pressed…" but the page does not move | Tell Claude, with the page and the button's name |
-| The page shows "Submitted" without your Enter | Stop. Tell Claude. That breaks the one rule BRIDGE must never break |
+| The page shows "Submitted" without your "Yes, submit now" | Stop. Tell Claude. That breaks the one rule BRIDGE must never break |
 
 ---
 
@@ -397,9 +400,11 @@ caption panel.
 
 10. **VERIFY.** Activate "Read back everything from the page".
     *Expect:* "Your application contains: …", then the empty questions by name, then
-    "BRIDGE never submits for you. Press Alt+Shift+S again to put the Submit application
-    button in reach."
-11. **Forward.** Press **Alt+Shift+S** again, then follow what it says, as in check 2 steps 6 and 7.
+    "BRIDGE submits only when you tell it to. Press Alt+Shift+S again to move to the Submit
+    my application button in BRIDGE."
+11. **Submit.** Press **Alt+Shift+S** again, then confirm, as in check 2 steps 6 and 7. With
+    Full name written the page goes to "Application received". With it empty, BRIDGE says
+    the page has not moved on.
 
 ### Run B: step changes, the most important question of the pass
 
@@ -456,7 +461,8 @@ announce silent step changes, and turn the visa question into an answerable grou
 
 - Your own logged-in browser, by hand. No scripts, no Playwright. Automating LinkedIn
   breaches its User Agreement and risks your account (`probe/README.md`).
-- **Never press Submit application.** Stop at the read-back.
+- **Never press Submit application, and never activate BRIDGE's "Submit my application"
+  button.** BRIDGE can now submit for real when told to. Stop at the read-back.
 - **Stop the proxy first** (Terminal C, Ctrl+C). With it running, BRIDGE would send a
   picture of any unlabelled control on your logged-in LinkedIn page to DeepSeek. With it
   stopped, BRIDGE says once that label inference is unavailable, and nothing leaves the machine.
