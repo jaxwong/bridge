@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Acme Careers — Jobs</title>
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; }
+    dialog { width: 520px; border: 1px solid #888; border-radius: 8px; padding: 20px; }
+    .row { margin: 14px 0; }
+    .q { font-weight: 600; margin-bottom: 6px; }
+    fieldset { border: 0; padding: 0; margin: 0; }
+    [role=radio] { display: inline-flex; gap: 6px; margin-right: 16px; cursor: pointer; }
+    .dropdown { border: 1px solid #888; padding: 8px; cursor: pointer; position: relative; user-select: none; }
+    .dropdown__menu { position: absolute; left: 0; right: 0; top: 100%; background: #fff; border: 1px solid #888; z-index: 2; }
+    .dropdown__option { padding: 6px 8px; cursor: pointer; }
+    .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <!-- LinkedIn Easy Apply's shape, measured 2026-09-21 (spec §11): a native <dialog> over a
+       search page that never goes away, "1/3 pages", steps swapped in place with no URL
+       change, and nothing announced when the step changes. Nothing is sent anywhere. -->
+  <header>
+    <form role="search" id="search"><label>Search jobs <input name="q"></label></form>
+  </header>
+  <h1>Junior Analyst</h1>
+  <p>Acme Corp · Singapore</p>
+  <button type="button" id="open">Easy Apply</button>
+  <p id="result" role="status"></p>
+
+  <dialog id="apply" aria-labelledby="apply-title">
+    <h2 id="apply-title">Apply to Acme Corp</h2>
+    <p id="pages"></p>
+    <div id="body"></div>
+    <div class="actions" id="actions"></div>
+  </dialog>
+
+  <script>
+    const NOTICE = ['Immediately', 'Two weeks', 'One month', 'Three months'];
+    const visaQ = 'Will you now or in the future require sponsorship for employment visa status?';
+    const STEPS = [
+      { title: 'Contact info', html: `
+        <div class="row"><label for="email">Email address</label><br><input id="email" type="email"></div>
+        <div class="row"><label for="mobile">Mobile phone number</label><br><input id="mobile" type="tel"></div>
+        <div class="row"><fieldset><legend>Were you referred by an Acme employee?</legend>
+          <label><input type="radio" name="referred" value="yes"> Yes</label>
+          <label><input type="radio" name="referred" value="no"> No</label></fieldset></div>
+        <div id="referrer"></div>` },
+      { title: 'Additional questions', html: `
+        <div class="row"><fieldset>
+          <div class="q">${visaQ}</div>
+          <div role="radio" tabindex="0" aria-checked="false" aria-label="${visaQ}"><input type="radio" name="visa" id="visa-yes"><span>Yes</span></div>
+          <div role="radio" tabindex="0" aria-checked="false" aria-label="${visaQ}"><input type="radio" name="visa" id="visa-no"><span>No</span></div>
+        </fieldset></div>
+        <div class="row"><div class="q">Resume</div><input type="file" id="resume"><p id="resume-name"></p></div>` },
+      { title: 'Work experience', html: `
+        <div class="row"><div class="q">Notice period</div><div class="dropdown" id="notice"><span class="dropdown__value">Select…</span></div></div>
+        <div class="row"><label for="why">Why Acme?</label><br><textarea id="why" rows="3"></textarea></div>
+        <div class="row"><div class="q">Portfolio</div><input type="file" id="portfolio"><p id="portfolio-name"></p></div>` },
+    ];
+    let at = 0;
+    const dlg = document.getElementById('apply');
+    const body = document.getElementById('body');
+
+    function show() {
+      // The whole step is replaced in place. Focus is left wherever it was; nothing is announced.
+      document.getElementById('pages').textContent = `${at + 1}/${STEPS.length} pages`;
+      body.innerHTML = `<h3>${STEPS[at].title}</h3>${STEPS[at].html}`;
+      const actions = document.getElementById('actions');
+      actions.innerHTML = (at > 0 ? '<button type="button" id="back">Back</button>' : '') +
+        (at < STEPS.length - 1 ? '<button type="button" id="fwd">Next</button>' : '<button type="button" id="fwd">Submit application</button>');
+      document.getElementById('back')?.addEventListener('click', () => { at--; show(); });
+      document.getElementById('fwd').addEventListener('click', () => {
+        if (at < STEPS.length - 1) { at++; show(); return; }
+        dlg.close();
+        document.getElementById('result').textContent = 'Submitted (test page, nothing sent).';
+      });
+      wire();
+    }
+
+    function wire() {
+      // Conditional fields: answering Yes adds two questions to the same step.
+      body.querySelectorAll('input[name=referred]').forEach((r) => r.addEventListener('change', () => {
+        document.getElementById('referrer').innerHTML = r.value === 'yes' && r.checked
+          ? `<div class="row"><label for="rname">Referrer name</label><br><input id="rname"></div>
+             <div class="row"><label for="remail">Referrer email</label><br><input id="remail" type="email"></div>` : '';
+      }));
+      body.querySelectorAll('[role=radio]').forEach((w) => {
+        const input = w.querySelector('input');
+        const sync = () => body.querySelectorAll('[role=radio]').forEach((x) => x.setAttribute('aria-checked', String(x.querySelector('input').checked)));
+        input.addEventListener('change', sync);
+        w.addEventListener('click', (e) => { if (e.target !== input) { input.checked = true; sync(); } });
+      });
+      for (const id of ['resume', 'portfolio']) {
+        const inp = document.getElementById(id);
+        inp?.addEventListener('change', () => { document.getElementById(`${id}-name`).textContent = inp.files[0] ? inp.files[0].name : ''; });
+      }
+      const dd = document.getElementById('notice');
+      if (dd) {
+        let menu = null;
+        const close = () => { if (menu) { menu.remove(); menu = null; } };
+        dd.addEventListener('mousedown', (e) => {
+          if (e.target.closest('.dropdown__option')) return;
+          if (menu) return close();
+          menu = document.createElement('div');
+          menu.className = 'dropdown__menu';
+          for (const t of NOTICE) {
+            const o = document.createElement('div');
+            o.className = 'dropdown__option';
+            o.textContent = t;
+            o.addEventListener('click', () => { dd.querySelector('.dropdown__value').textContent = t; dd.dataset.value = t; close(); });
+            menu.append(o);
+          }
+          dd.append(menu);
+        });
+      }
+    }
+
+    document.getElementById('open').addEventListener('click', () => { at = 0; show(); dlg.showModal(); });
+  </script>
+</body>
+</html>

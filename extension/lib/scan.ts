@@ -273,7 +273,7 @@ export function scanPage(): { result: ScanResult; handles: Map<string, FieldHand
       fields,
       pageBarriers: pageBarriers(),
       stepHint: stepHint(scope),
-      heading: stepHeading(scope),
+      heading: stepHeading(scope, entries[0]?.anchor),
       iframeOrigins: crossOriginIframes(),
     },
     handles,
@@ -317,10 +317,16 @@ function crossOriginIframes(): string[] {
   return [...origins];
 }
 
-function stepHeading(scope: Element): string {
-  const inScope = [...scope.querySelectorAll('h1,h2,h3,legend')].find((h) => visible(h) && clean(h.textContent));
-  const any = inScope || [...document.querySelectorAll('h1,h2,h3')].find((h) => visible(h) && clean(h.textContent));
-  return any ? clean(any.textContent).slice(0, 120) : clean(document.title);
+/** The step's name: the last heading before its first question. In a wizard dialog the
+ *  first heading is the dialog's title ("Apply to Acme"); the step's own comes after it. */
+function stepHeading(scope: Element, firstField: Element | undefined): string {
+  const headings = [...scope.querySelectorAll('h1,h2,h3,legend')].filter((h) => visible(h) && clean(h.textContent));
+  const before = firstField
+    ? headings.filter((h) => h.compareDocumentPosition(lightAnchor(firstField)) & Node.DOCUMENT_POSITION_FOLLOWING && !h.contains(firstField))
+    : [];
+  const pick = before[before.length - 1] || headings[0] ||
+    [...document.querySelectorAll('h1,h2,h3')].find((h) => visible(h) && clean(h.textContent));
+  return pick ? clean(pick.textContent).slice(0, 120) : clean(document.title);
 }
 
 /** The page's own statement of where the user is. It outranks any heuristic (§6.5). */

@@ -337,11 +337,11 @@ async function write(key: string, given: string | null) {
     return;
   }
 
+  await recordFilled(key);
+  const remembered = f.kind === 'file' ? await rememberCv(JSON.parse(answer) as StoredCv) : '';
+  // Confirmation, announcement and focus move together, after the bookkeeping.
   status.className = 'status ok';
   status.textContent = `On the page: ${res.readBack}`;
-  await recordFilled(key);
-  let remembered = '';
-  if (f.kind === 'file') remembered = await rememberCv(JSON.parse(answer) as StoredCv);
 
   const i = fields.findIndex((x) => x.key === key);
   const next = fields[i + 1];

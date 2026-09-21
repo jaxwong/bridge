@@ -37,18 +37,51 @@ const ctx = await chromium.launchPersistentContext('', {
   args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`],
 });
 
-try {
+const sw = ctx.serviceWorkers()[0] || await ctx.waitForEvent('serviceworker');
+const extId = new URL(sw.url()).host;
+
+/** A fixture page plus a side panel pointed at it. The panel runs as an ordinary tab (§8). */
+async function open(pathname) {
   const page = await ctx.newPage();
-  await page.goto('http://localhost:8765/');
-
-  const sw = ctx.serviceWorkers()[0] || await ctx.waitForEvent('serviceworker');
-  const extId = new URL(sw.url()).host;
-  const tabId = await sw.evaluate(async () => (await chrome.tabs.query({ url: 'http://localhost/*' }))[0]?.id);
-  check('found the test tab', typeof tabId === 'number', `tabId=${tabId}`);
-
+  await page.goto(`http://localhost:8765/${pathname}`);
+  const tabId = await sw.evaluate(async (u) => (await chrome.tabs.query({})).find((t) => t.url === u)?.id, page.url());
   const panel = await ctx.newPage();
   await panel.goto(`chrome-extension://${extId}/sidepanel.html?tabId=${tabId}`);
   await panel.waitForFunction(() => !document.getElementById('summary').textContent.startsWith('Scanning'), null, { timeout: 15000 });
+  return { page, panel, tabId };
+}
+/** Waits until the panel's one live region says something matching `re`; returns the text. */
+async function spoken(panel, re) {
+  await panel.waitForFunction((src) => new RegExp(src, 'i').test(document.getElementById('live').textContent), re.source, { timeout: 10000 });
+  return panel.textContent('#live');
+}
+/** Alt+Shift+S cannot be pressed headlessly. This is the message the service worker sends for it. */
+const pressForward = (tabId) => sw.evaluate((id) => chrome.runtime.sendMessage({ type: 'bridge/command-forward', tabId: id }), tabId);
+const pageFocus = (page) => page.evaluate(() => document.activeElement?.textContent?.trim() || document.activeElement?.tagName);
+
+try {
+  const { page, panel, tabId } = await open('');
+  check('found the test tab', typeof tabId === 'number', `tabId=${tabId}`);
+
+  // --- on load, before the panel is opened (§4, built-in tier) ------------------------
+  await page.waitForFunction(() => document.getElementById('bridge-announcement')?.textContent, null, { timeout: 5000 });
+  const onLoad = await page.textContent('#bridge-announcement');
+  check('the page itself announces the barrier count on load', /^BRIDGE found \d+ accessibility barriers on this form\. Press Alt\+Shift\+B/.test(onLoad), onLoad);
+
+  // --- one question at a time is the default (§4.2) -----------------------------------
+  check('one-question mode: exactly one question is shown', await panel.locator('#questions .q:visible').count() === 1);
+  check('one-question mode: it says where you are', (await panel.locator('#questions .q:visible h3').textContent()) === 'Question 1 of 11');
+  await panel.getByRole('button', { name: 'Next question' }).click();
+  check('one-question mode: Next shows the second question and focuses its control',
+    (await panel.locator('#questions .q:visible h3').textContent()) === 'Question 2 of 11' &&
+    await panel.evaluate(() => document.activeElement?.closest('.q')?.querySelector('h3')?.textContent) === 'Question 2 of 11');
+  await panel.getByRole('button', { name: 'Previous question' }).click();
+  await panel.getByLabel('Full name').fill('Z. Wei');
+  await panel.getByRole('button', { name: 'Write Full name to page' }).click();
+  await spoken(panel, /Full name: Z\. Wei\. Confirmed on the page\. Next: Phone/);
+  check('one-question mode: a confirmed answer advances to the next question',
+    (await panel.locator('#questions .q:visible h3').textContent()) === 'Question 2 of 11' &&
+    await panel.evaluate(() => document.activeElement?.tagName) === 'INPUT');
 
   // Most of this run answers questions out of order, so it uses the full list. The
   // default, one question at a time, has its own section below.
@@ -93,7 +126,7 @@ try {
   await panel.getByLabel('Full name').fill('Zheng Wei');
   await panel.getByRole('button', { name: 'Write Full name to page' }).click();
   const status = (q) => panel.locator('.q', { hasText: q }).locator('.status');
-  await status('Full name').filter({ hasText: /On the page|Could not/ }).waitFor();
+  await status('Full name').filter({ hasText: /On the page: Zheng Wei|Could not/ }).waitFor();
   check('text: written to the page', await page.inputValue('#name') === 'Zheng Wei');
   check('text: panel reports the DOM read-back', /On the page: Zheng Wei/.test(await status('Full name').textContent()));
   // Page order: the question after "Full name" is Phone.
@@ -204,6 +237,121 @@ try {
   await panel.getByRole('button', { name: 'Write Full name to page' }).click();
   await status('Full name').filter({ hasText: /On the page|Could not/ }).waitFor();
   check('reload: the fresh content script takes writes', await page.inputValue('#name') === 'Zheng Wei');
+
+  // =====================================================================================
+  // Multi-step, LinkedIn's shape: a native <dialog>, steps swapped in place, no URL change.
+  // =====================================================================================
+  {
+    const { page, panel, tabId } = await open('modal.html');
+    check('modal: a search page with one field makes no on-load announcement',
+      (await page.textContent('#bridge-announcement')) === '');
+    await page.getByRole('button', { name: 'Easy Apply' }).click();
+    let said = await spoken(panel, /Step 1 of 3/);
+    check('modal: opening the dialog is announced as step 1, from "1/3 pages"', /Step 1 of 3: Contact info\. 3 questions found/.test(said), said);
+    check('modal: the search box behind the dialog is not offered', !(await panel.locator('#questions').textContent()).includes('Search jobs'));
+
+    await panel.getByLabel('Email address').fill('zw@example.com');
+    await page.getByLabel('Yes').check();
+    said = await spoken(panel, /new questions appeared/);
+    check('conditional fields: announced as new questions, not as a step', /^2 new questions appeared: Referrer name, Referrer email\.$/.test(said), said);
+    check('conditional fields: what was typed in the panel survives the rescan', await panel.getByLabel('Email address').inputValue() === 'zw@example.com');
+
+    await page.getByRole('button', { name: 'Next' }).click();
+    said = await spoken(panel, /Step 2 of 3/);
+    check('modal: Next is announced, the page itself says nothing', /Step 2 of 3: Additional questions\./.test(said), said);
+    check('modal: an answer typed but never written is reported lost', /before Email address was written/.test(said), said);
+    check('modal: the questions are the new step\'s', /sponsorship/.test(await panel.locator('#questions').textContent()) &&
+      !(await panel.locator('#questions').textContent()).includes('Email address'));
+    check('modal: the unnamed resume upload is a usability barrier, not a blocking one',
+      /Usability: The upload button has no label/.test(await panel.textContent('#barriers')));
+
+    await panel.getByLabel('Full list').check();
+    await panel.locator('#questions input[type=file]').setInputFiles({ name: 'resume.pdf', mimeType: 'application/pdf', buffer: Buffer.alloc(50_000, 65) });
+    await panel.locator('.q:has(input[type=file])').getByRole('button', { name: /^Write/ }).click();
+    await page.waitForFunction(() => document.getElementById('resume-name').textContent === 'resume.pdf', null, { timeout: 5000 }).catch(() => {});
+    check('modal: resume written on step 2', await page.textContent('#resume-name') === 'resume.pdf');
+    await spoken(panel, /Resume: resume\.pdf\. Confirmed on the page/);
+
+    // Alt+Shift+S: the first press reads back, only the second moves focus (§6.5).
+    await page.evaluate(() => document.activeElement?.blur());
+    await pressForward(tabId);
+    said = await spoken(panel, /Press Alt\+Shift\+S to move to the Next button/);
+    check('forward command: first press runs VERIFY and names the button', /Your application contains: .*resume\.pdf/.test(said), said);
+    check('forward command: first press does not move focus', await pageFocus(page) !== 'Next');
+    await pressForward(tabId);
+    said = await spoken(panel, /Focus is on the Next button/);
+    check('forward command: second press focuses Next', await pageFocus(page) === 'Next', said);
+    check('forward command: it says what pressing does, and that BRIDGE will not', /moves to the next step\. BRIDGE never presses it/.test(said));
+
+    await page.getByRole('button', { name: 'Next' }).click();
+    said = await spoken(panel, /Step 3 of 3/);
+    check('modal: step 3 announced', /Step 3 of 3: Work experience/.test(said), said);
+    const opts = await panel.getByLabel(/Notice period/).locator('option').allTextContents();
+    check('modal: dropdown options on a later step are harvested', opts.includes('One month'), opts.join(' | '));
+    await panel.getByRole('button', { name: 'Write resume.pdf, chosen earlier, to page' }).click();
+    await page.waitForFunction(() => document.getElementById('portfolio-name').textContent === 'resume.pdf', null, { timeout: 5000 }).catch(() => {});
+    check('CV reuse: the file chosen on step 2 is written on step 3 without asking again', await page.textContent('#portfolio-name') === 'resume.pdf');
+
+    await pressForward(tabId);
+    await spoken(panel, /move to the Submit application button/);
+    await pressForward(tabId);
+    said = await spoken(panel, /Focus is on the Submit application button/);
+    check('forward command: on the last step it targets Submit and says it submits',
+      await pageFocus(page) === 'Submit application' && /Pressing it submits your application\. BRIDGE never presses it/.test(said), said);
+    check('modal: BRIDGE did not submit', (await page.textContent('#result')) === '');
+
+    await page.getByRole('button', { name: 'Back' }).click();
+    said = await spoken(panel, /Step 2 of 3/);
+    check('modal: Back is a step change too', /Step 2 of 3: Additional questions/.test(said), said);
+
+    const stored = await sw.evaluate(() => chrome.storage.session.get(null));
+    const sessionKey = Object.keys(stored).find((k) => k.startsWith(`session:${tabId}:`));
+    const session = stored[sessionKey];
+    check('session: one record per step reached, in storage.session', session?.steps.length === 3 && session.journey?.total === 3,
+      session?.steps.map((r) => `${r.index}:${r.label}:${r.status}`).join(' | '));
+    check('session: step 2 is current again after Back', session?.currentStepIndex === 2 && session.steps.find((r) => r.index === 2)?.status === 'current');
+    check('session: filled fields are recorded by key, never by value',
+      session?.steps.find((r) => r.index === 2)?.filledFieldIds.length === 1 && !/resume\.pdf|zw@example/.test(JSON.stringify(session)));
+
+    const [dl] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as JSON' }).click()]);
+    const report = JSON.parse(readFileSync(await dl.path(), 'utf8'));
+    check('export: §6.7 shape, grouped by step', report.portal === 'localhost:8765' && report.pagePath === '/modal.html' &&
+      report.steps?.length === 3 && Array.isArray(report.barriers), Object.keys(report).join(','));
+    check('export: every barrier has rule, severity, field, impact and no selector',
+      report.barriers.length > 0 && report.barriers.every((b) => b.rule && b.severity && 'field' in b && b.impact && !('selector' in b)));
+    check('export: the visa question\'s barrier is on step 2',
+      report.steps[1].barriers.some((b) => b.rule === 'options-identically-named' && /sponsorship/.test(b.field)));
+    check('export: no applicant data', !/resume\.pdf|zw@example|Zheng/.test(JSON.stringify(report)));
+    const [md] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as Markdown' }).click()]);
+    check('export: Markdown twin', /^# Accessibility barrier report: localhost:8765\/modal\.html/.test(readFileSync(await md.path(), 'utf8')));
+  }
+
+  // =====================================================================================
+  // Multi-step, Workday's shape: every step a full navigation that destroys the content script.
+  // =====================================================================================
+  {
+    const { page, panel, tabId } = await open('steps/1.html');
+    let said = await spoken(panel, /Step 1 of 3/);
+    check('full-nav: the journey is read from the page\'s stepper', /Step 1 of 3: My Information\. Next: My Experience\./.test(said), said);
+    await panel.getByLabel('First name').fill('Zheng Wei');
+    await page.getByRole('button', { name: 'Save and Continue' }).click();
+    said = await spoken(panel, /Step 2 of 3/);
+    check('full-nav: the new page is announced without reopening the panel', /Step 2 of 3: My Experience\. Next: Review\./.test(said), said);
+    check('full-nav: the unwritten answer from the destroyed step is reported lost', /before First name was written/.test(said), said);
+    await panel.getByLabel('Full list').check();
+    await panel.getByLabel('Job title').fill('Analyst');
+    await panel.getByRole('button', { name: 'Write Job title to page' }).click();
+    await spoken(panel, /Job title: Analyst\. Confirmed/);
+    check('full-nav: the fresh content script on step 2 takes writes', await page.inputValue('#title') === 'Analyst');
+    await page.getByRole('button', { name: 'Save and Continue' }).click();
+    await spoken(panel, /Step 3 of 3: Review/);
+    await pressForward(tabId);
+    await spoken(panel, /move to the Submit button/);
+    await pressForward(tabId);
+    said = await spoken(panel, /Focus is on the Submit button/);
+    check('full-nav: forward command reaches Submit on the last step', await pageFocus(page) === 'Submit', said);
+    check('full-nav: BRIDGE did not submit', (await page.textContent('#result')) === '');
+  }
 } finally {
   await ctx.close();
   server.close();

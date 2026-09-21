@@ -135,20 +135,24 @@ export default defineContentScript({
     // DOM. So one debounced observer covers every transition a live document can make.
     // It only reports THAT the form changed; the panel decides what the change means.
     let timer: number | undefined;
+    const check = () => {
+      // BRIDGE's own work (opening a dropdown to read it, writing an answer) leaves the
+      // set of fields as it was, so waiting it out and comparing afterwards loses nothing.
+      // Dropping the change instead would lose a step that happened to land mid-scan.
+      if (busy) { timer = window.setTimeout(check, 300); return; }
+      const now = fingerprintOf(scanPage().result);
+      if (now === notified) return;
+      notified = now;
+      const event: FormChanged = { type: 'bridge/form-changed' };
+      browser.runtime.sendMessage(event).catch((e) => {
+        // The panel being closed is the normal case, not a fault.
+        if (!/Receiving end does not exist/.test(String(e))) console.error('[BRIDGE] form-changed', e);
+      });
+    };
     new MutationObserver(() => {
-      if (busy || !last) return;
+      if (!last) return;
       clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        if (busy) return;
-        const now = fingerprintOf(scanPage().result);
-        if (now === notified) return;
-        notified = now;
-        const event: FormChanged = { type: 'bridge/form-changed' };
-        browser.runtime.sendMessage(event).catch((e) => {
-          // The panel being closed is the normal case, not a fault.
-          if (!/Receiving end does not exist/.test(String(e))) console.error('[BRIDGE] form-changed', e);
-        });
-      }, 400);
+      timer = window.setTimeout(check, 400);
     }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'open', 'aria-hidden', 'style', 'class'] });
 
     // --- on-load announcement, built-in tier (§4) --------------------------------------
