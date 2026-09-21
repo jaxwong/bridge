@@ -23,11 +23,18 @@ export interface FieldHandle {
   range?: { min: number; max: number; step: number };
 }
 
-const CUSTOM_WIDGET_CLASS = /select|dropdown|combo|picker|slider|range|date|calendar/i;
-const SLIDER_CLASS = /slider|range/i;
-const DATE_CLASS = /date|calendar/i;
+// Matched against whole WORDS of a class name, never substrings: "candidate", "update" and
+// "validate" all contain "date", and "selected" contains "select".
+const SLIDER_WORDS = new Set(['slider', 'range']);
+const DATE_WORDS = new Set(['date', 'datepicker', 'calendar']);
+const WIDGET_WORDS = new Set([...SLIDER_WORDS, ...DATE_WORDS, 'select', 'dropdown', 'combo', 'combobox', 'picker']);
 
-const classOf = (el: Element) => (typeof el.className === 'string' ? el.className : '');
+/** "dropdown__value dateRange-input" -> dropdown, value, date, range, input */
+function classWords(el: Element): string[] {
+  const cls = typeof el.className === 'string' ? el.className : '';
+  return cls.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+}
+const hasWord = (el: Element, words: Set<string>) => classWords(el).some((w) => words.has(w));
 
 function barrier(rule: string, severity: Barrier['severity'], message: string): Barrier {
   return { rule, severity, message };
@@ -42,7 +49,7 @@ function candidates(scope: Element): Element[] {
   deepQueryAll(scope, 'div,span,li').forEach((el) => {
     if (set.has(el) || !visible(el)) return;
     if (getComputedStyle(el).cursor !== 'pointer') return;
-    if (!CUSTOM_WIDGET_CLASS.test(classOf(el))) return;
+    if (!hasWord(el, WIDGET_WORDS)) return;
     if (el.querySelector(`${CONTROLS},[role],button,a[href]`)) return;
     set.add(el);
   });
@@ -68,10 +75,10 @@ function kindOf(el: Element): ControlKind {
   if (role === 'slider' || (el instanceof HTMLInputElement && el.type === 'range')) return 'slider';
   if (el instanceof HTMLInputElement && el.type === 'file') return 'file';
   if (role === 'combobox') return 'combobox';
-  if (el instanceof HTMLInputElement) return el.type === 'date' || DATE_CLASS.test(classOf(el)) ? 'date' : 'text';
-  if (SLIDER_CLASS.test(classOf(el))) return 'slider';
-  if (DATE_CLASS.test(classOf(el))) return 'date';
-  if (CUSTOM_WIDGET_CLASS.test(classOf(el))) return 'combobox';
+  if (el instanceof HTMLInputElement) return el.type === 'date' || hasWord(el, DATE_WORDS) ? 'date' : 'text';
+  if (hasWord(el, SLIDER_WORDS)) return 'slider';
+  if (hasWord(el, DATE_WORDS)) return 'date';
+  if (hasWord(el, WIDGET_WORDS)) return 'combobox';
   return 'unknown';
 }
 
@@ -216,7 +223,7 @@ export function scanPage(): { result: ScanResult; handles: Map<string, FieldHand
   // One field per group, asked as its question, with options named by their visible
   // text. This is what makes LinkedIn's visa question answerable: the page puts the
   // question into every option's aria-label, erasing "Yes" and "No" (spec §11).
-  for (const [key, { kind, opts }] of groups) {
+  for (const { kind, opts } of groups.values()) {
     const shared = opts[0].closest('fieldset,[role=radiogroup],[role=group]');
     const container = shared && opts.every((o) => shared.contains(o)) ? shared : null;
     const barriers: Barrier[] = [];
@@ -249,7 +256,6 @@ export function scanPage(): { result: ScanResult; handles: Map<string, FieldHand
       },
       handle: { kind, el: anchor, selector: cssPath(anchor), label: question, optionEls: opts, optionSelectors: opts.map(cssPath) },
     });
-    void key;
   }
 
   // Page order. A control inside a shadow root sorts where its host sits.
@@ -316,7 +322,11 @@ function crossOriginIframes(): string[] {
   const origins = new Set<string>();
   document.querySelectorAll('iframe[src]').forEach((f) => {
     if (!visible(f) || ariaHidden(f)) return;
-    const origin = new URL((f as HTMLIFrameElement).src, location.href).origin;
+    // src is whatever the page wrote. One that does not parse loads nothing, so there is
+    // no frame to report; it must not take the whole scan down.
+    const src = (f as HTMLIFrameElement).src;
+    if (!URL.canParse(src, location.href)) return;
+    const origin = new URL(src, location.href).origin;
     if (origin !== location.origin && origin !== 'null') origins.add(origin);
   });
   return [...origins];

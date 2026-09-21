@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Acme Careers — edge cases</title>
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; max-width: 640px; margin: 24px auto; padding: 0 16px; }
+    .row { margin: 16px 0; }
+    .dropdown { border: 1px solid #888; padding: 8px; cursor: pointer; position: relative; user-select: none; }
+    .dropdown__menu { position: absolute; left: 0; right: 0; top: 100%; background: #fff; border: 1px solid #888; z-index: 2; }
+    .dropdown__option { padding: 6px 8px; cursor: pointer; }
+    .candidate-card, .validate-hint, .update-note { cursor: pointer; padding: 8px; border: 1px solid #ccc; }
+    [role=slider] { display: block; height: 20px; background: #ddd; }
+    .slider { cursor: pointer; height: 20px; background: #ddd; }
+  </style>
+</head>
+<body>
+  <!-- Failure and edge cases for SCAN and ACT (AGENTS.md §7). Each block says what must
+       happen. There is deliberately NO submit button on this page. -->
+  <h1>Edge cases</h1>
+  <form id="apply">
+    <!-- An iframe whose src does not parse must not take the scan down with it. -->
+    <iframe src="http://[" title="broken" style="width:120px;height:30px"></iframe>
+
+    <label for="name">Full name</label><input id="name">
+    <!-- No label by any mechanism. The label before it belongs to "Full name" and must not
+         be borrowed: a wrong name is worse than "Unlabelled". -->
+    <input name="mystery">
+
+    <!-- Clickable, and their class names CONTAIN "date" — but they are not widgets. A tool
+         that reports these cries wolf (spec §6.2). -->
+    <div class="row candidate-card">View candidate tips</div>
+    <div class="row validate-hint">Why we ask</div>
+    <div class="row update-note">Update your profile later</div>
+
+    <!-- A dropdown whose options depend on another answer. Options must be read fresh. -->
+    <div class="row"><label for="country">Country</label>
+      <select id="country"><option>Singapore</option><option>Vietnam</option></select></div>
+    <div class="row"><div>City</div><div class="dropdown" id="city"><span class="dropdown__value">Select…</span></div></div>
+
+    <!-- A dropdown that ignores synthetic events: options cannot be harvested or chosen. -->
+    <div class="row"><div>Team</div><div class="dropdown" id="team"><span class="dropdown__value">Select…</span></div></div>
+
+    <!-- The three slider shapes ACT chooses between, plus one that publishes no range. -->
+    <div class="row"><label for="confidence">Confidence</label><input type="range" id="confidence" min="0" max="100" step="10" value="0"></div>
+    <div class="row"><span id="vol-l">Volume</span>
+      <span role="slider" id="volume" tabindex="0" aria-labelledby="vol-l" aria-valuemin="0" aria-valuemax="10" aria-valuenow="5"></span></div>
+    <div class="row"><div>Rating</div><div class="slider" id="rating"></div></div>
+
+    <!-- The two native date shapes. -->
+    <div class="row"><label for="dob">Date of birth</label><input type="date" id="dob"></div>
+    <div class="row"><label for="from">Available from</label><input id="from" class="datepicker" placeholder="mm/dd/yyyy"></div>
+  </form>
+  <script>
+    const CITIES = { Singapore: ['Jurong', 'Tampines'], Vietnam: ['Hanoi', 'Da Nang'] };
+    function dropdown(id, options, trustedOnly) {
+      const dd = document.getElementById(id);
+      let menu = null;
+      dd.addEventListener('mousedown', (e) => {
+        if (trustedOnly && !e.isTrusted) return;
+        if (e.target.closest('.dropdown__option')) return;
+        if (menu) { menu.remove(); menu = null; return; }
+        menu = document.createElement('div');
+        menu.className = 'dropdown__menu';
+        for (const t of options()) {
+          const o = document.createElement('div');
+          o.className = 'dropdown__option';
+          o.textContent = t;
+          o.addEventListener('click', () => { dd.querySelector('.dropdown__value').textContent = t; menu.remove(); menu = null; });
+          menu.append(o);
+        }
+        dd.append(menu);
+      });
+    }
+    dropdown('city', () => CITIES[document.getElementById('country').value], false);
+    dropdown('team', () => ['Platform', 'Growth'], true);
+
+    const vol = document.getElementById('volume');
+    vol.addEventListener('keydown', (e) => {
+      const now = +vol.getAttribute('aria-valuenow');
+      if (e.key === 'Home') vol.setAttribute('aria-valuenow', '0');
+      if (e.key === 'ArrowRight') vol.setAttribute('aria-valuenow', String(Math.min(10, now + 1)));
+    });
+  </script>
+</body>
+</html>

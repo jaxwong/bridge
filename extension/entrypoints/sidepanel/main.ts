@@ -14,12 +14,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 
 /** A field as the panel knows it: which frame it is in, and a key that survives a rescan
  *  (the content script's ids are positional and shift when fields appear). */
-export type PanelField = FieldDescriptor & {
-  frameId: number; localId: string; key: string;
-  /** What the page itself yielded, before any inferred name replaced it. The barrier
-   *  report keys on this: an inferred name can differ from one run to the next. */
-  pageLabel: string; pageLabelSource: FieldDescriptor['labelSource'];
-};
+export type PanelField = FieldDescriptor & { frameId: number; localId: string; key: string };
 
 type Reason = 'open' | 'manual' | 'tab' | 'page-loaded' | 'form-changed';
 
@@ -82,7 +77,14 @@ let session: ApplicationSession | null = null;
 let verified = false;
 let mode: 'one' | 'list' = 'one';
 let current = 0;
+/**
+ * Names from label inference (§6.4), by field key, for the CURRENT step only. This map is
+ * the single owner of an inferred name: a field's own `label` is never overwritten, so the
+ * barrier report always carries what the page yielded, and a name inferred for one
+ * question cannot follow its key onto a different question on the next step.
+ */
 const inferred = new Map<string, string>();
+const nameOf = (f: PanelField) => inferred.get(f.key) ?? f.label;
 
 const SEVERITY_WORD: Record<Severity, string> = { blocking: 'Blocking', usability: 'Usability', ok: 'OK' };
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -92,7 +94,7 @@ const questionEl = (key: string) => [...$('questions').children].find((q) => (q 
 const firstControl = (key: string) => questionEl(key)?.querySelector<HTMLElement>('input, select, textarea') ?? null;
 
 function labelText(f: PanelField) {
-  return f.label + (['nearby-text', 'none', 'llm'].includes(f.labelSource) ? ' (label inferred)' : '');
+  return nameOf(f) + (inferred.has(f.key) || f.labelSource === 'nearby-text' || f.labelSource === 'none' ? ' (label inferred)' : '');
 }
 
 // --- rendering ------------------------------------------------------------------------
@@ -140,10 +142,15 @@ function renderBarriers() {
   }
 }
 
+/** What a question's controls were built from. A kept question whose options or range the
+ *  page has since changed (country -> city) would offer answers that no longer exist. */
+const builtFrom = (f: PanelField) => JSON.stringify([f.kind, f.options ?? null, f.range ?? null]);
+
 function buildQuestion(f: PanelField): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'q';
   wrap.dataset.key = f.key;
+  wrap.dataset.builtFrom = builtFrom(f);
   const ctlId = `ctl-${f.key.replace(/[^a-z0-9]+/gi, '-')}`;
 
   const position = document.createElement('h3');
@@ -250,7 +257,7 @@ function paintNames() {
     const q = questionEl(f.key)!;
     q.querySelector('.position')!.textContent = `Question ${i + 1} of ${fields.length}`;
     q.querySelector('.name')!.textContent = labelText(f);
-    q.querySelector('.name-plain')!.textContent = ` ${f.label}`;
+    q.querySelector('.name-plain')!.textContent = ` ${nameOf(f)}`;
   });
 }
 
@@ -261,7 +268,10 @@ function renderQuestions(fresh: boolean) {
   const focusedKey = (document.activeElement?.closest('.q') as HTMLElement | null)?.dataset.key;
   const focusedId = document.activeElement?.id;
   if (fresh) box.replaceChildren();
-  box.replaceChildren(...fields.map((f) => questionEl(f.key) || buildQuestion(f)));
+  box.replaceChildren(...fields.map((f) => {
+    const kept = questionEl(f.key);
+    return kept && kept.dataset.builtFrom === builtFrom(f) ? kept : buildQuestion(f);
+  }));
   paintNames();
   applyMode();
   // Moving a node blurs it; put focus back where the user was.
@@ -320,7 +330,7 @@ async function write(key: string, given: string | null) {
   const status = questionEl(key)!.querySelector('.status')!;
   const answer = given ?? await readAnswer(f);
   if (answer == null) {
-    announce(`Choose an answer for ${f.label} first.`);
+    announce(`Choose an answer for ${nameOf(f)} first.`);
     firstControl(key)?.focus();
     return;
   }
@@ -339,7 +349,7 @@ async function write(key: string, given: string | null) {
     status.className = 'status fail';
     const detail = res.error || `The page shows "${res.readBack || 'nothing'}".`;
     status.textContent = `Could not fill: may need sighted help. ${detail}`;
-    announce(`Could not fill ${f.label}. ${detail}`);
+    announce(`Could not fill ${nameOf(f)}. ${detail}`);
     return;
   }
 
@@ -351,7 +361,7 @@ async function write(key: string, given: string | null) {
 
   const i = fields.findIndex((x) => x.key === key);
   const next = fields[i + 1];
-  announce(`${f.label}: ${res.readBack}. Confirmed on the page.${remembered}${next ? ` Next: ${next.label}.` : ' That was the last question.'}`);
+  announce(`${nameOf(f)}: ${res.readBack}. Confirmed on the page.${remembered}${next ? ` Next: ${nameOf(next)}.` : ' That was the last question.'}`);
   // Focus moves to the next question after each answer (§6.6).
   if (next) goTo(next.key); else $('verify').focus();
 }
@@ -387,14 +397,20 @@ async function verifyAll(): Promise<boolean> {
     const r = byFrame.find((x) => x.frameId === f.frameId)?.results.find((x) => x.fieldId === f.localId);
     const li = document.createElement('li');
     const value = r?.found ? (r.value || 'empty') : 'no longer on the page';
-    li.textContent = `${f.label}: ${value}`;
+    li.textContent = `${nameOf(f)}: ${value}`;
     ul.append(li);
-    if (r?.found && r.value && r.value !== 'not checked') filled.push(`${f.label}, ${r.value}`);
-    else empty.push(f.label);
+    if (r?.found && r.value && r.value !== 'not checked') filled.push(`${nameOf(f)}, ${r.value}`);
+    else empty.push(nameOf(f));
   }
   verified = true;
 
-  const forward = step ? await send(id, step.mainFrame, { type: 'bridge/forward-action', focus: false }) : null;
+  let forward = null;
+  try {
+    forward = step ? await send(id, step.mainFrame, { type: 'bridge/forward-action', focus: false }) : null;
+  } catch (e) {
+    // The read-back above is still true and still worth hearing; only the button's name is missing.
+    diag('Forward action', String(e));
+  }
   announce(
     (filled.length ? `Your application contains: ${filled.join('. ')}.` : 'Nothing has been filled yet.') +
     (empty.length ? ` ${empty.length} ${empty.length === 1 ? 'question is' : 'questions are'} empty: ${empty.join(', ')}.` : '') +
@@ -410,7 +426,13 @@ async function verifyAll(): Promise<boolean> {
 async function forwardCommand() {
   if (!step) return;
   if (!verified) { await verifyAll(); return; }
-  const forward = await send(await targetTab(), step.mainFrame, { type: 'bridge/forward-action', focus: true });
+  let forward;
+  try {
+    forward = await send(await targetTab(), step.mainFrame, { type: 'bridge/forward-action', focus: true });
+  } catch (e) {
+    announce(`BRIDGE could not reach the page. ${String(e)}`);
+    return;
+  }
   announce(forward
     ? `Focus is on the ${forward.name} button on the page. ${forward.submits ? 'Pressing it submits your application.' : 'Pressing it moves to the next step.'} BRIDGE never presses it.`
     : 'BRIDGE could not find a Continue or Submit button on this step.');
@@ -433,7 +455,7 @@ async function recordStep(s: StepState, scannedAt: string, newStep: boolean) {
   if (!session || session.origin !== s.origin) await loadSession(s.origin);
   const sn = session!;
   const index = s.index ?? (newStep || !sn.steps.length ? sn.steps.length + 1 : sn.currentStepIndex);
-  const scan = { url: s.url, scannedAt, fields: fields.map(({ frameId: _f, localId: _l, key: _k, pageLabel, pageLabelSource, ...d }) => ({ ...d, label: pageLabel, labelSource: pageLabelSource })), pageBarriers, stepHint: s.hint };
+  const scan = { url: s.url, scannedAt, fields: fields.map(({ frameId: _f, localId: _l, key: _k, ...d }) => d), pageBarriers, stepHint: s.hint };
   const existing = sn.steps.find((r) => r.index === index);
   if (existing) Object.assign(existing, { url: s.url, label: s.heading, scan });
   else sn.steps.push({ index, url: s.url, label: s.heading, scan, status: 'current', filledFieldIds: [] });
@@ -508,8 +530,7 @@ async function scanOnce(reason: Reason) {
       const n = seen.get(nameKey) || 0;
       seen.set(nameKey, n + 1);
       const key = `${frame.frameId}|${nameKey}|${n}`;
-      const label = inferred.get(key);
-      merged.push({ ...f, frameId: frame.frameId, localId: f.id, id: `${frame.frameId}:${f.id}`, key, pageLabel: f.label, pageLabelSource: f.labelSource, ...(label ? { label, labelSource: 'llm' as const } : {}) });
+      merged.push({ ...f, frameId: frame.frameId, localId: f.id, id: `${frame.frameId}:${f.id}`, key });
     }
   }
   const reached = new Set(scans.map((s) => s.frame.origin));
@@ -553,14 +574,14 @@ async function scanOnce(reason: Reason) {
         const q = questionEl(f.key);
         const typed = q?.querySelector<HTMLInputElement>('input:not([type=radio]):not([type=checkbox]):not([type=file]), select, textarea')?.value.trim();
         return !!typed && !q!.querySelector('.status.ok');
-      }).map((f) => f.label)
+      }).map(nameOf)
     : [];
   const before = new Set(fields.map((f) => f.key));
 
   fields = merged;
   pageBarriers = barriers;
   step = now;
-  if (verdict !== 'fields-changed') { verified = false; current = 0; }
+  if (verdict !== 'fields-changed') { verified = false; current = 0; inferred.clear(); }
 
   await recordStep(now, topScan.scannedAt, verdict === 'new-step');
   const journey = journeyText(now);
@@ -589,32 +610,32 @@ async function scanOnce(reason: Reason) {
   } else {
     const added = fields.filter((f) => !before.has(f.key));
     if (reloaded) announce(`The page reloaded, so answers written before may be gone. ${summaryText()}`);
-    else if (added.length) announce(`${plural(added.length, 'new question')} appeared: ${added.map((f) => f.label).join(', ')}.`);
+    else if (added.length) announce(`${plural(added.length, 'new question')} appeared: ${added.map(nameOf).join(', ')}.`);
     else if (reason === 'manual') announce(summaryText());
   }
 
-  void nameUnlabelled();
+  nameUnlabelled().catch((e) => { diag('Label inference', `failed: ${String(e)}`); announce(`Label inference failed. ${String(e)}`); });
 }
 
 // --- label inference (§6.4) ---------------------------------------------------------------
 
 async function nameUnlabelled() {
-  const unnamed = fields.filter((f) => f.labelSource === 'none');
+  const unnamed = fields.filter((f) => f.labelSource === 'none' && !inferred.has(f.key));
   if (!unnamed.length) return;
+  const asked = step;
   const result = await inferLabels(await targetTab(), unnamed, (m) => diag('Label inference', m));
+  // The page may have moved on while the model was thinking. Names for a step that is no
+  // longer showing are dropped, not applied to whatever took its place.
+  if (step !== asked) { diag('Label inference', 'discarded: the step changed before the names arrived'); return; }
   if (!result.ok) {
     announce(`Label inference is unavailable, so ${plural(unnamed.length, 'question')} ${unnamed.length === 1 ? 'has' : 'have'} no name. ${result.error}`);
     return;
   }
   for (const { id, label } of result.labels) {
-    const f = fields.find((x) => x.id === id);
-    if (!f || !label.trim()) continue;
-    inferred.set(f.key, label);
-    f.label = label;
-    f.labelSource = 'llm';
+    const f = unnamed.find((x) => x.id === id);
+    if (f && label.trim()) inferred.set(f.key, label.trim());
   }
   paintNames();
-  renderBarriers();
 }
 
 // --- always enable on this site (§4, third tier) --------------------------------------------

@@ -102,6 +102,14 @@ export function accName(el: Element): { name: string; source: NameSource; fromPl
   return { name: '', source: 'none', fromPlaceholder: false };
 }
 
+/** A <label for> that points at a different, perceivable control is that control's name.
+ *  Borrowing it would put a confident wrong name on this one. */
+function namesAnotherControl(candidate: Element, el: Element): boolean {
+  if (!(candidate instanceof HTMLLabelElement) || !candidate.htmlFor) return false;
+  const target = (candidate.getRootNode() as Document | ShadowRoot).getElementById(candidate.htmlFor);
+  return !!target && target !== el && !el.contains(target) && visible(target) && !ariaHidden(target);
+}
+
 /**
  * For a control with no accessible name: the nearest preceding visible text, so the
  * side panel can still ask the question. Always presented as "label inferred" (§6.4).
@@ -114,7 +122,7 @@ export function nearbyText(el: Element): string {
     while (sib) {
       const t = clean(sib.textContent);
       // A label is short. A paragraph above the form is not this control's name.
-      if (t && t.length <= 120 && !sib.querySelector(CONTROLS)) return t;
+      if (t && t.length <= 120 && !sib.querySelector(CONTROLS) && !namesAnotherControl(sib, el)) return t;
       sib = sib.previousElementSibling;
     }
     node = node.parentElement;

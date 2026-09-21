@@ -48,7 +48,8 @@ would announce "BRIDGE is open. Press F6 to reach it" from the page instead.
 
 `npm run test:e2e` loads the built extension, opens the side panel as an ordinary page
 pointed at a test tab (`sidepanel.html?tabId=…`), and drives it against the pages in
-`test/fixtures/acme`. 98 checks:
+`test/fixtures/acme`. 125 checks, in independent sections, so one failure
+does not hide the results after it:
 
 - `index.html`: every barrier in spec §6.2 that a page can show, each write strategy in
   §6.3 including the pointer-only slider, the Ashby-shaped uploader, a checkbox group, a
@@ -63,6 +64,14 @@ pointed at a test tab (`sidepanel.html?tabId=…`), and drives it against the pa
   the content script.
 - `uploaders.html`: three file inputs that differ only in whether a keyboard can reach
   them. The rule's verdicts are checked against real Tab presses.
+- `edge.html`: failure and edge cases. A malformed iframe `src`, class names that merely
+  contain "date", a neighbouring field's label that must not be borrowed, a dropdown whose
+  options depend on another answer, a dropdown that ignores synthetic events, all three
+  slider shapes plus one with no range, both date shapes, no forward button, and a closed tab.
+- `unnamed-a.html` to `unnamed-b.html`: a step change with no stepper, and the rule that a
+  name inferred for one question never reaches a different question on the next page.
+- The proxy stub answering 502, non-JSON and a wrong shape; the crop-rectangle privacy rule
+  by direct message; a page BRIDGE may not run in; user-added site registration.
 - Label inference against a **stub** of the proxy on port 8000, clearly labelled in the
   test, including the check that nothing the applicant entered is in the request. The suite
   fails at startup if something else is already listening on 8000, so stop the real proxy

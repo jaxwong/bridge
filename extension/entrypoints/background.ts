@@ -78,7 +78,10 @@ async function prepareFrames(tabId: number): Promise<Frame[]> {
   // Pages in the built-in list already have the content script. Anywhere else, the
   // shortcut's activeTab grant lets us inject it now (§4, second tier).
   for (const { frameId } of frames) {
-    const alive = await browser.tabs.sendMessage(tabId, { type: 'bridge/ping' }, { frameId }).then(() => true, () => false);
+    const alive = await browser.tabs.sendMessage(tabId, { type: 'bridge/ping' }, { frameId }).then(() => true, (e) => {
+      if (/Receiving end does not exist|Could not establish connection/.test(String(e))) return false;
+      throw e;
+    });
     if (!alive) {
       await browser.scripting.executeScript({ target: { tabId, frameIds: [frameId] }, files: ['/content-scripts/content.js'] });
     }
