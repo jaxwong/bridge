@@ -1,8 +1,8 @@
 // Data model: spec §6.1.
 
 export type ControlKind =
-  | 'text' | 'textarea' | 'select' | 'combobox' | 'radio-group'
-  | 'checkbox' | 'file' | 'unknown';
+  | 'text' | 'textarea' | 'select' | 'combobox' | 'radio-group' | 'checkbox-group'
+  | 'checkbox' | 'file' | 'slider' | 'date' | 'unknown';
 
 export type Severity = 'blocking' | 'usability' | 'ok';
 
@@ -21,6 +21,8 @@ export interface FieldDescriptor {
   required: boolean;
   /** Choices, in page order. Radio groups use each option's visible text, not its aria-label. */
   options?: string[];
+  /** Sliders. Absent when the widget publishes no range; ACT then cannot place a value. */
+  range?: { min: number; max: number; step: number };
   barriers: Barrier[];
 }
 
@@ -38,6 +40,11 @@ export interface ScanResult {
   fields: FieldDescriptor[];
   pageBarriers: Barrier[];
   stepHint: StepHint | null;
+  /** The step's own heading, for "Step 2 of 4: Resume" (§6.5). */
+  heading: string;
+  /** Origins of visible cross-origin iframes. The panel reports the ones BRIDGE has no
+   *  content script in as cross-origin-frame-unreachable (§6.2). */
+  iframeOrigins: string[];
 }
 
 export interface FillResult {

@@ -2,16 +2,13 @@
 // in probe/ (§11). Every write is followed by a read-back FROM THE DOM.
 
 import { accName, clean, sleep } from './dom';
-import type { FieldHandle } from './scan';
+import { refind, refindOptions, type FieldHandle } from './scan';
 import type { FillResult } from './types';
 
 const OPTION_SEL = '[role=option],[class*=option],li';
 
-/** Re-find an element a framework may have replaced since SCAN. */
-export function resolve(el: Element, selector: string): Element | null {
-  if (el.isConnected) return el;
-  try { return document.querySelector(selector); } catch { return null; }
-}
+const nativeInput = (o: Element) => (o instanceof HTMLInputElement ? o : o.querySelector<HTMLInputElement>('input'));
+const isOn = (o: Element) => nativeInput(o)?.checked ?? o.getAttribute('aria-checked') === 'true';
 
 function mouse(el: Element, types: string[]) {
   for (const t of types) el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, button: 0 }));
@@ -54,7 +51,7 @@ export async function harvestOptions(el: Element): Promise<string[]> {
 
 /** What the page now shows as the selection. A custom combobox rarely keeps it on the
  *  element that was written to; react-select renders it in a sibling node. */
-function comboboxValue(el: Element): string {
+function comboboxText(el: Element): string {
   if (el instanceof HTMLInputElement && el.value) return el.value;
   let node: Element | null = el;
   for (let d = 0; d < 4 && node; d++) {
@@ -65,10 +62,48 @@ function comboboxValue(el: Element): string {
   return el instanceof HTMLInputElement ? '' : clean(el.textContent);
 }
 
+/** "Select…" is not an answer. When the options are known, text that is none of them is
+ *  a placeholder and the field is empty; VERIFY must not read it out as a value. */
+function comboboxValue(h: FieldHandle, el: Element): string {
+  const shown = comboboxText(el);
+  if (!h.options?.length) return shown;
+  const a = shown.toLowerCase();
+  return h.options.some((o) => { const b = o.toLowerCase(); return a === b || a.includes(b) || b.includes(a); }) ? shown : '';
+}
+
+function sliderValue(el: Element): string {
+  if (el instanceof HTMLInputElement) return el.value;
+  const shown = el.querySelector('[class*=value]');
+  return el.getAttribute('aria-valuenow') ?? (el as HTMLElement).dataset.value ?? (shown ? clean(shown.textContent) : '');
+}
+
+/** Pages that take a date as text say which order they want in the placeholder. */
+function formatDate(iso: string, el: HTMLInputElement): string {
+  if (el.type === 'date') return iso;
+  const [y, m, d] = iso.split('-');
+  const ph = el.placeholder.toLowerCase();
+  if (/^d+\W+m+\W+y+$/.test(ph)) return `${d}/${m}/${y}`;
+  if (/^m+\W+d+\W+y+$/.test(ph)) return `${m}/${d}/${y}`;
+  return iso;
+}
+
+function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  // React tracks the last value it set; assigning .value directly is swallowed.
+  // Going through the prototype setter makes React observe the change.
+  const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, 'value')!.set!.call(el, value);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
 // --- read-back ---------------------------------------------------------------------
 
+function optionLabel(o: Element): string {
+  return clean(o.textContent) || clean(o.closest('label')?.textContent) || accName(o).name;
+}
+
 export function readValue(h: FieldHandle): string {
-  const el = resolve(h.el, h.selector);
+  const el = refind(h);
   if (!el) return '';
   switch (h.kind) {
     case 'select': {
@@ -76,15 +111,15 @@ export function readValue(h: FieldHandle): string {
       return s.selectedIndex >= 0 ? clean(s.options[s.selectedIndex].text) : '';
     }
     case 'radio-group': {
-      const opts = (h.optionEls || []).map((o, i) => resolve(o, h.optionSelectors![i])).filter(Boolean) as Element[];
-      const checked = opts.find((o) => {
-        const native = o instanceof HTMLInputElement ? o : o.querySelector('input[type=radio]') as HTMLInputElement | null;
-        return native ? native.checked : o.getAttribute('aria-checked') === 'true';
-      });
+      const checked = refindOptions(h).find((o) => o && isOn(o));
       if (!checked) return '';
       // Visible text, not aria-label: the aria-label may be the question (LinkedIn).
-      return clean(checked.textContent) || accName(checked).name;
+      return optionLabel(checked);
     }
+    case 'checkbox-group':
+      return refindOptions(h).filter((o): o is Element => !!o && isOn(o)).map(optionLabel).join(', ');
+    case 'slider':
+      return sliderValue(el);
     case 'checkbox': {
       const native = el instanceof HTMLInputElement ? el : el.querySelector('input') as HTMLInputElement | null;
       const on = native ? native.checked : el.getAttribute('aria-checked') === 'true';
@@ -95,7 +130,9 @@ export function readValue(h: FieldHandle): string {
       return files && files.length ? files[0].name : '';
     }
     case 'combobox':
-      return comboboxValue(el);
+      return comboboxValue(h, el);
+    case 'date':
+      return (el instanceof HTMLInputElement ? el : el.querySelector('input'))?.value ?? '';
     default:
       return (el as HTMLInputElement).value ?? '';
   }
@@ -104,7 +141,7 @@ export function readValue(h: FieldHandle): string {
 // --- write -------------------------------------------------------------------------
 
 export async function fill(fieldId: string, h: FieldHandle, value: string): Promise<FillResult> {
-  const el = resolve(h.el, h.selector);
+  const el = refind(h);
   if (!el) return { fieldId, ok: false, strategy: 'resolve', readBack: '', error: 'The field is no longer on the page.' };
 
   let strategy = '';
@@ -125,8 +162,8 @@ export async function fill(fieldId: string, h: FieldHandle, value: string): Prom
       }
       case 'radio-group': {
         strategy = 'click';
-        const opts = (h.optionEls || []).map((o, i) => resolve(o, h.optionSelectors![i]));
-        const i = opts.findIndex((o) => o && matches(clean(o.textContent) || accName(o).name, value));
+        const opts = refindOptions(h);
+        const i = opts.findIndex((o) => o && matches(optionLabel(o), value));
         if (i < 0) return { fieldId, ok: false, strategy, readBack: readValue(h), error: `No option matching "${value}".` };
         const target = opts[i]!;
         // Prefer the native input inside an ARIA wrapper: that is what the page's own
@@ -134,7 +171,59 @@ export async function fill(fieldId: string, h: FieldHandle, value: string): Prom
         const native = target instanceof HTMLInputElement ? target : target.querySelector('input[type=radio]');
         (native as HTMLElement || target as HTMLElement).click();
         if (native) strategy = 'click (native input inside ARIA wrapper)';
-        expected = clean(target.textContent) || value;
+        expected = optionLabel(target);
+        break;
+      }
+      case 'checkbox-group': {
+        // `value` is a JSON array of the option texts that should end up checked.
+        strategy = 'click each option into the wanted state';
+        const wanted = JSON.parse(value) as string[];
+        const opts = refindOptions(h);
+        if (opts.some((o) => !o)) return { fieldId, ok: false, strategy, readBack: readValue(h), error: 'An option is no longer on the page.' };
+        const unknown = wanted.filter((w) => !opts.some((o) => optionLabel(o!) === w));
+        if (unknown.length) return { fieldId, ok: false, strategy, readBack: readValue(h), error: `No option matching "${unknown.join('", "')}".` };
+        for (const o of opts as Element[]) {
+          if (isOn(o) !== wanted.includes(optionLabel(o))) ((nativeInput(o) || o) as HTMLElement).click();
+        }
+        expected = (opts as Element[]).map(optionLabel).filter((t) => wanted.includes(t)).join(', ');
+        break;
+      }
+      case 'slider': {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return { fieldId, ok: false, strategy: 'slider', readBack: readValue(h), error: `"${value}" is not a number.` };
+        // The strategy is chosen by the control's shape, never by a previous failure (§8).
+        if (el instanceof HTMLInputElement) {
+          strategy = 'native range setter';
+          setNativeValue(el, String(n));
+        } else if (el.getAttribute('role') === 'slider' && (el as HTMLElement).tabIndex >= 0) {
+          strategy = 'keyboard (Home, then ArrowRight per step)';
+          if (!h.range) return { fieldId, ok: false, strategy, readBack: readValue(h), error: 'The slider does not publish its range.' };
+          (el as HTMLElement).focus();
+          const key = (k: string) => el.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: k, bubbles: true, cancelable: true }));
+          key('Home');
+          for (let k = 0; k < Math.round((n - h.range.min) / h.range.step); k++) key('ArrowRight');
+        } else {
+          strategy = 'pointer on the track';
+          if (!h.range) return { fieldId, ok: false, strategy, readBack: readValue(h), error: 'The slider does not publish its range.' };
+          const track = el.querySelector('[class*=track]') || el;
+          const r = track.getBoundingClientRect();
+          const x = r.left + ((n - h.range.min) / (h.range.max - h.range.min)) * r.width;
+          const at = { bubbles: true, cancelable: true, clientX: x, clientY: r.top + r.height / 2, button: 0 };
+          // The order a real press produces: each pointer event, then its mouse twin.
+          for (const [p, m] of [['pointerdown', 'mousedown'], ['pointermove', 'mousemove'], ['pointerup', 'mouseup']]) {
+            track.dispatchEvent(new PointerEvent(p, { ...at, pointerId: 1, isPrimary: true }));
+            track.dispatchEvent(new MouseEvent(m, at));
+          }
+        }
+        expected = String(n);
+        break;
+      }
+      case 'date': {
+        strategy = 'underlying input, prototype value setter';
+        const input = el instanceof HTMLInputElement ? el : el.querySelector('input');
+        if (!input) return { fieldId, ok: false, strategy, readBack: readValue(h), error: 'The date picker has no text input to write to.' };
+        expected = formatDate(value, input);
+        setNativeValue(input, expected);
         break;
       }
       case 'checkbox': {
@@ -176,15 +265,14 @@ export async function fill(fieldId: string, h: FieldHandle, value: string): Prom
         mouse(target, ['mousedown', 'mouseup', 'click']);
         break;
       }
-      default: {
-        // React tracks the last value it set; assigning .value directly is swallowed.
-        // Going through the prototype setter makes React observe the change.
+      case 'text':
+      case 'textarea': {
         strategy = 'prototype value setter';
-        const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-        Object.getOwnPropertyDescriptor(proto, 'value')!.set!.call(el, value);
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
+        setNativeValue(el as HTMLInputElement | HTMLTextAreaElement, value);
+        break;
       }
+      case 'unknown':
+        return { fieldId, ok: false, strategy: 'none', readBack: '', error: 'BRIDGE does not know how to operate this control.' };
     }
   } catch (e) {
     return { fieldId, ok: false, strategy, readBack: readValue(h), error: String(e) };

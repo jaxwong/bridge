@@ -1,6 +1,8 @@
 // DOM primitives shared by SCAN and ACT. Ported from probe/, where each rule here was
 // found by measurement against a live portal (spec §6.2, §6.5, §11).
 
+import { browser } from 'wxt/browser';
+
 export const CONTROLS =
   'input,select,textarea,[role=combobox],[role=checkbox],[role=radio],[role=slider],[role=spinbutton]';
 
@@ -14,6 +16,31 @@ export function visible(el: Element): boolean {
 
 /** Invisible to a screen reader, so neither a field to offer nor a barrier to report. */
 export const ariaHidden = (el: Element): boolean => !!el.closest('[aria-hidden="true"]');
+
+/**
+ * The shadow root of an element, open OR closed. Content scripts may open closed roots
+ * (chrome.dom), so a field inside one is reachable like any other (spec §8, decisions).
+ */
+export function shadowOf(el: Element): ShadowRoot | null {
+  return el instanceof HTMLElement ? browser.dom.openOrClosedShadowRoot(el) : null;
+}
+
+/** querySelectorAll that also descends into every shadow root under `root`. */
+export function deepQueryAll<T extends Element = Element>(root: ParentNode, selector: string): T[] {
+  const out = [...root.querySelectorAll<T>(selector)];
+  for (const el of root.querySelectorAll('*')) {
+    const sr = shadowOf(el);
+    if (sr) out.push(...deepQueryAll<T>(sr, selector));
+  }
+  return out;
+}
+
+/** The element's nearest ancestor-or-self in the light DOM: what orders it on the page. */
+export function lightAnchor(el: Element): Element {
+  let node = el;
+  for (let root = node.getRootNode(); root instanceof ShadowRoot; root = node.getRootNode()) node = root.host;
+  return node;
+}
 
 /**
  * In the tab order. Not the same as visible: a visually hidden but focusable input is the
@@ -53,15 +80,17 @@ export type NameSource = 'aria' | 'label-element' | 'nearby-text' | 'none';
 
 /** A subset of accname: enough to decide whether, and how, a control is named. */
 export function accName(el: Element): { name: string; source: NameSource; fromPlaceholder: boolean } {
+  // ids and label[for] are scoped to the tree the element lives in, which may be a shadow root.
+  const root = el.getRootNode() as Document | ShadowRoot;
   const byIds = (ids: string) => ids.split(/\s+/)
-    .map((id) => document.getElementById(id)).filter(Boolean).map((n) => clean(n!.textContent)).join(' ');
+    .map((id) => root.getElementById(id)).filter(Boolean).map((n) => clean(n!.textContent)).join(' ');
 
   const lb = el.getAttribute('aria-labelledby');
   if (lb) { const t = byIds(lb); if (t) return { name: t, source: 'aria', fromPlaceholder: false }; }
   const al = el.getAttribute('aria-label');
   if (al && al.trim()) return { name: al.trim(), source: 'aria', fromPlaceholder: false };
   if (el.id) {
-    const l = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+    const l = root.querySelector(`label[for="${CSS.escape(el.id)}"]`);
     if (l && clean(l.textContent)) return { name: clean(l.textContent), source: 'label-element', fromPlaceholder: false };
   }
   const wrap = el.closest('label');
@@ -91,8 +120,9 @@ export function nearbyText(el: Element): string {
   return '';
 }
 
-/** A CSS path that re-finds the element after a re-render replaces it. */
-export function cssPath(el: Element): string {
+const SHADOW_HOP = ' >>> ';
+
+function pathWithinRoot(el: Element): string {
   if (el.id) return `#${CSS.escape(el.id)}`;
   const parts: string[] = [];
   let node: Element | null = el;
@@ -106,6 +136,26 @@ export function cssPath(el: Element): string {
     node = parent;
   }
   return parts.join(' > ');
+}
+
+/** A path that re-finds the element after a re-render replaces it. Shadow roots are
+ *  crossed with " >>> ": host path, then the path inside that host's root. */
+export function cssPath(el: Element): string {
+  const root = el.getRootNode();
+  const own = pathWithinRoot(el);
+  return root instanceof ShadowRoot ? `${cssPath(root.host)}${SHADOW_HOP}${own}` : own;
+}
+
+export function queryPath(path: string): Element | null {
+  let scope: ParentNode = document;
+  let found: Element | null = null;
+  for (const segment of path.split(SHADOW_HOP)) {
+    found = scope.querySelector(segment);
+    if (!found) return null;
+    const sr = shadowOf(found);
+    if (sr) scope = sr;
+  }
+  return found;
 }
 
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
