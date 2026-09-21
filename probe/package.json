@@ -1,0 +1,11 @@
+{
+  "name": "bridge-probe",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Validates BRIDGE's SCAN and ACT strategies against live job portals",
+  "scripts": {
+    "scan": "node run.js",
+    "act": "node act.js"
+  },
+  "dependencies": { "playwright": "1.56.0" }
+}
