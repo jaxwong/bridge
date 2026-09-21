@@ -2,9 +2,14 @@
 // state that must outlive the page, and re-derives everything from the DOM (§6.5).
 
 import { fill, harvestOptions, readValue } from '../lib/act';
-import type { Request } from '../lib/messages';
+import { accName, clean, deepQueryAll, formScope, visible } from '../lib/dom';
+import type { CropRect, FormChanged, ForwardAction, Request } from '../lib/messages';
 import { refind, scanPage, type FieldHandle } from '../lib/scan';
 import type { ReadBackResult, ScanResult } from '../lib/types';
+
+const FORWARD = /\b(submit|continue|next|review|apply|send)\b/i;
+const NOT_FORWARD = /\b(back|previous|cancel|close|dismiss|save draft)\b/i;
+const SUBMITS = /\b(submit|apply|send)\b/i;
 
 export default defineContentScript({
   matches: [
@@ -27,32 +32,69 @@ export default defineContentScript({
 
     let handles = new Map<string, FieldHandle>();
     let last: ScanResult | null = null;
+    // While BRIDGE itself is changing the page (opening a dropdown to read it, writing
+    // an answer), the watcher below must not mistake that for the page moving on.
+    let busy = 0;
+    // Harvested once per document: reopening thirteen dropdowns on every rescan would
+    // flicker the page for no new information.
+    const optionCache = new Map<string, string[]>();
+
+    const fingerprintOf = (r: ScanResult) =>
+      `${r.stepHint?.index ?? ''}|${r.fields.map((f) => `${f.kind}:${f.label}`).sort().join('|')}`;
+    let notified = '';
+
+    async function whileBusy<T>(work: () => Promise<T>): Promise<T> {
+      busy++;
+      try { return await work(); } finally { setTimeout(() => { busy--; }, 600); }
+    }
+
+    function forwardAction(focus: boolean): ForwardAction | null {
+      const scope = formScope();
+      const buttons = deepQueryAll<HTMLElement>(scope, 'button,input[type=submit],input[type=button],[role=button],a[href]')
+        .filter((b) => visible(b) && !(b as HTMLButtonElement).disabled)
+        .map((b) => ({ b, name: accName(b).name || clean(b.textContent) || (b as HTMLInputElement).value || '' }))
+        .filter(({ name }) => FORWARD.test(name) && !NOT_FORWARD.test(name));
+      // The last one in page order: forms put the forward action at the end.
+      const hit = buttons[buttons.length - 1];
+      if (!hit) return null;
+      if (focus) {
+        hit.b.scrollIntoView({ block: 'center' });
+        hit.b.focus();
+      }
+      return { name: hit.name, submits: SUBMITS.test(hit.name) };
+    }
 
     async function handle(msg: Request): Promise<unknown> {
       switch (msg.type) {
         case 'bridge/ping':
-          return { ok: true };
+          // timeOrigin is fixed for the life of a document: the panel uses it to tell a
+          // new page from a repeated "load complete" on the same one.
+          return { ok: true, pageId: performance.timeOrigin };
 
-        case 'bridge/scan': {
-          const { result, handles: h } = scanPage();
-          // Custom dropdown options only exist once opened (§6.3): open, read, close.
-          // The handle keeps them too, so read-back can tell "Select…" from a selection.
-          for (const f of result.fields) {
-            if (f.kind !== 'combobox') continue;
-            const handle = h.get(f.id)!;
-            handle.options = f.options = await harvestOptions(handle.el);
-          }
-          handles = h;
-          last = result;
-          return result;
-        }
+        case 'bridge/scan':
+          return whileBusy(async () => {
+            const { result, handles: h } = scanPage();
+            // Custom dropdown options only exist once opened (§6.3): open, read, close.
+            // The handle keeps them too, so read-back can tell "Select…" from a selection.
+            for (const f of result.fields) {
+              if (f.kind !== 'combobox') continue;
+              const handle = h.get(f.id)!;
+              const key = `${handle.label}#${handle.ordinal}`;
+              if (!optionCache.has(key)) optionCache.set(key, await harvestOptions(handle.el));
+              handle.options = f.options = optionCache.get(key)!;
+            }
+            handles = h;
+            last = result;
+            notified = fingerprintOf(result);
+            return result;
+          });
 
         case 'bridge/fill': {
           const h = handles.get(msg.fieldId);
           if (!h) {
             return { fieldId: msg.fieldId, ok: false, strategy: '', readBack: '', error: 'BRIDGE does not know this field any more. Scan the page again.' };
           }
-          return fill(msg.fieldId, h, msg.value);
+          return whileBusy(() => fill(msg.fieldId, h, msg.value));
         }
 
         case 'bridge/read-back': {
@@ -64,6 +106,21 @@ export default defineContentScript({
             return { fieldId: f.id, label: f.label, value: found ? readValue(h) : '', found };
           });
         }
+
+        case 'bridge/forward-action':
+          return forwardAction(msg.focus);
+
+        case 'bridge/rect': {
+          // For a label-inference crop (§6.4). Field values never leave the device, so a
+          // control that already holds something is not photographed at all.
+          const h = handles.get(msg.fieldId);
+          const el = h && refind(h);
+          if (!h || !el || readValue(h)) return null;
+          el.scrollIntoView({ block: 'center' });
+          const r = (el.parentElement || el).getBoundingClientRect();
+          const rect: CropRect = { x: r.x, y: r.y, width: r.width, height: r.height, dpr: devicePixelRatio };
+          return rect;
+        }
       }
     }
 
@@ -72,5 +129,46 @@ export default defineContentScript({
       handle(msg).then(sendResponse, (e) => sendResponse({ error: String(e) }));
       return true;
     });
+
+    // --- step detector, page side (§6.5) ----------------------------------------------
+    // Full navigations restart this script; SPA routes and in-place swaps both mutate the
+    // DOM. So one debounced observer covers every transition a live document can make.
+    // It only reports THAT the form changed; the panel decides what the change means.
+    let timer: number | undefined;
+    new MutationObserver(() => {
+      if (busy || !last) return;
+      clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        if (busy) return;
+        const now = fingerprintOf(scanPage().result);
+        if (now === notified) return;
+        notified = now;
+        const event: FormChanged = { type: 'bridge/form-changed' };
+        browser.runtime.sendMessage(event).catch((e) => {
+          // The panel being closed is the normal case, not a fault.
+          if (!/Receiving end does not exist/.test(String(e))) console.error('[BRIDGE] form-changed', e);
+        });
+      }, 400);
+    }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'open', 'aria-hidden', 'style', 'class'] });
+
+    // --- on-load announcement, built-in tier (§4) --------------------------------------
+    // Only in the top frame, and only where there is an application form: a dialog or
+    // form with at least two controls. A search page must stay silent.
+    if (window.top === window) {
+      const region = document.createElement('div');
+      region.setAttribute('role', 'status');
+      region.setAttribute('aria-live', 'polite');
+      region.id = 'bridge-announcement';
+      region.style.cssText = 'position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap';
+      document.body.append(region);
+      // A live region is only spoken if it exists before its text arrives.
+      window.setTimeout(() => {
+        if (formScope() === document.body) return;
+        const { result } = scanPage();
+        if (result.fields.length < 2) return;
+        const n = result.pageBarriers.length + result.fields.reduce((sum, f) => sum + f.barriers.length, 0);
+        region.textContent = `BRIDGE found ${n} accessibility barrier${n === 1 ? '' : 's'} on this form. Press Alt+Shift+B to open BRIDGE.`;
+      }, 1000);
+    }
   },
 });

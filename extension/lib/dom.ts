@@ -107,12 +107,14 @@ export function accName(el: Element): { name: string; source: NameSource; fromPl
  * side panel can still ask the question. Always presented as "label inferred" (§6.4).
  */
 export function nearbyText(el: Element): string {
+  const limit = formScope();
   let node: Element | null = el;
-  for (let depth = 0; depth < 4 && node; depth++) {
+  for (let depth = 0; depth < 4 && node && node !== limit; depth++) {
     let sib = node.previousElementSibling;
     while (sib) {
       const t = clean(sib.textContent);
-      if (t && !sib.querySelector(CONTROLS)) return t.slice(0, 160);
+      // A label is short. A paragraph above the form is not this control's name.
+      if (t && t.length <= 120 && !sib.querySelector(CONTROLS)) return t;
       sib = sib.previousElementSibling;
     }
     node = node.parentElement;

@@ -17,7 +17,8 @@ export interface FieldDescriptor {
   id: string;
   kind: ControlKind;
   label: string;
-  labelSource: 'aria' | 'label-element' | 'nearby-text' | 'none';
+  /** 'llm' is only ever set by the side panel, after label inference (§6.4). */
+  labelSource: 'aria' | 'label-element' | 'nearby-text' | 'none' | 'llm';
   required: boolean;
   /** Choices, in page order. Radio groups use each option's visible text, not its aria-label. */
   options?: string[];
@@ -61,4 +62,46 @@ export interface ReadBackResult {
   label: string;
   value: string;
   found: boolean;
+}
+
+// --- session state, spec §6.5. Held by the side panel in chrome.storage.session. ---
+
+export interface StepRecord {
+  index: number;
+  url: string;
+  /** "My Experience", from the page's stepper or the step's heading. */
+  label: string;
+  scan: Pick<ScanResult, 'url' | 'scannedAt' | 'fields' | 'pageBarriers' | 'stepHint'>;
+  status: 'current' | 'completed';
+  /** Keys of the fields BRIDGE confirmed on the page. Never values. */
+  filledFieldIds: string[];
+}
+
+export interface ApplicationSession {
+  tabId: number;
+  origin: string;
+  steps: StepRecord[];
+  currentStepIndex: number;
+  journey?: { index: number; total: number; labels: string[] };
+  startedAt: string;
+}
+
+// --- barrier report, spec §6.7. The contract with bridge-business.md. ---
+
+export interface ReportBarrier {
+  rule: string;
+  severity: Severity;
+  /** The field's label, or null for a page-level barrier. With `rule`, the compare key. */
+  field: string | null;
+  impact: string;
+  /** Present only when the application has more than one step. */
+  step?: number;
+}
+
+export interface BarrierReport {
+  portal: string;
+  pagePath: string;
+  generatedAt: string;
+  barriers: ReportBarrier[];
+  steps?: { index: number; label: string; pagePath: string; barriers: ReportBarrier[] }[];
 }

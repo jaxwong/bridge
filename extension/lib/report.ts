@@ -1,51 +1,38 @@
-// The barrier report: bridge-user.md §6.7, which owns the format.
-//
-// One ScanResult, flattened into what leaves the browser. Both producers use this — the
-// side panel's "Export barrier report" and the monitor in ../../monitor — so one scanned
-// page produces one report whichever side scanned it.
-//
-// The dashboard declares this shape again, as a consumer validating untrusted input rather
-// than a producer building it. §6.7 is the contract between them, not either declaration.
+// Barrier report: spec §6.7. The contract with the employer dashboard and monitor
+// (bridge-business.md §6). Accessibility failures only: no field values, no applicant
+// identity. The compare key is `rule` + `field`; there is deliberately no selector.
 
-import type { ScanResult, Severity } from './types';
+import type { ApplicationSession, BarrierReport, ReportBarrier, StepRecord } from './types';
 
-export interface ReportBarrier {
-  rule: string;
-  severity: Severity;
-  /** The field's label. Absent on page-level barriers, which belong to no field. */
-  label?: string;
-  /** Barrier.message, renamed at the boundary: spoken to the applicant, read by the employer. */
-  impact: string;
+function barriersOf(step: StepRecord, withStep: boolean): ReportBarrier[] {
+  const tag = withStep ? { step: step.index } : {};
+  return [
+    ...step.scan.pageBarriers.map((b) => ({ rule: b.rule, severity: b.severity, field: null, impact: b.message, ...tag })),
+    ...step.scan.fields.flatMap((f) => f.barriers.map((b) => ({ rule: b.rule, severity: b.severity, field: f.label, impact: b.message, ...tag }))),
+  ];
 }
 
-export interface BarrierReport {
-  portal: string;
-  pagePath: string;
-  generatedAt: string;
-  barriers: ReportBarrier[];
-  pageBarriers: ReportBarrier[];
-}
-
-/**
- * Carries no field values and no applicant identity — only which rules fired, on which
- * labelled field, and what it means for the user.
- *
- * `pagePath` drops the query string: the dashboard identifies a form across time by
- * portal + pagePath, and a job posting's identity is in its path on every portal measured
- * in §11. See §6.7.
- */
-export function toReport(scan: ScanResult): BarrierReport {
-  const url = new URL(scan.url);
-  return {
-    portal: url.host,
-    pagePath: url.pathname,
-    generatedAt: scan.scannedAt,
-    barriers: scan.fields.flatMap((f) =>
-      f.barriers.map((b): ReportBarrier => ({
-        rule: b.rule, severity: b.severity, label: f.label, impact: b.message,
-      }))),
-    pageBarriers: scan.pageBarriers.map((b): ReportBarrier => ({
-      rule: b.rule, severity: b.severity, impact: b.message,
-    })),
+export function buildReport(session: ApplicationSession): BarrierReport {
+  const steps = [...session.steps].sort((a, b) => a.index - b.index);
+  const many = steps.length > 1;
+  const first = new URL(steps[0].url);
+  const report: BarrierReport = {
+    portal: first.host,
+    pagePath: first.pathname,
+    generatedAt: new Date().toISOString(),
+    barriers: steps.flatMap((s) => barriersOf(s, many)),
   };
+  if (many) {
+    report.steps = steps.map((s) => ({ index: s.index, label: s.label, pagePath: new URL(s.url).pathname, barriers: barriersOf(s, true) }));
+  }
+  return report;
+}
+
+export function reportMarkdown(r: BarrierReport): string {
+  const line = (b: ReportBarrier) => `- **${b.severity}** \`${b.rule}\`${b.field ? ` on "${b.field}"` : ''}: ${b.impact}`;
+  const body = r.steps
+    ? r.steps.map((s) => `## Step ${s.index}: ${s.label}\n\n${s.barriers.length ? s.barriers.map(line).join('\n') : 'No barriers found on this step.'}`).join('\n\n')
+    : (r.barriers.length ? r.barriers.map(line).join('\n') : 'No barriers found.');
+  return `# Accessibility barrier report: ${r.portal}${r.pagePath}\n\nGenerated ${r.generatedAt} by BRIDGE. ` +
+    `${r.barriers.length} barrier${r.barriers.length === 1 ? '' : 's'}. Contains no applicant data.\n\n${body}\n`;
 }
