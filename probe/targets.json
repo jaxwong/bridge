@@ -1,0 +1,8 @@
+{
+  "greenhouse":   { "url": "https://job-boards.greenhouse.io/gitlab/jobs/8556658002" },
+  "lever":        { "url": "https://jobs.lever.co/palantir/ac978161-6f46-4f6b-ad9e-a258e642751c/apply" },
+  "ashby":        { "url": "https://jobs.ashbyhq.com/cohere/7133d205-5421-4336-a8e2-6037b5f55073/application" },
+  "workday":      { "url": "https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/US-CA-Santa-Clara/Manager--OEM-Solution-Architecture_JR2025803/apply", "click": "[data-automation-id=applyManually]", "wait": 8000 },
+  "vietnamworks": { "url": "https://www.vietnamworks.com/supply-specialist-chinese-speaking-1789975384058698811-2109550-jv", "click": "button[aria-label=\"Nộp đơn\"]", "wait": 8000 },
+  "linkedin":     { "url": "https://sg.linkedin.com/jobs/view/software-engineer-ii-java-spring-aws-at-jpmorganchase-4466468725" }
+}
