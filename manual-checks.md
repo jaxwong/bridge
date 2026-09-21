@@ -338,8 +338,14 @@ This is the pass that decides whether the product works. Method and key referenc
 2. **Cmd+F5** turns VoiceOver on.
 3. **Control+Option+Cmd+F10** opens the caption panel. Every announcement appears as text
    you can screenshot. Keep it on for the whole pass.
-4. Do one run **with the screen on** to learn the flow. Findings from this run do not count.
-5. **Control+Option+Shift+F11** turns on Screen Curtain. The display goes black. Every
+4. **Decide about automatic reading.** By default VoiceOver reads a newly loaded web page
+   from the top until something interrupts it, and the side panel is a web page. So opening
+   BRIDGE speaks the heading, the summary, and then every barrier and question. **Control**
+   stops it. To turn it off: VoiceOver Utility (**Control+Option+Fn+F8**), Web, General,
+   untick **"Automatically speak the webpage"**. Write down which setting the pass used.
+   Do part of one run with it on, because that is what a new user hears.
+5. Do one run **with the screen on** to learn the flow. Findings from this run do not count.
+6. **Control+Option+Shift+F11** turns on Screen Curtain. The display goes black. Every
    finding below comes from a run with the curtain on.
 
 If a function-key shortcut does nothing, add **Fn**.
