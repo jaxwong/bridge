@@ -284,7 +284,8 @@ real side panel.
 8. Open the file and check:
    - `portal` is `localhost:8765` and `pagePath` is `/modal.html`.
    - `steps` has two entries, each with its own `barriers`.
-   - Step 2 contains `options-identically-named` with the visa question as `field`.
+   - Step 2's `barriers` contains `options-identically-named` with the visa question as `label`.
+   - Step 2's `pageBarriers` contains `upload-unnamed`, with no `label`.
    - No barrier has a `selector`.
    - Nothing you typed appears anywhere in the file.
 9. Activate **"Export barrier report as Markdown"** and check that a `.md` file lands too.
