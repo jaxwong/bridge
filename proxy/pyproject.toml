@@ -1,0 +1,17 @@
+[project]
+name = "bridge-proxy"
+version = "0.1.0"
+description = "BRIDGE label-inference proxy: one endpoint, holds the LLM API key, no persistence."
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "openai",
+    "pydantic",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "httpx",
+]
