@@ -9,7 +9,7 @@ quoted text back into the session; most failures here have a known, small fix.
 | # | Check | Time | Blocks the video? |
 |---|---|---|---|
 | 1 | Focus spike | 10 min | Yes |
-| 2 | Alt+Shift+S from a real keyboard | 10 min | Yes |
+| 2 | Alt+Shift+S presses Next, never Submit | 10 min | Yes |
 | 3 | Screenshot crop for label inference | 10 min | Yes, if the demo shows inference |
 | 4 | "Always enable BRIDGE on this site" | 10 min | No |
 | 5 | Export saves a file | 5 min | Yes, it hands over to the employer demo |
@@ -59,7 +59,7 @@ extension is first installed, so a shortcut added in a later build is often left
 
 1. Open `chrome://extensions/shortcuts`.
 2. Under BRIDGE, "Open BRIDGE" should show Alt+Shift+B.
-3. "Check the answers, then move to Continue or Submit" should show Alt+Shift+S.
+3. "Check the answers, then press Continue or get Submit ready" should show Alt+Shift+S.
 4. If either is blank, click its pencil and press the keys yourself.
 
 **The three test pages:**
@@ -70,6 +70,7 @@ extension is first installed, so a shortcut added in a later build is often left
 | Acme employer demo | `http://localhost:8765/`, `/?v=2`, `/?v=3` | one small form in three versions, for the monitor and dashboard. Not used by these checks |
 | Acme dialog | `http://localhost:8765/modal.html` | LinkedIn Easy Apply: steps swap in place |
 | Acme journey | `http://localhost:8765/steps/1.html` | Workday: each step is a full page load |
+| Acme stuck | `http://localhost:8765/stuck.html` | a Next button that refuses to advance |
 
 Always use `localhost`, not `127.0.0.1`. The single page embeds a `127.0.0.1` frame on
 purpose, as the frame BRIDGE is not allowed to reach.
@@ -140,37 +141,39 @@ Record the result in `bridge-user.md` §10, under the open question about panel 
 
 ## 2. Alt+Shift+S from a real keyboard
 
-**Questions:** does the shortcut fire at all, and does focus really leave the side panel
-and land on the page's button? The suite proved the logic by sending the same internal
-message the shortcut sends. It could not press keys or observe real keyboard focus.
+**Settled on 2026-09-21, Chrome 154 on macOS:** the shortcut fires, and nothing moves
+keyboard focus from the side panel to the page. Not `focus()` in the page, not the tabs or
+windows APIs, not closing the panel. Chrome's pane key does, in four presses. So the design
+changed (`bridge-user.md` §6.5): BRIDGE presses a Next or Continue button itself, and never
+a button that submits. This check is now about that behaviour.
 
 The command has a gate. The **first** press on a step reads everything back. Only the
-**second** press moves focus. Any write in between closes the gate again.
+**second** press acts. Any write in between closes the gate again.
 
-1. Open `http://localhost:8765/apply.html` and press **Alt+Shift+B**.
-2. Put focus **in the panel**, by whatever check 1 found works.
-3. Press **Alt+Shift+S**.
-4. Expect the live region at the top of the panel to say either "Nothing has been filled
-   yet." or "Your application contains: …", ending with
-   "Press Alt+Shift+S to move to the Submit application button."
-5. Confirm focus did **not** move. It should still be in the panel.
-6. Press **Alt+Shift+S** again.
-7. Expect: "Focus is on the Submit application button on the page. Pressing it submits
-   your application. BRIDGE never presses it."
-8. The decisive test: without clicking anything, press **Enter**.
-9. Look at the page. Under the Submit button it should now say
-   **"Submitted (test page, nothing sent)."** That proves real keyboard focus was on the
-   page's button. If that text does not appear, focus never left the panel.
-10. Reload the page and repeat steps 3 to 9 with focus starting **in the page** instead.
-11. Open `http://localhost:8765/modal.html`, click **Easy Apply**, and repeat steps 3 to 7.
-    The button named should be **Next**, and the second announcement should say
-    "Pressing it moves to the next step."
+1. Rebuild and reload the extension. Open `http://localhost:8765/modal.html`, press
+   **Alt+Shift+B**, and click **Easy Apply** on the page.
+2. Press **Alt+Shift+B** again so focus is in the panel. Do not touch the mouse from here.
+3. Press **Alt+Shift+S**. *Expect:* "Nothing has been filled yet." or "Your application
+   contains: …", ending "Press Alt+Shift+S again and BRIDGE presses the Next button, which
+   moves to the next step." The page must still show step 1.
+4. Press **Alt+Shift+S** again. *Expect:* the page moves to step 2, BRIDGE says "Step 2 of 3:
+   Additional questions. …", and focus is on the first question in the panel.
+5. Repeat steps 3 and 4 to reach step 3.
+6. On step 3 press **Alt+Shift+S** twice. *Expect after the second press:* "Submit
+   application submits your application, so BRIDGE does not press it. It is selected on the
+   page. Press Command+Option+Down arrow until you hear Submit application, then press Enter."
+   The page must **not** show "Submitted".
+7. Press **Cmd+Option+Down arrow** until focus is on the page's Submit application button,
+   then **Enter**. *Expect:* "Submitted (test page, nothing sent)." Count the presses.
+8. Open `http://localhost:8765/stuck.html`, whose Next button refuses to advance. Press
+   **Alt+Shift+B**, then **Alt+Shift+S** twice. *Expect:* "BRIDGE pressed the Next button on
+   the page.", and three seconds later "The page has not moved on since BRIDGE pressed Next. …"
 
 **Write down**
 
-- First press: what was announced, and whether focus stayed put.
-- Second press: what was announced.
-- After Enter: did "Submitted (test page, nothing sent)." appear? From the panel? From the page?
+- Whether each second press moved the page on, and what was announced.
+- On step 3: that nothing was submitted until you pressed Enter yourself.
+- The number of pane-key presses in step 7.
 
 **If it fails**
 
@@ -178,7 +181,8 @@ The command has a gate. The **first** press on a step reads everything back. Onl
 |---|---|
 | Nothing happens, or a text field gets an "Í" | The shortcut is not bound. Go back to `chrome://extensions/shortcuts` |
 | The panel opens but nothing is announced | That press opened the panel, which was closed. Press again once it has finished scanning |
-| Announcements are right but Enter does nothing on the page | `focus()` in the page cannot pull keyboard focus out of the side panel. Tell Claude. The move to the page then needs a different design, and §6.5 changes. F6 is not an answer on macOS |
+| The second press announces "BRIDGE pressed…" but the page does not move | Tell Claude, with the page and the button's name |
+| The page shows "Submitted" without your Enter | Stop. Tell Claude. That breaks the one rule BRIDGE must never break |
 
 ---
 
@@ -393,8 +397,9 @@ caption panel.
 
 10. **VERIFY.** Activate "Read back everything from the page".
     *Expect:* "Your application contains: …", then the empty questions by name, then
-    "Press Alt+Shift+S to move to the Submit application button."
-11. **Forward.** Press **Alt+Shift+S** twice, as in check 2.
+    "BRIDGE never submits for you. Press Alt+Shift+S again to put the Submit application
+    button in reach."
+11. **Forward.** Press **Alt+Shift+S** again, then follow what it says, as in check 2 steps 6 and 7.
 
 ### Run B: step changes, the most important question of the pass
 
@@ -404,7 +409,8 @@ Open `http://localhost:8765/modal.html` and open BRIDGE.
 2. **Listen.** "Step 1 of 3: Contact info. 3 questions found…" comes from the *panel's* live
    region while your focus is in the *page*.
 3. Activate **Next** on the page. Listen for "Step 2 of 3: Additional questions."
-4. Do it once more with your focus **in the panel**, pressing Next with the mouse.
+4. Do it once more with your focus **in the panel**, using **Alt+Shift+S** twice so BRIDGE
+   presses Next. This is the path a real user takes.
 
 Write down, for each case: **was the step change spoken?**
 

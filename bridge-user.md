@@ -120,10 +120,10 @@ Triggered when the user reaches the end of the list or requests it.
 
 - Re-read every mapped field **from the page DOM**, not from BRIDGE's own state. This is what catches ACT failures and anything the page reset (e.g. a framework re-render).
 - Read back as a structured summary: "Your application contains: Name, Zheng Wei. Years of experience, 2. CV, resume.pdf. 1 field could not be filled: Start date."
-- Then: "Ready. The Submit button is at the bottom of the page. Press Alt+Shift+S to move focus to it." BRIDGE moves focus; the user presses it.
+- Then the way forward. **Changed 2026-09-21 after testing by hand:** Chrome does not let the page take keyboard focus from the side panel, so BRIDGE cannot "move focus to Submit". A button that only moves on (Next, Continue) is pressed by BRIDGE on the second Alt+Shift+S. A button that submits is never pressed: BRIDGE selects it on the page and says how to reach it with Chrome's pane key. See §6.5.
 
 On a multi-step application this runs **before every forward move**, not only at the end,
-and `Alt+Shift+S` targets Continue rather than Submit on every step but the last. Once
+and `Alt+Shift+S` presses Continue on every step but the last, where it readies Submit. Once
 Continue is pressed the previous step's DOM is gone and read-back is no longer possible.
 See §6.5.
 
@@ -511,9 +511,30 @@ unless a conditional field actually appeared.
 
 **This is a change to §4.4.** Once the user presses Continue, the previous step's DOM is
 gone and read-back is impossible. So VERIFY fires before *each* forward move, not once at
-the end. Generalise `Alt+Shift+S` from "focus Submit" to **"focus the primary forward
+the end. Generalise `Alt+Shift+S` from "focus Submit" to **"the primary forward
 action"** — Continue on steps 1..n-1, Submit on step n — and gate it behind that step's
-VERIFY. BRIDGE still never presses it.
+VERIFY.
+
+**BRIDGE never submits. It does press Continue** (decided 2026-09-21). The original rule was
+"BRIDGE never presses it", with the shortcut moving keyboard focus to the button. Measured by
+hand on Chrome 154: nothing moves keyboard focus from the side panel to the page. Not
+`focus()` in the page, not `tabs.update`, not `windows.update`, not closing the panel.
+Chrome's pane key does, in four presses on the test machine, and the count depends on the
+user's toolbars. Four chords per step is not a usable flow, so:
+
+- A forward button whose name does not say submit, apply or send is **pressed by BRIDGE** on
+  the second Alt+Shift+S. The user stays in the panel, the new step is announced, and focus
+  goes to its first question. The page side owns this rule and refuses to click a submitting
+  name whatever the panel asks.
+- A button that submits is **never pressed**. BRIDGE gives it the page's focus, so the pane
+  key lands on it, and says: "Press Command+Option+Down arrow until you hear Submit
+  application, then press Enter." (F6 on Windows and Linux, from Chrome's documentation,
+  not tried.)
+- The gate closes the moment BRIDGE presses, so a second impatient press reads back again
+  instead of skipping a step. If the step has not changed three seconds after the press,
+  BRIDGE says the page has not moved on.
+- Known risk: a button named only "Continue" that in fact submits would be pressed. Names
+  are all BRIDGE has to go on.
 
 The barrier report (§6.7) then accumulates across every step the user walked, grouped by
 step. That is the honest and considerably stronger version of "analyses the entire
@@ -715,10 +736,10 @@ These change earlier sections. They are listed once here so nothing is silent.
   `bridge-business.md` §6.1; the shape is §6.7. `FieldDescriptor` carries no selector, and generated selectors are not stable
   across releases.
 - **Alt+Shift+S is gated by VERIFY, in the panel.** First press on a step runs VERIFY
-  and announces the summary plus "press Alt+Shift+S again to move to Continue". Second
-  press asks the content script to focus the forward action. Whether `el.focus()` in the
-  page takes keyboard focus away from the side panel cannot be verified headlessly; the
-  announcement names the button either way, and the manual pass (§8.9) settles it.
+  and announces the summary plus what the second press will do. The second press asks the
+  content script to act on the forward action: press it if it only moves on, select it if
+  it submits (§6.5). The manual pass settled the open question: `el.focus()` in the page
+  does not take keyboard focus away from the side panel.
 - **On-load announcement only on application pages.** The built-in tier's content script
   announces the barrier count from an injected, visually hidden status region, and only
   when §6.5's `formScope()` finds a dialog or form with at least two controls. Otherwise
@@ -812,9 +833,10 @@ name and whether it submits.
 
 Verify, both shapes: after Next the panel's live region holds "Step 2 of 3" and the new
 step's questions replace the old ones; answering Yes on step 1 announces "2 new
-questions" without a step announcement; first Alt+Shift+S press runs VERIFY and does not
-move focus; second press makes the page's `activeElement` the Continue button, and on the
-last step the Submit button; the session holds three `StepRecord`s with no values; the
+questions" without a step announcement; first Alt+Shift+S press runs VERIFY and presses
+nothing; second press presses Next and the new step is announced, and on the last step
+makes the Submit button the page's `activeElement` without pressing it; a Next that refuses
+to advance is reported, and is not pressed twice; the session holds three `StepRecord`s with no values; the
 form is never submitted by the test.
 
 Paths. Happy: three announced transitions in each shape. Failure: the content script is
@@ -892,9 +914,9 @@ for each, with what to expect, what to write down and what each failure means, a
 
 1. **Focus spike.** Answered for the keyboard on 2026-09-21 (§10). Still to do: what VoiceOver
    speaks when the panel opens.
-2. **Alt+Shift+S from the keyboard.** The command's wiring and whether `el.focus()` in the
-   page pulls keyboard focus out of the side panel cannot be tested headlessly. The suite
-   proves the panel and page logic by sending the same message the shortcut sends.
+2. **Alt+Shift+S from the keyboard.** Done 2026-09-21: the shortcut fires, and `el.focus()`
+   in the page does not pull keyboard focus out of the side panel, so the design changed
+   (§6.5). Still to do by hand: the new behaviour, in `manual-checks.md` check 2.
 3. **The screenshot crop.** `captureVisibleTab` needs the `activeTab` grant of a real
    Alt+Shift+B. With the proxy running, open the fixture, press the shortcut, and expect
    the third question to become "LinkedIn profile URL (label inferred)" and Diagnostics to
@@ -940,10 +962,12 @@ slider itself, kept because it demos well (§7).
 8. "Notice period": BRIDGE says "Could not fill: may need sighted help" because the page
    discards it. Say the line: BRIDGE never claims a success it did not read back.
 9. VERIFY: "Your application contains: Full name, Zheng Wei. …  1 question is empty:
-   Notice period." Press Alt+Shift+S; BRIDGE names the Submit button. Press Enter
-   yourself.
-10. Multi-step, 20 seconds: open `modal.html`, press Easy Apply, answer step 1, press Next.
-    The page says nothing; BRIDGE says "Step 2 of 3: Additional questions".
+   Notice period." Press Alt+Shift+S again; BRIDGE says Submit application submits, so it
+   does not press it. Press Command+Option+Down arrow until the Submit button is spoken,
+   then press Enter yourself.
+10. Multi-step, 20 seconds: open `modal.html`, press Easy Apply, answer step 1, press
+    Alt+Shift+S twice. BRIDGE reads the step back, presses Next, and says "Step 2 of 3:
+    Additional questions". The page itself says nothing.
 11. Export barrier report. Hand over to the employer demo, `bridge-business.md` §7.
 
 ## 10. Risks and open questions
@@ -985,7 +1009,9 @@ user's password manager. Say this out loud in the pitch; it reads as judgement, 
   The panel reloads, and answers typed but not written are lost. Checked by hand the same
   day: the panel reopens and Tab moves inside it. F6 does nothing on macOS;
   Cmd+Option+Down arrow reaches the panel in four presses.
-- Can a content script's `focus()` take keyboard focus *out of* the side panel (Alt+Shift+S)? Untested, §8.8 item 2.
+- ~~Can a content script's `focus()` take keyboard focus *out of* the side panel?~~ **No, measured
+  by hand** on Chrome 154, macOS, 2026-09-21, and neither can any extension API tried. §6.5
+  records the design that follows from it.
 
 ## 11. Portal findings (measured)
 

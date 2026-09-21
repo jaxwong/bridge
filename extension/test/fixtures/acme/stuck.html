@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Acme Careers: a Next button that refuses</title></head>
+<body>
+  <h1>Your details</h1>
+  <p>Test page for BRIDGE. Next never advances: it stands for a page that rejects the step.</p>
+  <form id="f" onsubmit="return false">
+    <label for="a">Full name</label> <input id="a">
+    <label for="b">Email</label> <input id="b">
+    <button type="button" id="next">Next</button>
+  </form>
+  <p id="clicks">0</p>
+  <p id="error"></p>
+  <script>
+    document.getElementById('next').addEventListener('click', () => {
+      const c = document.getElementById('clicks'); c.textContent = String(Number(c.textContent) + 1);
+      document.getElementById('error').textContent = 'Please complete all required questions.';
+    });
+  </script>
+</body>
+</html>

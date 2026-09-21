@@ -10,7 +10,7 @@ export type Request =
   | { type: 'bridge/scan' }
   | { type: 'bridge/fill'; fieldId: string; value: string }
   | { type: 'bridge/read-back' }
-  | { type: 'bridge/forward-action'; focus: boolean }
+  | { type: 'bridge/forward-action'; act: boolean }
   | { type: 'bridge/rect'; fieldId: string };
 
 export type Response<T extends Request['type']> =
@@ -36,7 +36,8 @@ export async function send<R extends Request>(tabId: number, frameId: number, re
 }
 
 /** The step's primary forward control: Continue on steps 1..n-1, Submit on the last (§6.5). */
-export interface ForwardAction { name: string; submits: boolean }
+/** `pressed` is true only when the page side clicked the button. It never clicks one that submits. */
+export interface ForwardAction { name: string; submits: boolean; pressed: boolean }
 
 /** Where an unlabelled, still-empty control sits in the viewport, in CSS pixels. */
 export interface CropRect { x: number; y: number; width: number; height: number; dpr: number }

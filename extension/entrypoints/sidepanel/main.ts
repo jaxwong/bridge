@@ -406,7 +406,7 @@ async function verifyAll(): Promise<boolean> {
 
   let forward = null;
   try {
-    forward = step ? await send(id, step.mainFrame, { type: 'bridge/forward-action', focus: false }) : null;
+    forward = step ? await send(id, step.mainFrame, { type: 'bridge/forward-action', act: false }) : null;
   } catch (e) {
     // The read-back above is still true and still worth hearing; only the button's name is missing.
     diag('Forward action', String(e));
@@ -415,27 +415,52 @@ async function verifyAll(): Promise<boolean> {
     (filled.length ? `Your application contains: ${filled.join('. ')}.` : 'Nothing has been filled yet.') +
     (empty.length ? ` ${empty.length} ${empty.length === 1 ? 'question is' : 'questions are'} empty: ${empty.join(', ')}.` : '') +
     (forward
-      ? ` BRIDGE never ${forward.submits ? 'submits' : 'moves on'} for you. Press Alt+Shift+S to move to the ${forward.name} button.`
+      ? (forward.submits
+          ? ` BRIDGE never submits for you. Press Alt+Shift+S again to put the ${forward.name} button in reach.`
+          : ` Press Alt+Shift+S again and BRIDGE presses the ${forward.name} button, which moves to the next step.`)
       : ' BRIDGE never submits. Press the page\'s own submit button when you are ready.'),
   );
   return true;
 }
 
+// Chrome's own key for moving between the side panel and the page. The number of presses
+// depends on the user's toolbars (four, measured on one Mac), so none is promised. F6 is
+// from Chrome's documentation and has not been tried on Windows.
+const PANE_KEY = /Mac/.test(navigator.platform) ? 'Command+Option+Down arrow' : 'F6';
+const PAGE_MOVES_ON_WITHIN_MS = 3000;
+
 /** Alt+Shift+S (§6.5): the first press on a step reads everything back; only the press
- *  after that moves focus to Continue or Submit. BRIDGE never presses it. */
+ *  after that acts. A button that moves on is pressed for the user, because Chrome does
+ *  not let the page take keyboard focus from the panel. A button that submits never is. */
 async function forwardCommand() {
   if (!step) return;
   if (!verified) { await verifyAll(); return; }
+  // The gate closes before anything is pressed, so an impatient second press reads back
+  // again instead of pressing Next twice and skipping a step.
+  verified = false;
+  const from = { session, index: session?.currentStepIndex };
   let forward;
   try {
-    forward = await send(await targetTab(), step.mainFrame, { type: 'bridge/forward-action', focus: true });
+    forward = await send(await targetTab(), step.mainFrame, { type: 'bridge/forward-action', act: true });
   } catch (e) {
     announce(`BRIDGE could not reach the page. ${String(e)}`);
     return;
   }
-  announce(forward
-    ? `Focus is on the ${forward.name} button on the page. ${forward.submits ? 'Pressing it submits your application.' : 'Pressing it moves to the next step.'} BRIDGE never presses it.`
-    : 'BRIDGE could not find a Continue or Submit button on this step.');
+  if (!forward) { announce('BRIDGE could not find a Continue or Submit button on this step.'); return; }
+  diag('Forward action', `${forward.name}: ${forward.pressed ? 'pressed' : 'not pressed, it submits'}`);
+  if (!forward.pressed) {
+    announce(`${forward.name} submits your application, so BRIDGE does not press it. It is selected on the page. ` +
+      `Press ${PANE_KEY} until you hear ${forward.name}, then press Enter.`);
+    return;
+  }
+  announce(`BRIDGE pressed the ${forward.name} button on the page.`);
+  // A new step announces itself (runScan). A page that rejects the step says nothing a
+  // screen reader user would hear from the panel, so its silence is reported.
+  await new Promise((r) => setTimeout(r, PAGE_MOVES_ON_WITHIN_MS));
+  if (session === from.session && session?.currentStepIndex === from.index) {
+    announce(`The page has not moved on since BRIDGE pressed ${forward.name}. It may be asking for an answer it does not have yet. ` +
+      `Press ${PANE_KEY} to reach the page and hear what it says.`);
+  }
 }
 
 // --- session (§6.5) ---------------------------------------------------------------------

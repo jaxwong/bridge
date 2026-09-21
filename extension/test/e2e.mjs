@@ -357,19 +357,16 @@ try {
     check('modal: resume written on step 2', await page.textContent('#resume-name') === 'resume.pdf');
     await spoken(panel, /Resume: resume\.pdf\. Confirmed on the page/);
 
-    // Alt+Shift+S: the first press reads back, only the second moves focus (§6.5).
-    await page.evaluate(() => document.activeElement?.blur());
+    // Alt+Shift+S: the first press reads back, only the second acts (§6.5). Chrome does not
+    // let the page take keyboard focus from the side panel (measured by hand), so BRIDGE
+    // presses a Next or Continue button itself. It never presses a button that submits.
     await pressForward(tabId);
-    said = await spoken(panel, /Press Alt\+Shift\+S to move to the Next button/);
+    said = await spoken(panel, /Press Alt\+Shift\+S again and BRIDGE presses the Next button/);
     check('forward command: first press runs VERIFY and names the button', /Your application contains: .*resume\.pdf/.test(said), said);
-    check('forward command: first press does not move focus', await pageFocus(page) !== 'Next');
+    check('forward command: first press does not press Next', /Step 2 of 3/.test(await panel.textContent('#journey')), await panel.textContent('#journey'));
     await pressForward(tabId);
-    said = await spoken(panel, /Focus is on the Next button/);
-    check('forward command: second press focuses Next', await pageFocus(page) === 'Next', said);
-    check('forward command: it says what pressing does, and that BRIDGE will not', /moves to the next step\. BRIDGE never presses it/.test(said));
-
-    await page.getByRole('button', { name: 'Next' }).click();
     said = await spoken(panel, /Step 3 of 3/);
+    check('forward command: second press presses Next, and the new step is announced', /Step 3 of 3: Work experience/.test(said), said);
     check('modal: step 3 announced', /Step 3 of 3: Work experience/.test(said), said);
     const opts = await panel.getByLabel(/Notice period/).locator('option').allTextContents();
     check('modal: dropdown options on a later step are harvested', opts.includes('One month'), opts.join(' | '));
@@ -378,11 +375,11 @@ try {
     check('CV reuse: the file chosen on step 2 is written on step 3 without asking again', await page.textContent('#portfolio-name') === 'resume.pdf');
 
     await pressForward(tabId);
-    await spoken(panel, /move to the Submit application button/);
+    await spoken(panel, /BRIDGE never submits for you\. Press Alt\+Shift\+S again to put the Submit application button in reach/);
     await pressForward(tabId);
-    said = await spoken(panel, /Focus is on the Submit application button/);
-    check('forward command: on the last step it targets Submit and says it submits',
-      await pageFocus(page) === 'Submit application' && /Pressing it submits your application\. BRIDGE never presses it/.test(said), said);
+    said = await spoken(panel, /submits your application, so BRIDGE does not press it/);
+    check('forward command: a button that submits is selected on the page, never pressed, and the way to it is said',
+      await pageFocus(page) === 'Submit application' && /until you hear Submit application, then press Enter/.test(said), said);
     check('modal: BRIDGE did not submit', (await page.textContent('#result')) === '');
 
     await page.getByRole('button', { name: 'Back' }).click();
@@ -432,13 +429,15 @@ try {
     await panel.getByRole('button', { name: 'Write Job title to page' }).click();
     await spoken(panel, /Job title: Analyst\. Confirmed/);
     check('full-nav: the fresh content script on step 2 takes writes', await page.inputValue('#title') === 'Analyst');
-    await page.getByRole('button', { name: 'Save and Continue' }).click();
-    await spoken(panel, /Step 3 of 3: Review/);
     await pressForward(tabId);
-    await spoken(panel, /move to the Submit button/);
+    await spoken(panel, /BRIDGE presses the Save and Continue button/);
     await pressForward(tabId);
-    said = await spoken(panel, /Focus is on the Submit button/);
-    check('full-nav: forward command reaches Submit on the last step', await pageFocus(page) === 'Submit', said);
+    check('full-nav: BRIDGE presses Save and Continue, and the page it loads is announced', await arrives(spoken(panel, /Step 3 of 3: Review/)));
+    await pressForward(tabId);
+    await spoken(panel, /put the Submit button in reach/);
+    await pressForward(tabId);
+    said = await spoken(panel, /so BRIDGE does not press it/);
+    check('full-nav: forward command selects Submit on the last step and does not press it', await pageFocus(page) === 'Submit', said);
     check('full-nav: BRIDGE did not submit', (await page.textContent('#result')) === '');
   });
 
@@ -599,6 +598,18 @@ try {
     check('register-site: registers one all-frames content script for the origin, and a second call is a no-op',
       first?.ok && second?.ok && registered.length === 1 && registered[0].matches.join() === 'https://example.com/*' && registered[0].allFrames === true,
       JSON.stringify({ first, second, registered }));
+  });
+
+  await section('a forward button that does not advance', async () => {
+    const { page, panel, tabId } = await open('stuck.html');
+    await pressForward(tabId);
+    await spoken(panel, /BRIDGE presses the Next button/);
+    await pressForward(tabId);
+    await spoken(panel, /BRIDGE pressed the Next button/);
+    await pressForward(tabId);   // an impatient second press must not press Next again
+    const said = await spoken(panel, /has not moved on/);
+    check('the page refuses the step: BRIDGE says the page has not moved on', /has not moved on since BRIDGE pressed Next/.test(said), said);
+    check('a press straight after pressing Next reads back instead of pressing twice', await page.textContent('#clicks') === '1', await page.textContent('#clicks'));
   });
 } finally {
   await ctx.close();
