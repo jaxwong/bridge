@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BRIDGE — application form monitoring</title>
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to main content</a>
+
+  <header class="banner">
+    <p class="wordmark">BRIDGE</p>
+    <p class="tagline">Accessibility monitoring for application forms</p>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <h1>Application form monitoring</h1>
+    <p class="lede">
+      BRIDGE scans your customers' live application forms and tells you what changed since
+      the last scan: barriers they fixed, barriers still open, and barriers that are new.
+      The new ones are the alert.
+    </p>
+
+    <!-- Status, announced to a screen reader as it changes. One region for the whole page. -->
+    <p id="live" class="live" role="status" aria-live="polite"></p>
+
+    <section aria-labelledby="load-h">
+      <h2 id="load-h">Load barrier reports</h2>
+      <p id="load-help">
+        Choose the report files written by the monitor, or exported from the BRIDGE
+        extension. You can load more than once — files add to what is already loaded.
+      </p>
+      <div class="loader" id="dropzone">
+        <label class="file-label" for="reports">Barrier report files (JSON)</label>
+        <input type="file" id="reports" name="reports" multiple accept="application/json,.json"
+               aria-describedby="load-help">
+        <p class="loader__alt">You can also drag report files onto this box. Either way works —
+          an uploader that <em>only</em> accepts a drag is one of the barriers BRIDGE reports.</p>
+      </div>
+      <div id="load-errors" class="errors" hidden></div>
+    </section>
+
+    <section id="list-view" aria-labelledby="list-h">
+      <h2 id="list-h" tabindex="-1">Monitored forms</h2>
+      <div id="list-body">
+        <p class="empty">No reports loaded yet.</p>
+      </div>
+    </section>
+
+    <section id="detail-view" aria-labelledby="detail-h" hidden>
+      <h2 id="detail-h" tabindex="-1"></h2>
+      <p id="detail-meta" class="meta"></p>
+      <p><button type="button" id="back">Back to all forms</button></p>
+      <div id="detail-body"></div>
+    </section>
+
+    <section class="pitch" aria-labelledby="pitch-h">
+      <h2 id="pitch-h">What this is</h2>
+
+      <h3>The customer is the platform, not the employer</h3>
+      <p>
+        Greenhouse, Lever, Workday and their competitors host thousands of employers'
+        application forms on one set of components. When one of those components locks out
+        a screen-reader user, it locks them out everywhere it is used — and when the vendor
+        fixes it once, it is fixed for every employer on the platform. That is who we sell to.
+      </p>
+
+      <h3>Monitoring, not a one-off audit</h3>
+      <p>
+        A form that passed an accessibility review does not stay accessible. Two things keep
+        changing underneath it. Employers add new job postings constantly, each one new
+        human-written content poured into a fixed template — new screening questions, new
+        embedded assessments, new third-party widgets. And the vendor ships platform updates
+        on its own schedule, outside any individual employer's control. A redesigned date
+        picker or upload widget can break keyboard access weeks after the last audit passed.
+      </p>
+      <p>
+        An audit is a photograph. What a vendor needs is a smoke alarm: something watching
+        every form on the platform that says <em>this one broke on Tuesday</em>.
+      </p>
+
+      <h3>What the vendor gets</h3>
+      <ul>
+        <li>Continuous scanning of their customers' live forms. The vendor runs nothing.</li>
+        <li>An alert the moment a scan finds a barrier the previous scan did not.</li>
+        <li>Current accessibility evidence for procurement, which asks for proof that
+          reflects the product as it is now, not as it was at the last review.</li>
+      </ul>
+
+      <h3>Pricing</h3>
+      <p>
+        Priced per monitored form, per month, on the number of forms the vendor puts under
+        monitoring. No per-seat charge and no setup fee: the vendor hands over posting URLs,
+        we scan them on a schedule.
+      </p>
+      <p class="caveat">
+        The figure belongs on the pitch slide, where it can be defended, not in this
+        dashboard. Nothing on this page is a number we did not measure.
+      </p>
+
+      <h3>What this demo does not do</h3>
+      <p>
+        No accounts, no billing, no scheduler. The monitor is run by hand here; in production
+        it runs on a schedule. The monitor only ever reads a page — it never fills a field,
+        never clicks forward and never submits an application.
+      </p>
+    </section>
+  </main>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
