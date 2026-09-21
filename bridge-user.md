@@ -159,7 +159,9 @@ See §6.5.
 - TypeScript, Manifest V3, built with WXT (handles side panel, content scripts, and reload during dev)
 - Side panel UI: plain HTML + minimal Preact. Native elements only, no component library.
 - `axe-core` bundled into the content script for standard rule checks
-- Proxy: FastAPI, single endpoint, holds the LLM API key. No database.
+- Proxy: FastAPI, single endpoint, holds the LLM API key. No database. The model is
+  DeepSeek V4.1 Flash (`deepseek-flash`, text and image input) through the OpenAI-format
+  endpoint at `https://api.deepseek.com`; the key is `DEEPSEEK_API_KEY`.
 
 ### 5.3 Manifest essentials
 
@@ -620,51 +622,257 @@ Plus at least **one real portal** posting for credibility. Never submit to a rea
 during testing; stop at VERIFY. `probe/` scans live portals without submitting and is the
 tool for keeping §11 honest as postings expire.
 
-## 8. Build plan
+## 8. Build plan (tonight, full scope)
 
-**Day 1: tracer bullet**
-- **First: the side panel focus spike.** §4 assumes focus moves into the panel when it opens.
-  Chrome's documentation does not say whether an extension can do that. If it cannot, the
-  user has to reach the panel themselves (F6 cycles browser panes), and the opening flow
-  changes. Settle it before building on it
-- WXT skeleton, side panel opens on Alt+Shift+B, content script in all frames
-- On Acme Careers: SCAN, then fill **one custom dropdown** from the side panel and read it
-  back. A dropdown rather than the slider, because the dropdown strategy is proven on real
-  portals (§11) and the slider was found on none
-- Port SCAN from `probe/scan.js` and the write strategies from `probe/act-inpage.js`
-  rather than rediscovering them
-- The side panel takes its target `tabId` explicitly instead of querying the active tab, so
-  the whole loop can be driven headlessly with the panel opened as an ordinary page
+Status at the start of the night, measured on branch `implement-bridge-user`:
 
-**Day 2: breadth**
-- **Field identity across re-renders.** A `FieldDescriptor` must be re-resolved when the
-  framework replaces the element, not held as a node reference. Re-find by selector, then by
-  accessible name and position as a fallback, and report "Could not fill" if both fail
-- **Harvest options from custom dropdowns during SCAN** (open, read, close), §6.3
-- All §6.2 rules on the fixture, including `options-identically-named`, `group-not-labelled`
-  and `modal-without-dialog-role`
-- The fixture's multi-step mode, the step detector, and "Step N of M" announcements (§6.5)
-- Per-step VERIFY and focus-to-forward-action
-- "Always enable BRIDGE on this site" (§4, third tier)
+- `npm run typecheck` exit 0; `npm run test:e2e` 23/23, zero axe violations on the panel.
+- Built: SCAN with most §6.2 rules, option harvesting, text / native select / custom
+  dropdown / radio / checkbox / file writes, DOM read-back, VERIFY, one live region,
+  Alt+Shift+B, explicit `tabId` for headless driving.
+- A scratch run proved the file path works inside the extension with an Ashby-shaped
+  uploader and a 1.2 MB file (written, rendered by the page, read back, 831 ms).
+- Not built: every §8 day-2 and day-3 item, Alt+Shift+S, on-load announcement, per-frame
+  routing, one-question mode, CV reuse across steps, export, "always enable", proxy.
 
-**Day 3: reality and polish**
-- Greenhouse end to end, stopping before submit. Re-run `probe/` first; postings expire
-- LinkedIn Easy Apply by hand: the visa question answered through BRIDGE
-- Proxy + LLM label inference, if time allows. It is not on the critical path: every
-  demo field has a label or a derivable one
-- Full NVDA pass on the side panel; fix everything it finds
-- Barrier report export (§6.7). The dashboard and monitor are in `bridge-business.md` §8
-- Record a fallback demo video
+Everything below is done tonight, in this order. Each step ends with `npm run typecheck`
+and `npm run test:e2e` green and one commit. A step that fails verification stops the
+line; nothing after it starts on a red suite.
+
+### Decisions this plan makes
+
+These change earlier sections. They are listed once here so nothing is silent.
+
+- **`closed-shadow-root` is retired.** Content scripts can call
+  `chrome.dom.openOrClosedShadowRoot(el)`, which returns closed roots too. SCAN and ACT
+  pierce every shadow root, open or closed, so a field inside one is offered like any
+  other and there is nothing to warn about. Step 1 verifies the API on a closed root in
+  the fixture; if it returns null there, the rule comes back as specified in §6.2.
+- **Slider strategy is chosen by shape, not by failure.** `input[type=range]` → native
+  setter. Focusable `role="slider"` → Home then ArrowRight × n. Anything else → pointer
+  events at the x-coordinate for the value. A failed write is reported, never retried
+  with a different strategy (AGENTS.md §2).
+- **No `history.pushState` patch.** Content scripts run in an isolated world and cannot
+  intercept the page's `history` calls. Every SPA route change mutates the DOM, so the
+  debounced `MutationObserver` is the one source; it records `basis: "url-change"` when
+  `location.href` differs from the previous evaluation. §6.5's three sources collapse to
+  two: script load and mutation.
+- **Export key is `rule` + field label, no selector.** Resolves `bridge-business.md`
+  §6.1. `FieldDescriptor` carries no selector, and generated selectors are not stable
+  across releases.
+- **Alt+Shift+S is gated by VERIFY, in the panel.** First press on a step runs VERIFY
+  and announces the summary plus "press Alt+Shift+S again to move to Continue". Second
+  press asks the content script to focus the forward action. Whether `el.focus()` in the
+  page takes keyboard focus away from the side panel cannot be verified headlessly; the
+  announcement names the button either way, and the manual pass (§8.9) settles it.
+- **On-load announcement only on application pages.** The built-in tier's content script
+  announces the barrier count from an injected, visually hidden status region, and only
+  when §6.5's `formScope()` finds a dialog or form with at least two controls. Otherwise
+  a LinkedIn search page would announce on every load.
+- **Frame identity comes from the frames themselves.** Each frame's content script sends
+  `bridge/frame-hello` on load; the service worker keeps `frameId → origin` per tab in
+  `chrome.storage.session`. No `webNavigation` permission (it adds a browsing-history
+  install warning). A visible cross-origin iframe whose origin never said hello is
+  `cross-origin-frame-unreachable`.
+- **Field ids become `${frameId}:f${n}`.** The panel routes `fill` and `read-back` per
+  frame.
+
+### 8.1 Fixture v2 and SCAN/ACT breadth, single page
+
+Build, in `extension/test/fixtures/acme/index.html` and `lib/`:
+
+- Fixture additions: years-of-experience slider (div, no role, no tab stop, `data-min`
+  / `data-max` / `data-step`, value set by pointer on the track); CV uploader in Ashby's
+  shape (1 px, `tabindex="-1"`, unnamed, drop zone as the visible affordance, renders the
+  filename from `input.files`); custom date picker with an underlying text input; a
+  "Language skills" checkbox group with no `fieldset`/`legend` (Lever's shape); a
+  newsletter popup with an email field and no dialog role, off to one side; a
+  `<acme-consent>` custom element holding a labelled checkbox in a **closed** shadow root;
+  a same-origin iframe with one labelled field and a `http://127.0.0.1` iframe with one
+  field (cross-origin and outside `host_permissions`). The discarded-write field is
+  renamed "Notice period" so "Earliest start date" can be the date picker.
+- SCAN: kinds `slider`, `date`, `checkbox-group`; `range` from `aria-valuemin/max/now`,
+  `min/max/step` or `data-*`; checkbox grouping by shared `name` with `group-not-labelled`;
+  shadow-root piercing; `role="progressbar"` in `stepHint`; no field-level `missing-label`
+  for file inputs (the page rule already covers them, they were counted twice); a
+  combobox whose text has not changed since SCAN reads back as empty (today the
+  untouched fixture dropdown reads back as "Select…").
+- ACT: slider by shape (above); date via the underlying input and the native setter;
+  checkbox group by clicking each option into the wanted state; re-resolution by
+  selector, then by accessible name plus ordinal among controls of the same kind, then
+  "Could not fill".
+
+Verify, all in `test/e2e.mjs`: each new barrier is listed; slider set to 2 moves the
+page's thumb and reads back 2; CV written and rendered; date read back; two languages
+checked, one unchecked; the shadow-root checkbox offered and written; the popup reported
+as `modal-without-dialog-role`; a field the fixture re-renders after 500 ms is still
+filled via the name-and-ordinal path; the untouched dropdown reads back as empty.
+
+Paths. Happy: the counts in §9 come from this run. Failure: a widget that ignores the
+pointer or key events reports "Could not fill" and VERIFY shows it empty; the suite
+asserts that shape on the discard field, not on the slider. Edge: `openOrClosedShadowRoot`
+missing or null → rule restored per the decision above; a slider with no discoverable
+range → panel shows a plain number input and ACT reports "Could not fill: no range".
+
+### 8.2 Frames
+
+Build: `bridge/frame-hello` and the per-tab registry in the service worker; the panel
+scans every registered frame and merges results in page order (top frame first);
+`fill` / `read-back` carry the frame; `cross-origin-frame-unreachable` derived in the
+panel from the top frame's visible iframe origins minus the registry; on
+`tabs.onUpdated` status `complete` the service worker re-injects while `activeTab`
+holds, treating "missing host permission" as the one expected failure, and broadcasts
+`bridge/page-loaded` so the panel rescans.
+
+Verify: the same-origin iframe's field appears in the panel and is filled and read back;
+the 127.0.0.1 iframe produces exactly one `cross-origin-frame-unreachable`; reloading the
+fixture makes the panel rescan without a click.
+
+Paths. Happy: two frames, one barrier. Failure: a frame that never says hello (script
+blocked by CSP) is reported unreachable, not silently skipped. Edge: an iframe that is
+`display:none` is ignored; an `about:blank` iframe inherits the parent origin and says
+hello via `match_about_blank`.
+
+### 8.3 Multi-step
+
+Build. Fixture: `modal.html` in LinkedIn's shape (a native `<dialog>`, "1/3 pages",
+in-place swap, no URL change, a Yes/No on step 1 that reveals two fields when Yes, the
+visa radios on step 2, a react-select-shaped dropdown on step 3, Back / Next / Submit)
+and `steps/1.html`, `2.html`, `3.html` in Workday's shape (a
+`[data-automation-id=progressBar]` stepper naming all three steps, "step 1 of 3",
+Continue as a full navigation, Submit on 3). Extension: the §6.5 detector in the content
+script (scope, fingerprint, Jaccard, step index outranks similarity, `basis` recorded);
+`bridge/step-changed` and `bridge/fields-changed` to the panel; `ApplicationSession` in
+`chrome.storage.session` keyed by `tabId` with one `StepRecord` per step and
+`filledFieldIds` only; the panel announces "Step 2 of 3: Resume" or "New step: Resume",
+rescans, and resets the VERIFY gate; the `focus-submit` command wired through the
+service worker to the panel; `bridge/focus-forward` in the content script finds the
+forward action (submit type first, then a button or link named Submit / Continue / Next /
+Apply / Review, last in DOM order), scrolls it into view, focuses it and returns its
+name and whether it submits.
+
+Verify, both shapes: after Next the panel's live region holds "Step 2 of 3" and the new
+step's questions replace the old ones; answering Yes on step 1 announces "2 new
+questions" without a step announcement; first Alt+Shift+S press runs VERIFY and does not
+move focus; second press makes the page's `activeElement` the Continue button, and on the
+last step the Submit button; the session holds three `StepRecord`s with no values; the
+form is never submitted by the test.
+
+Paths. Happy: three announced transitions in each shape. Failure: the content script is
+destroyed by the Workday-shape navigation and the panel's pending answer for that step is
+discarded with "the page moved on; step 1 can no longer be read back". Edge: a
+transition with no stepper (`stepHint` null) announces "New step" and the position as
+"total number of steps unknown"; Back to a previous step is a step change too and is
+announced; a `fields-changed` verdict with nothing new is silent.
+
+### 8.4 Panel features
+
+Build: one-question-at-a-time mode as the default with "Question 2 of 8", Next and
+Previous, auto-advance on a confirmed write, and a full-list toggle; CV bytes stored in
+`chrome.storage.session` after the first confirmed write, so a later file question
+offers "Write resume.pdf, chosen earlier, to page" beside the file input; "Export barrier
+report" producing JSON per §6.7 (with `field` label and, when the session has more than
+one step, `steps[]` grouping) and a Markdown twin, downloaded from the panel; "Always
+enable BRIDGE on this site", shown only when the origin is not in the built-in list,
+calling `permissions.request` synchronously inside the click and then asking the service
+worker to `registerContentScripts`; the on-load announcement per the decision above.
+
+Verify: both modes render the same questions; a write in one-question mode moves focus
+to the next question's control; a second file question on `modal.html` step 3 shows the
+reuse button and writes the stored CV; the exported JSON parses, has no field values
+and no identity, and its keys match `bridge-business.md` §6.1; the fixture page's
+injected status region reads "BRIDGE found N barriers on this form" about a second after
+load. `permissions.request` needs a user gesture that headless cannot supply; it is
+covered by hand in §8.9.
+
+Paths. Happy: the demo runs in one-question mode. Failure: a blob download the side
+panel refuses is reported in the live region and the JSON is copied to the clipboard
+instead, announced as such. Edge: a stored CV from another tab is not offered (keyed by
+tab); export with zero barriers still produces a file, saying so.
+
+### 8.5 Proxy and label inference
+
+Build: `proxy/` (FastAPI, one endpoint, per §6.4; being built now in isolation) and the
+panel client: for fields whose `labelSource` is `none`, the panel captures the visible
+tab, crops each field's rectangle (returned by SCAN) into a PNG, POSTs
+`{ id, kind, nearbyText, options, cropPng }` to `http://localhost:8000/infer-labels`, and
+relabels those questions "label inferred". Field values never go: SCAN runs before any
+answer exists, and the crop is taken at SCAN time.
+
+Verify: the proxy's own tests; an e2e run against a stub proxy on port 8000 (a 20-line
+Node server, labelled as a test stub) that returns fixed labels for the ids it receives,
+asserting the request carries no field values and the panel shows the returned labels
+as inferred. The live model call is verified only once `DEEPSEEK_API_KEY` is set; it is
+listed as unverified until then. Two things only that live call can settle: DeepSeek's
+docs do not say whether image input works together with JSON output mode, and they warn
+that JSON mode "may occasionally return empty content". The proxy returns 502 for empty
+or unparseable output and never retries, so both land on the failure path below.
+
+Paths. Happy: the fixture's one unlabelled field gets a label. Failure: proxy down →
+one live-region sentence, "label inference unavailable", and the field keeps its
+"Unlabelled text" name; no retry. Edge: zero fields with `labelSource: none` → no
+request at all.
+
+### 8.6 Live portal
+
+Run `probe/run.js --preset greenhouse` to confirm the posting is live, then `probe/act.js`,
+which fills and stops at read-back. Nothing is submitted. If the posting has expired,
+swap it from the board API per `probe/README.md`. Result pasted into §11.
+
+### 8.7 Docs
+
+README v0 limits removed; §4, §6.1, §6.2, §6.3, §6.5 and §10 updated to match the
+decisions above; `bridge-business.md` §6.1 marked settled.
+
+### 8.8 Stays with a human
+
+These cannot be done by the build and are not claimed by it:
+
+1. **Focus spike**, 10 minutes, can run now: README steps. Its answer sets the first
+   line of §9.
+2. **VoiceOver pass with Screen Curtain** on the fixture and the panel
+   (`probe/screen-reader-testing.md`), including "Always enable BRIDGE on this site" and
+   Chrome's permission prompt, and whether Alt+Shift+S moves keyboard focus into the page.
+3. **NVDA pass** on Windows. Not possible on this machine tonight; the video says
+   "tested with VoiceOver; NVDA pending" until it is done.
+4. **LinkedIn Easy Apply by hand**: the visa question answered through BRIDGE.
+5. **`DEEPSEEK_API_KEY`** exported in the shell that runs the proxy, for one live call
+   with a crop attached.
+6. **Recording** per §9. QuickTime does not capture VoiceOver speech; use OBS with system
+   audio or keep the caption panel on screen.
+
+### 8.9 Order of the night
+
+8.1 → 8.2 → 8.3 → 8.4 → 8.5 → 8.6 → 8.7, then the human list. The proxy directory is
+built in parallel from the start because nothing depends on it until 8.5.
 
 ## 9. Demo script
 
-1. Open Acme Careers with NVDA running. Try to use the slider with the keyboard. Nothing happens.
-2. BRIDGE announces "4 barriers found". Press Alt+Shift+B.
-3. SCAN list read aloud.
-4. Answer "Years of experience: 2". Split screen: the real slider moves.
-5. Pick a CV in the side panel. The drop zone on the page shows it attached.
-6. VERIFY summary read aloud. Focus moves to Submit. User submits.
-7. Export barrier report. Hand over to the employer demo, `bridge-business.md` §7.
+Acme Careers is the fixture in `extension/test/fixtures/acme`. VoiceOver on, Screen
+Curtain on for the applicant beats, caption panel visible for the camera. Nothing here
+uses a slider strategy or a widget that was not found on a real portal, except the
+slider itself, kept because it demos well (§7).
+
+1. Open Acme Careers. Tab through the form. The education dropdown is never reached, the
+   Yes/No options both say the visa question, the CV control is not there at all.
+2. BRIDGE's status region says "BRIDGE found N barriers on this form. Press Alt+Shift+B."
+   N is whatever the §8.1 run reports; it is written in here once that run is green.
+   Press it. The panel opens, announces the pre-check summary, and asks the first
+   question.
+3. Answer "Full name". BRIDGE confirms from the page and moves to the next question.
+4. "Highest education completed, label inferred": choose Bachelor's. Split screen: the
+   page's dropdown shows Bachelor's.
+5. The visa question, now a real group: choose No. The page's radio is checked.
+6. Years of experience: type 2. The page's slider thumb moves.
+7. CV: choose a file in the panel's native picker. The drop zone shows resume.pdf.
+8. "Notice period": BRIDGE says "Could not fill: may need sighted help" because the page
+   discards it. Say the line: BRIDGE never claims a success it did not read back.
+9. VERIFY: "Your application contains: Full name, Zheng Wei. …  1 question is empty:
+   Notice period." Press Alt+Shift+S; BRIDGE names the Submit button. Press Enter
+   yourself.
+10. Multi-step, 20 seconds: open `modal.html`, answer step 1, press Next. The page says
+    nothing; BRIDGE says "Step 2 of 3: Resume".
+11. Export barrier report. Hand over to the employer demo, `bridge-business.md` §7.
 
 ## 10. Risks and open questions
 
