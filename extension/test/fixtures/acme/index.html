@@ -15,6 +15,10 @@
     .dropdown__option:hover { background: #eee; }
     fieldset { border: 0; padding: 0; margin: 0; }
     [role=radio] { display: inline-flex; gap: 6px; margin-right: 16px; cursor: pointer; }
+    /* v3 only: a drop zone as the sole visible affordance, with the real input pushed out
+       of the tab order. Ashby's shape (spec §11). */
+    .dropzone { border: 2px dashed #888; padding: 22px; text-align: center; color: #555; }
+    .cv-input { position: absolute; width: 1px; height: 1px; opacity: 0; }
   </style>
 </head>
 <body>
@@ -65,12 +69,58 @@
   </form>
 
   <script>
-    // --- custom dropdown: options exist only while open; mousedown toggles ---
     const EDU = ['Secondary', 'Diploma', "Bachelor's", "Master's", 'PhD'];
+
+    // --- demo versions (bridge-business.md §6.5) -------------------------------------
+    // One form changing over time, for the employer dashboard's change detection. No query
+    // string is v1, which is what test/e2e.mjs drives and must stay exactly as it was.
+    const version = Number(new URLSearchParams(location.search).get('v')) || 1;
+
+    // v2: "Acme fixes their dropdown." Rebuilt as a labelled native select, so
+    // missing-label, custom-dropdown-no-role and not-keyboard-operable all go away.
+    if (version >= 2) {
+      const row = document.getElementById('edu').closest('.row');
+      const label = document.createElement('label');
+      label.setAttribute('for', 'edu-select');
+      label.textContent = 'Highest education completed';
+      const select = document.createElement('select');
+      select.id = 'edu-select';
+      select.name = 'edu';
+      for (const t of ['Select…', ...EDU]) select.append(new Option(t));
+      row.replaceChildren(label, document.createElement('br'), select);
+    }
+
+    // v3: "Next week the employer adds a CV upload." The input is out of the tab order, so
+    // only a drag works: drag-drop-only.
+    //
+    // It is named by aria-label and deliberately NOT by <label for>. scan.ts's
+    // pageBarriers() skips any file input carrying a label[for], so labelling it that way
+    // would silence the exact barrier this version exists to demonstrate.
+    if (version >= 3) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      const q = document.createElement('div');
+      q.className = 'q';
+      q.textContent = 'CV';
+      const zone = document.createElement('div');
+      zone.className = 'dropzone';
+      zone.id = 'cv-dropzone';
+      zone.textContent = 'Drag your CV here';
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.id = 'cv';
+      input.className = 'cv-input';
+      input.tabIndex = -1;
+      input.setAttribute('aria-label', 'CV');
+      row.append(q, zone, input);
+      document.querySelector('#apply button[type=submit]').closest('.row').before(row);
+    }
+
+    // --- custom dropdown (v1 only): options exist only while open; mousedown toggles ---
     const edu = document.getElementById('edu');
     let menu = null;
     function closeMenu() { if (menu) { menu.remove(); menu = null; } }
-    edu.addEventListener('mousedown', (e) => {
+    if (edu) edu.addEventListener('mousedown', (e) => {
       if (e.target.closest('.dropdown__option')) return;
       if (menu) return closeMenu();
       menu = document.createElement('div');
@@ -88,7 +138,7 @@
       }
       edu.append(menu);
     });
-    document.addEventListener('mousedown', (e) => { if (!edu.contains(e.target)) closeMenu(); });
+    document.addEventListener('mousedown', (e) => { if (edu && !edu.contains(e.target)) closeMenu(); });
 
     // --- LinkedIn-style radios: the wrapper mirrors the native input's state ---
     document.querySelectorAll('[role=radio]').forEach((w) => {
