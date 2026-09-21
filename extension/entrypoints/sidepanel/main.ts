@@ -5,7 +5,7 @@
 
 import { inferLabels } from '../../lib/infer';
 import { send, type Frame, type FormChanged, type WorkerEvent, type WorkerRequest } from '../../lib/messages';
-import { buildReport, reportMarkdown } from '../../lib/report';
+import { buildReport, reportFileStem, reportMarkdown } from '../../lib/report';
 import type {
   ApplicationSession, Barrier, FieldDescriptor, FillResult, ScanResult, Severity, StepHint,
 } from '../../lib/types';
@@ -673,7 +673,7 @@ function download(name: string, type: string, text: string) {
 function exportReport(format: 'json' | 'md') {
   if (!session?.steps.length) { announce('There is nothing to export yet. Scan an application page first.'); return; }
   const report = buildReport(session);
-  const name = `bridge-report-${report.portal}-${report.generatedAt.replace(/[:.]/g, '-')}.${format}`;
+  const name = `${reportFileStem(report)}.${format}`;
   if (format === 'json') download(name, 'application/json', JSON.stringify(report, null, 2));
   else download(name, 'text/markdown', reportMarkdown(report));
   announce(`Barrier report saved as ${name}. ${plural(report.barriers.length + report.pageBarriers.length, 'barrier')}. It contains none of your answers and nothing about you.`);

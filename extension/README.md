@@ -18,7 +18,7 @@ npm run dev          # WXT dev mode with reload
 2. `chrome://extensions` → turn on **Developer mode** → **Load unpacked** → choose
    `extension/.output/chrome-mv3`
 3. Serve the test page: `python3 -m http.server 8765 -d test/fixtures/acme`, then open
-   `http://localhost:8765`
+   `http://localhost:8765/apply.html`
 4. Press **Alt+Shift+B**. If Chrome says the shortcut is taken, set it at
    `chrome://extensions/shortcuts`
 
@@ -48,15 +48,18 @@ would announce "BRIDGE is open. Press F6 to reach it" from the page instead.
 
 `npm run test:e2e` loads the built extension, opens the side panel as an ordinary page
 pointed at a test tab (`sidepanel.html?tabId=…`), and drives it against the pages in
-`test/fixtures/acme`. 125 checks, in independent sections, so one failure
+`test/fixtures/acme`. 130 checks, in independent sections, so one failure
 does not hide the results after it:
 
-- `index.html`: every barrier in spec §6.2 that a page can show, each write strategy in
+- `apply.html`: the applicant demo page. Every barrier in spec §6.2 that a page can show, each write strategy in
   §6.3 including the pointer-only slider, the Ashby-shaped uploader, a checkbox group, a
   custom date picker, a field inside a closed shadow root, a field the page re-renders at a
   new path, a field inside a same-origin iframe, an unreachable `127.0.0.1` iframe, a field
   that throws the write away, a full page reload, both answer modes, the on-load
   announcement, and zero axe violations on the panel.
+- `index.html`, `?v=2`, `?v=3`: the employer demo's one form in three versions
+  (`bridge-business.md` §6.5). Checked here because `fixtures/reports/` and the dashboard
+  demo depend on exactly what the scanner says about them.
 - `modal.html`: LinkedIn Easy Apply's shape. Steps swapped in place inside a native
   `<dialog>`, conditional fields, step announcements, the Alt+Shift+S gate, CV reuse on a
   later step, the session in `storage.session`, and the exported report.

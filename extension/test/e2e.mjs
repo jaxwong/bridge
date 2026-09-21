@@ -91,7 +91,9 @@ const arrives = (promise) => promise.then(() => true, () => false);
 
 try {
   await section('single page', async () => {
-  const { page, panel, tabId } = await open('');
+  // apply.html is the applicant demo page. index.html belongs to the employer demo: one form
+  // in three versions (?v=2, ?v=3), scanned by the monitor.
+  const { page, panel, tabId } = await open('apply.html');
   check('found the test tab', typeof tabId === 'number', `tabId=${tabId}`);
 
   // --- label inference, proxy not running (§6.4 failure path) --------------------------
@@ -549,6 +551,27 @@ try {
       !(await panel.locator('#questions').textContent()).includes('Preferred office'),
       (await panel.locator('#questions .name').allTextContents()).join(' | '));
     check('…and that took a request of its own', proxyRequests.length - before >= 5, `${proxyRequests.length - before} requests`);
+  });
+
+  await section('employer demo fixture', async () => {
+    // fixtures/reports/ and the dashboard demo depend on these three scans of ONE form.
+    const rules = async (query) => {
+      const { panel } = await open(query);
+      await panel.getByLabel('Full list').check();
+      const [dl] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as JSON' }).click()]);
+      const r = JSON.parse(readFileSync(await dl.path(), 'utf8'));
+      return { r, keys: [...r.barriers.map((b) => `${b.rule}|${b.label}`), ...r.pageBarriers.map((b) => b.rule)].sort() };
+    };
+    const v1 = await rules(''), v2 = await rules('?v=2'), v3 = await rules('?v=3');
+    check('v1, v2 and v3 are one form: same portal and pagePath, no query string',
+      [v1, v2, v3].every((v) => v.r.portal === 'localhost:8765' && v.r.pagePath === '/'));
+    check('v1: the dropdown\'s three barriers and the visa question\'s two', v1.keys.length === 5 &&
+      v1.keys.filter((k) => /Highest education/.test(k)).length === 3 && v1.keys.filter((k) => /sponsorship/.test(k)).length === 2, v1.keys.join(' ; '));
+    check('v2 (the fix): the dropdown\'s barriers are gone, nothing new', v2.keys.length === 2 && v2.keys.every((k) => v1.keys.includes(k)), v2.keys.join(' ; '));
+    check('v3 (the regression): exactly one new barrier, drag-drop-only on the page',
+      v3.keys.filter((k) => !v2.keys.includes(k)).join() === 'drag-drop-only', v3.keys.join(' ; '));
+    check('a one-step export is the same shape the monitor writes: no steps, no step numbers',
+      !('steps' in v1.r) && v1.r.barriers.every((b) => !('step' in b)));
   });
 
   await section('no page to work on', async () => {

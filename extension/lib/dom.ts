@@ -1,8 +1,6 @@
 // DOM primitives shared by SCAN and ACT. Ported from probe/, where each rule here was
 // found by measurement against a live portal (spec §6.2, §6.5, §11).
 
-import { browser } from 'wxt/browser';
-
 export const CONTROLS =
   'input,select,textarea,[role=combobox],[role=checkbox],[role=radio],[role=slider],[role=spinbutton]';
 
@@ -18,11 +16,20 @@ export function visible(el: Element): boolean {
 export const ariaHidden = (el: Element): boolean => !!el.closest('[aria-hidden="true"]');
 
 /**
- * The shadow root of an element, open OR closed. Content scripts may open closed roots
- * (chrome.dom), so a field inside one is reachable like any other (spec §8, decisions).
+ * The shadow root of an element. In a content script chrome.dom opens CLOSED roots too, so
+ * a field inside one is reachable like any other (spec §8, decisions).
+ *
+ * This file is also bundled into the employer monitor (../../monitor), which runs in an
+ * ordinary page where no extension API exists. There only open roots can be seen. That is
+ * a real difference in what the two producers can report, not a fallback: a barrier inside
+ * a closed root appears in the extension's export and not in the monitor's. Hence no
+ * import from wxt here: lib/ stays plain DOM code.
  */
+type ChromeDom = { dom?: { openOrClosedShadowRoot?: (el: HTMLElement) => ShadowRoot | null } };
 export function shadowOf(el: Element): ShadowRoot | null {
-  return el instanceof HTMLElement ? browser.dom.openOrClosedShadowRoot(el) : null;
+  if (!(el instanceof HTMLElement)) return null;
+  const open = (globalThis as { chrome?: ChromeDom }).chrome?.dom?.openOrClosedShadowRoot;
+  return open ? open(el) : el.shadowRoot;
 }
 
 /** querySelectorAll that also descends into every shadow root under `root`. */
