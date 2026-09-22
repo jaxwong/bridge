@@ -161,7 +161,7 @@ check('a page barrier with no label is accepted, because page barriers have none
 // --- automated WCAG 2.2 A/AA findings ------------------------------------------------
 // The fixtures in fixtures/reports/ predate the WCAG fields and are kept exactly as they
 // were: they are the back-compatibility corpus. fixtures/reports-wcag/ is a real capture
-// from the current monitor.
+// exported from the extension once the WCAG fields existed.
 
 const WCAG_DIR = path.resolve(here, '../../fixtures/reports-wcag/localhost-8765');
 const enriched = readdirSync(WCAG_DIR).sort()

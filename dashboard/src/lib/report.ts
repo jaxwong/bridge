@@ -1,4 +1,4 @@
-// The barrier report as it arrives from the monitor or from the extension's export.
+// The barrier report as it arrives from the BRIDGE extension's export.
 // The format is defined in bridge-user.md §6.7 and owned there; this file only reads it.
 
 export type Severity = 'blocking' | 'usability' | 'ok';
@@ -144,8 +144,8 @@ export function parseReport(raw: unknown, source: string): BarrierReport {
  * One form scanned at one instant is one scan, however many times its file was picked.
  * Without that, loading the same file twice would compare a scan against itself and report
  * a form as unchanged while hiding the previous scan it should have been compared with —
- * and picking files twice is normal here, because the monitor writes one directory per
- * form and a file dialog opens on one directory at a time.
+ * and picking the same file twice is easy to do when reports arrive one at a time from
+ * different applicants and pile up in a downloads folder.
  */
 export function groupByForm(reports: BarrierReport[]): Form[] {
   const forms = new Map<string, Form>();

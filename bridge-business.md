@@ -1,5 +1,23 @@
 # BRIDGE: Business spec
 
+> **Status, 2026-09-22 — the employer side no longer scans.** This spec is left as written
+> below, but these parts no longer describe the code:
+>
+> - **§2, §3, §5 and §6.2 describe a monitor** that took a list of posting URLs and scanned
+>   them on a schedule. It has been removed. There is no monitor package, no local API and
+>   no employer-initiated scanning anywhere in the repo.
+> - **Reports now reach the dashboard one way only:** the applicant scans a form in their own
+>   browser with the extension, exports a JSON report, and a business user loads that file.
+>   Nothing is automatic and nothing is fetched.
+> - **§6.3 (compare) and §6.4 (dashboard) still hold**, including the `rule` + label key and
+>   the resolved / still open / new buckets.
+> - **§6.5's fixture versions still exist** in `extension/test/fixtures/acme`, now used for
+>   the extension's own tests and for the dashboard's fixtures.
+>
+> The offer in §2 rests on continuous coverage the monitor provided. Whether the business
+> case survives on applicant-exported reports alone is a product question this note does not
+> answer — see [`HANDOVER.md`](HANDOVER.md) §5 for what the new flow can and cannot see.
+
 The employer side of BRIDGE: who pays, for what, and what we build to demo it.
 
 The applicant side (the extension) is [`bridge-user.md`](bridge-user.md). The applicant is the

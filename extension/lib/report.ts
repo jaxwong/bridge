@@ -1,9 +1,9 @@
 // The barrier report: bridge-user.md §6.7, which owns the format.
 //
-// toReport() flattens one ScanResult into what leaves the browser. Both producers use it —
-// the side panel's "Export barrier report" and the monitor in ../../monitor — so one scanned
-// page produces one report whichever side scanned it. buildReport() is the side panel's
-// view of a whole application: toReport() of every step the applicant reached, combined.
+// toReport() flattens one ScanResult into what leaves the browser. buildReport() is the
+// side panel's view of a whole application: toReport() of every step the applicant reached,
+// combined. The export is the only way a report leaves the browser, and it happens only
+// when the applicant asks for it.
 //
 // The dashboard declares this shape again, as a consumer validating untrusted input rather
 // than a producer building it. §6.7 is the contract between them, not either declaration.
@@ -53,7 +53,7 @@ export function toReport(scan: Pick<ScanResult, 'url' | 'scannedAt' | 'fields' |
 
 /**
  * One application, every step reached. A one-step application is exactly toReport() of
- * that step, so it is byte-for-byte what the monitor writes for the same page. With more
+ * that step, so a single-step application exports exactly that. With more
  * steps, the two flat lists hold every step's barriers (each tagged with its `step`), the
  * form is identified by its FIRST step's path, `generatedAt` is the most recent scan, and
  * `steps[]` keeps the grouping. Consumers that do not know `steps` or `step` ignore them.
@@ -80,7 +80,7 @@ export function buildReport(session: ApplicationSession): BarrierReport {
   };
 }
 
-/** Same stem as the monitor's files (monitor/run.mjs), so reports from both sort together. */
+/** Names the file after the form and the moment, so exported reports sort together. */
 export function reportFileStem(r: BarrierReport): string {
   const slug = `${r.portal}${r.pagePath}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'root';
   return `${slug}-${r.generatedAt.replace(/\.\d+Z$/, 'Z').replace(/:/g, '-')}`;

@@ -75,11 +75,14 @@ async function readFiles(files: File[]): Promise<void> {
     }
   }
 
+  // Counted by groupByForm rather than by how many files were handed in: the same report
+  // can be picked twice and is still one report.
   const before = totalScans(groupByForm(loaded));
   loaded = [...loaded, ...accepted];
   const forms = groupByForm(loaded);
   const added = totalScans(forms) - before;
   const alreadyHeld = accepted.length - added;
+  const scans = totalScans(forms);
 
   renderErrors(failures);
   render();
@@ -89,7 +92,6 @@ async function readFiles(files: File[]): Promise<void> {
   if (added) parts.push(`${added} ${added === 1 ? 'report' : 'reports'} loaded`);
   if (alreadyHeld) parts.push(`${alreadyHeld} ${alreadyHeld === 1 ? 'report was' : 'reports were'} already loaded`);
   if (failures.length) parts.push(`${failures.length} ${failures.length === 1 ? 'file' : 'files'} could not be read`);
-  const scans = totalScans(forms);
   parts.push(`${forms.length} ${forms.length === 1 ? 'form' : 'forms'}, ${scans} ${scans === 1 ? 'scan' : 'scans'} in total`);
   announce(`${parts.join('. ')}.`);
 }
@@ -307,7 +309,7 @@ function render(): void {
 const input = $<HTMLInputElement>('reports');
 input.addEventListener('change', () => {
   const files = [...(input.files ?? [])];
-  // Cleared so the same file can be chosen again after a re-run of the monitor overwrote it.
+  // Cleared so the same file can be chosen again, e.g. after a newer export replaced it.
   input.value = '';
   void readFiles(files);
 });

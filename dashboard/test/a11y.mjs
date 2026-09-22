@@ -76,11 +76,23 @@ try {
   await axeScan('empty state');
 
   // --- loading through the real file input -------------------------------------------
-  await page.setInputFiles('#reports', [ACME(21), ACME(22), ACME(23), GREENHOUSE]);
+  await page.setInputFiles('#reports', [ACME(21), ACME(22)]);
   await page.waitForSelector('table');
-  check('loading is announced', /4 reports loaded\. 2 forms, 4 scans in total\./.test(await page.textContent('#live')),
+  check('loading is announced', /2 reports loaded\. 1 form, 2 scans in total\./.test(await page.textContent('#live')),
     await page.textContent('#live'));
-  check('groups four reports into two forms', (await page.locator('tbody tr').count()) === 2);
+
+  // Loading is additive: a second batch joins the first rather than replacing it. Several
+  // reports for one form are what makes a history, so this is the property the whole
+  // comparison rests on.
+  await page.setInputFiles('#reports', [ACME(23), GREENHOUSE]);
+  await page.waitForFunction(() => document.querySelector('caption')?.textContent.includes('4 scans'));
+  check('a second batch adds to what is loaded instead of replacing it',
+    /2 reports loaded\. 2 forms, 4 scans in total\./.test(await page.textContent('#live')),
+    await page.textContent('#live'));
+  check('the reports from the first batch are still there',
+    (await page.locator('#list-body caption').textContent()).includes('from 4 scans'),
+    await page.locator('#list-body caption').textContent());
+  check('groups four reports into two forms', (await page.locator('#list-body tbody tr').count()) === 2);
 
   const acmeRow = page.locator('tbody tr', { hasText: 'localhost:8765' });
   check('the form list shows the newest scan\'s blocking count',
@@ -151,14 +163,22 @@ try {
   check('a file that is not a report is rejected by name', /notes\.json/.test(errors), errors.replace(/\s+/g, ' '));
   check('and says what was wrong with it', /"portal" is missing/.test(errors));
   check('the failure is announced', /1 file could not be read/.test(await page.textContent('#live')));
-  check('one bad file does not discard the good ones', (await page.locator('tbody tr').count()) === 2);
+  check('one bad file does not discard the good ones', (await page.locator('#list-body tbody tr').count()) === 2);
   await axeScan('load error');
 
-  // --- WCAG-enriched reports from the current monitor ---------------------------------
+  // --- reports carrying WCAG findings --------------------------------------------------
   await page.reload();
   await page.setInputFiles('#reports', ENRICHED);
   await page.waitForSelector('table');
-  await page.locator('tbody tr').getByRole('button').click();
+  // A report predating the WCAG fields and one carrying them describe the same form and
+  // belong to the same history.
+  await page.setInputFiles('#reports', [ACME(21)]);
+  await page.waitForFunction(() => document.querySelector('caption')?.textContent.includes('4 scans'));
+  check('a legacy report and WCAG-enriched ones load into one history for the same form',
+    (await page.locator('#list-body tbody tr').count()) === 1 &&
+    (await page.locator('#list-body caption').textContent()).includes('1 form'),
+    await page.locator('#list-body caption').textContent());
+  await page.locator('#list-body tbody tr').getByRole('button').click();
   await page.waitForSelector('#detail-view:not([hidden])');
 
   const summary = (await page.textContent('.wcag-summary')).replace(/\s+/g, ' ').trim();
