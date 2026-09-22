@@ -39,7 +39,13 @@ const SEVERITY_WORD: Record<Severity, string> = {
   blocking: 'Blocking', usability: 'Usability', ok: 'OK',
 };
 
-const formTitle = (f: Form): string => `${f.portal}${f.pagePath}`;
+/** Where the form lives. Always available, and what identifies it across reports. */
+const formUrl = (f: Form): string => `${f.portal}${f.pagePath}`;
+
+/** What the posting calls itself, as the page gave it. A form whose page had no heading —
+ *  and any report written before postingTitle existed — falls back to its address. */
+const formTitle = (f: Form): string =>
+  f.scans[f.scans.length - 1]?.postingTitle ?? formUrl(f);
 
 // The date only, no clock time. The demo seed is captured ahead of time, so a clock time on
 // stage would read as earlier than the submit the audience just watched. The full time stays
@@ -79,7 +85,7 @@ function renderList(): void {
   const forms = groupByForm(loaded);
 
   const head = el('tr', {}, [
-    el('th', { scope: 'col', text: 'Form' }),
+    el('th', { scope: 'col', text: 'Job posting' }),
     el('th', { scope: 'col', text: 'Last scanned' }),
     el('th', { scope: 'col', text: 'Blocking' }),
     el('th', { scope: 'col', text: 'Usability' }),
@@ -93,7 +99,8 @@ function renderList(): void {
     const open = el('button', { type: 'button', class: 'linkish', text: formTitle(form), 'data-form-key': form.key });
     open.addEventListener('click', () => openDetail(form.key));
     return el('tr', {}, [
-      el('th', { scope: 'row' }, [open]),
+      // The posting names itself; its address is what identifies it, kept underneath.
+      el('th', { scope: 'row' }, [open, el('span', { class: 'row__url', text: formUrl(form) })]),
       el('td', {}, [when(newest.generatedAt)]),
       el('td', { class: counts.blocking ? 'count count--blocking' : 'count', text: String(counts.blocking) }),
       el('td', { class: 'count', text: String(counts.usability) }),
@@ -227,6 +234,8 @@ function openDetail(key: string): void {
 
   const meta = $('detail-meta');
   meta.replaceChildren(
+    el('span', { class: 'detail-url', text: formUrl(form) }),
+    ' · ',
     `${form.scans.length} ${form.scans.length === 1 ? 'scan' : 'scans'} loaded. Newest `,
     when(newest.generatedAt),
     previous ? ', compared with ' : ', with no earlier scan to compare against.',

@@ -1,7 +1,8 @@
 {
   "portal": "localhost:8765",
   "pagePath": "/apply.html",
-  "generatedAt": "2026-09-22T10:20:22.587Z",
+  "postingTitle": "Junior Analyst — Apply",
+  "generatedAt": "2026-09-22T11:37:12.956Z",
   "standard": {
     "name": "WCAG",
     "version": "2.2",

@@ -25,8 +25,14 @@
       </span>
       <p class="wordmark">BRIDGE</p>
     </div>
-    <p class="tagline">Accessibility findings from real applicants</p>
     <span class="banner__spacer"></span>
+    <!-- Static account chrome for the demo. There is no sign-in, no session and no menu
+         behind it, so it is not a control: a dropdown that opens onto nothing would be
+         worse than none. -->
+    <div class="account">
+      <p class="account__org">Acme Pte Ltd</p>
+      <p class="account__user">Priya Raman · Talent Operations</p>
+    </div>
     <button type="button" id="theme-toggle" class="btn-icon" aria-live="off">
       <span class="vh" id="theme-toggle-label">Switch to dark theme</span>
       <svg class="icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
@@ -42,27 +48,20 @@
   </header>
 
   <main id="main" tabindex="-1">
-    <h1>Accessibility findings from real applicants</h1>
-    <p class="lede">
-      When someone applies for a job using BRIDGE, the extension records the accessibility
-      barriers it found on that form. Their reports show here: what each form is doing to the
-      people trying to use it, a suggested fix for each barrier, and what has changed between
-      one report and the next.
-    </p>
+    <h1>Tracked application forms</h1>
 
-    <p class="disclaimer" role="note">
-      <strong>These are automated WCAG 2.2 A/AA accessibility findings.</strong>
-      They are not a conformance decision and not a legal opinion. BRIDGE does not certify
-      WCAG compliance and does not replace testing with real assistive technology.
-      <strong>Human review is required for a WCAG conformance claim.</strong>
-    </p>
-
-    <!-- Status, announced to a screen reader as it changes. One region for the whole page. -->
-    <p id="live" class="live" role="status" aria-live="polite"></p>
+    <!-- Spoken when a report opens, so a screen reader user is told what they landed on.
+         Visually hidden: on screen the report itself already says it, and printing it too
+         put the same sentence on the page twice. -->
+    <p id="live" class="vh" role="status" aria-live="polite"></p>
 
     <section id="list-view" aria-labelledby="list-h">
-      <h2 id="list-h" tabindex="-1">Forms reported on</h2>
+      <h2 id="list-h" class="vh" tabindex="-1">All tracked forms</h2>
       <div id="list-body"></div>
+      <!-- Where the one report on this page came from. Kept because a demo that looks live
+           and is not is the thing an audience should never be left to assume. -->
+      <p class="provenance">Demo data: one real BRIDGE scan of the Acme Careers test form,
+        captured ahead of time. Nothing is sent to this page yet.</p>
     </section>
 
     <section id="detail-view" aria-labelledby="detail-h" hidden>
@@ -72,60 +71,6 @@
       <div id="detail-body"></div>
     </section>
 
-    <section class="pitch" aria-labelledby="pitch-h">
-      <h2 id="pitch-h">What this is</h2>
-
-      <h3>The customer is the platform, not the employer</h3>
-      <p>
-        Greenhouse, Lever, Workday and their competitors host thousands of employers'
-        application forms on one set of components. When one of those components locks out
-        a screen-reader user, it locks them out everywhere it is used — and when the vendor
-        fixes it once, it is fixed for every employer on the platform. That is who we sell to.
-      </p>
-
-      <h3>Findings from the people actually blocked</h3>
-      <p>
-        A form that passed an accessibility review does not stay accessible. Employers add
-        new job postings constantly, each one new human-written content poured into a fixed
-        template — new screening questions, new embedded assessments, new third-party
-        widgets. The vendor ships platform updates on its own schedule. A redesigned date
-        picker or upload widget can break keyboard access weeks after the last audit passed.
-      </p>
-      <p>
-        What arrives here is not a crawl. It is a report from a real applicant, on the real
-        form they were trying to complete, at the moment they were trying to complete it —
-        including the steps a crawler never reaches, because a person filled in what was
-        needed to get there. An audit is a photograph. This is what the form did to someone.
-      </p>
-
-      <h3>What the vendor gets</h3>
-      <ul>
-        <li>Findings from the forms their customers actually publish, on the journeys
-          applicants actually take.</li>
-        <li>A comparison against the last report for the same form, so a barrier that was
-          not there before stands out.</li>
-        <li>Evidence that reflects the product as it is now, in the plain language of what
-          an applicant could not do.</li>
-      </ul>
-
-      <h3>What it costs</h3>
-      <p>
-        A subscription, per platform, for as long as reports keep arriving. No per-seat
-        charge and no setup fee. The vendor runs nothing and installs nothing.
-      </p>
-      <p class="caveat">
-        The figure belongs on the pitch slide, where it can be defended, not in this
-        dashboard. Nothing on this page is a number we did not measure.
-      </p>
-
-      <h3>What this demo does not do</h3>
-      <p>
-        No accounts, no billing, no automated crawling. Sending a report from the extension to
-        this page is not built yet: the report shown is one real BRIDGE scan of the Acme Careers
-        test form, captured ahead of time. BRIDGE never scans a form on an employer's behalf,
-        never signs in anywhere, and never submits an application on its own.
-      </p>
-    </section>
   </main>
 
   <script type="module" src="/src/main.ts"></script>

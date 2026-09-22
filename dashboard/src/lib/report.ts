@@ -47,6 +47,10 @@ export interface BarrierReport {
   portal: string;
   /** Pathname only — no query string. §6.7 explains why. */
   pagePath: string;
+  /** What the posting calls itself, read from the page by the scanner. Absent on a form
+   *  with no heading, and on reports written before it existed; the list falls back to
+   *  the address. */
+  postingTitle?: string;
   generatedAt: string;
   standard?: Standard;
   barriers: ReportBarrier[];
@@ -147,9 +151,13 @@ export function parseReport(raw: unknown, source: string): BarrierReport {
     if (!Array.isArray(r[k])) fail(source, `"${k}" is ${r[k] === undefined ? 'missing' : 'not an array'}`);
   }
 
+  if (r.postingTitle !== undefined && (typeof r.postingTitle !== 'string' || !r.postingTitle)) {
+    fail(source, '"postingTitle" is present but not a non-empty string');
+  }
   const report: BarrierReport = {
     portal: r.portal as string,
     pagePath: r.pagePath as string,
+    ...(typeof r.postingTitle === 'string' && r.postingTitle ? { postingTitle: r.postingTitle } : {}),
     generatedAt: r.generatedAt as string,
     barriers: (r.barriers as unknown[]).map((b, i) => parseBarrier(b, source, `barriers[${i}]`, true)),
     pageBarriers: (r.pageBarriers as unknown[]).map((b, i) => parseBarrier(b, source, `pageBarriers[${i}]`, false)),

@@ -57,23 +57,24 @@ try {
   };
 
   // --- what the page says about itself -----------------------------------------------
-  const disclaimer = await page.locator('main > .disclaimer').textContent();
-  check('states up front that findings are automated WCAG 2.2 A/AA, not a conformance result',
-    /automated WCAG 2\.2 A\/AA accessibility findings/i.test(disclaimer) &&
-    /not a conformance decision/i.test(disclaimer), disclaimer.replace(/\s+/g, ' ').trim());
-  check('and that human review is required for a conformance claim',
-    /Human review is required for a WCAG conformance claim/i.test(disclaimer));
-  // Every sentence mentioning certification, compliance or legality must be a denial.
-  // A bare keyword search would flag the disclaimer's own "does not certify".
-  const claims = (await page.textContent('main'))
+  // Every sentence mentioning certification, compliance or legality must be a denial. A
+  // bare keyword search would flag the disclaimer's own "does not certify". Run on both
+  // views: the findings carry more of this language than the list does.
+  const unqualifiedClaims = async () => (await page.textContent('main'))
     .split(/(?<=[.!?])\s+/)
     .filter((s) => /certif|complian|legal|guarantee/i.test(s))
     .filter((s) => !/\b(not|never|no|nothing)\b/i.test(s));
-  check('no sentence on the page claims compliance, certification or legal standing',
-    claims.length === 0, claims.join(' | ').slice(0, 200) || 'none');
+  check('no sentence on the list view claims compliance, certification or legal standing',
+    (await unqualifiedClaims()).length === 0, (await unqualifiedClaims()).join(' | ').slice(0, 200) || 'none');
   check('the page says the report shown was captured ahead of time, not sent',
-    /report shown is one real BRIDGE scan of the Acme Careers\s+test form, captured ahead of time/.test(await page.textContent('.pitch')));
+    /one real BRIDGE scan of the Acme Careers test form,\s+captured ahead of time/.test(
+      (await page.textContent('.provenance')).replace(/\s+/g, ' ')),
+    await page.textContent('.provenance'));
   check('there is no way to upload a report', (await page.locator('input[type=file], #dropzone, #reports').count()) === 0);
+  // The page-level banner is gone; the disclaimer now sits with the findings, which is
+  // where a reader is actually looking at a criterion number. It is checked there, below.
+  check('the list view does not lecture: no page-level disclaimer banner',
+    (await page.locator('main > .disclaimer').count()) === 0);
 
   // --- the form list, from the seed --------------------------------------------------
   await page.waitForSelector('table');
@@ -81,6 +82,11 @@ try {
     (await page.locator('#list-body caption').textContent()) === '1 form, from 1 scan.',
     await page.locator('#list-body caption').textContent());
   const row = page.locator('tbody tr', { hasText: 'localhost:8765/apply.html' });
+  check('the posting is listed by the name the page gives it, not by its address',
+    (await row.getByRole('button').textContent()) === 'Junior Analyst — Apply',
+    await row.getByRole('button').textContent());
+  check('and its address is still shown, under the name',
+    (await row.locator('.row__url').textContent()) === 'localhost:8765/apply.html');
   check('the form list shows the blocking and usability counts',
     (await row.locator('td').nth(1).textContent()) === '9' && (await row.locator('td').nth(2).textContent()) === '4',
     `${await row.locator('td').nth(1).textContent()} / ${await row.locator('td').nth(2).textContent()}`);
@@ -96,7 +102,10 @@ try {
   check('opening a form moves focus to its heading, not to the top of the page',
     await page.evaluate(() => document.activeElement?.id) === 'detail-h',
     await page.evaluate(() => document.activeElement?.id));
-  check('the detail view names the form', (await page.textContent('#detail-h')) === 'localhost:8765/apply.html');
+  check('the report is headed by the posting, not by a URL',
+    (await page.textContent('#detail-h')) === 'Junior Analyst — Apply', await page.textContent('#detail-h'));
+  check('and still says which address it scanned',
+    (await page.locator('#detail-meta .detail-url').textContent()) === 'localhost:8765/apply.html');
   check('the form list is hidden while the detail is open', await page.locator('#list-view').isHidden());
 
   const bucket = (heading) => page.locator('.bucket', { hasText: heading });
@@ -124,8 +133,17 @@ try {
   const criteria = await page.locator('.wcag-table tbody th[scope=row]').allTextContents();
   check('the summary breaks findings down by success criterion, numerically ordered',
     criteria.join(',') === '1.3.1,2.1.1,2.5.3,4.1.2', criteria.join(','));
-  check('the summary repeats that this is not a conformance decision',
-    /Human review is required for a WCAG conformance claim/.test(summary));
+  // The page-level banner was removed; this is now the only place the disclaimer appears,
+  // so it carries the whole of what the old banner said and is checked in full here.
+  const reportDisclaimer = await page.locator('.wcag-summary .disclaimer').textContent();
+  check('the findings carry the disclaimer, since no banner does any more',
+    /Automated findings, not a conformance decision/i.test(reportDisclaimer) &&
+    /Human review is required for a WCAG conformance claim/i.test(reportDisclaimer),
+    reportDisclaimer.replace(/\s+/g, ' ').trim());
+  check('the summary names the standard so silence is not read as a pass',
+    /Measured against WCAG 2\.2, Level AA/.test(summary));
+  check('no sentence in the report claims compliance, certification or legal standing',
+    (await unqualifiedClaims()).length === 0, (await unqualifiedClaims()).join(' | ').slice(0, 200) || 'none');
   check('the summary names the standard and the criteria the scanner can fail, so silence is not a pass',
     /Measured against WCAG 2\.2, Level AA\. The scanner can fail 7 criteria: 1\.3\.1, 1\.4\.3, 2\.1\.1, 2\.5\.3, 2\.5\.8, 3\.3\.2, 4\.1\.2\. Any other criterion was not checked\./.test(summary),
     summary.slice(0, 220));
@@ -135,7 +153,7 @@ try {
   await page.getByRole('button', { name: 'Back to all forms' }).click();
   await page.waitForSelector('#list-view:not([hidden])');
   check('Back returns focus to the row it was opened from',
-    await page.evaluate(() => document.activeElement?.textContent) === 'localhost:8765/apply.html',
+    await page.evaluate(() => document.activeElement?.textContent) === 'Junior Analyst — Apply',
     await page.evaluate(() => document.activeElement?.textContent));
 
   // --- dark mode is a second set of colours, so it needs its own contrast pass ---------

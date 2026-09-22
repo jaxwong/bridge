@@ -243,18 +243,23 @@ body {
   color: var(--text);
 }
 
-.tagline {
-  margin: 0;
-  padding-left: var(--s3);
-  border-left: 1px solid var(--border);
-  color: var(--text-3);
-  font-size: 0.8rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .banner__spacer { flex: 1 1 auto; }
+
+/* Who is signed in. Text only — no avatar, and no menu, because there is nothing behind
+   one. It sits against a divider so it reads as account chrome, not as content. */
+.account {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-right: var(--s3);
+  margin-right: var(--s1);
+  border-right: 1px solid var(--border);
+  text-align: right;
+  min-width: 0;
+}
+.account p { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.account__org { font-size: 0.82rem; font-weight: 640; color: var(--text); letter-spacing: -0.005em; }
+.account__user { font-size: 0.72rem; color: var(--text-3); }
 
 /* ============================================================================
    BUTTONS — compact, with a real hierarchy
@@ -464,22 +469,35 @@ tbody th { font-weight: 600; }
 
 time { color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-/* A count reads as a figure, not prose: tabular, and chipped when it is not zero. */
-.count {
+/* A count reads as a figure, not prose. The chip and the column heading are centred on the
+   same axis: left-aligning both put the chip's padded box a few pixels off the heading and
+   it read as misaligned. */
+/* Scoped: the form list centres both figure columns; the criterion table centres only its
+   count, because "From rules" beside it is text and stays left. */
+#list-body thead th:nth-child(3), #list-body thead th:nth-child(4),
+.wcag-table thead th:nth-child(3) { text-align: center; }
+td.count {
+  text-align: center;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   color: var(--text-2);
+  white-space: nowrap;
 }
-.count--blocking {
-  display: inline-block;
-  min-width: 24px;
-  padding: 1px 7px;
-  border-radius: 20px;
-  background: var(--danger-bg);
-  border: 1px solid var(--danger-line);
+td.count--blocking {
   color: var(--danger);
-  text-align: center;
-  font-weight: 680;
+  font-weight: 700;
+}
+
+/* The address under the posting's name: present, subordinate, and never wrapped into the
+   title itself. */
+.row__url {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  color: var(--text-3);
+  font-weight: 400;
+  word-break: break-all;
 }
 
 .change { color: var(--text-2); font-size: 0.86rem; }
@@ -641,6 +659,13 @@ ul.barriers { list-style: none; margin: 0; padding: 0; display: grid; gap: var(-
 
 .wcag-summary .disclaimer { margin-top: var(--s4); margin-bottom: 0; font-size: 0.84rem; }
 
+.provenance {
+  margin: var(--s3) 0 0;
+  font-size: 0.78rem;
+  color: var(--text-3);
+  max-width: 70ch;
+}
+
 /* ============================================================================
    DETAIL VIEW
    ========================================================================= */
@@ -660,6 +685,7 @@ ul.barriers { list-style: none; margin: 0; padding: 0; display: grid; gap: var(-
   word-break: break-word;
 }
 #detail-meta { margin-bottom: var(--s3); font-size: 0.86rem; }
+.detail-url { font-family: var(--mono); font-size: 0.8rem; color: var(--text-2); }
 /* The report is a document, not a data grid: it gets a document's width. */
 #detail-view { max-width: 900px; }
 /* The rule under the header block is what separates provenance from findings. */
@@ -688,7 +714,7 @@ ul.barriers { list-style: none; margin: 0; padding: 0; display: grid; gap: var(-
    ========================================================================= */
 
 @media (max-width: 720px) {
-  .tagline { display: none; }
+  .account__user { display: none; }
   thead th, tbody th, tbody td { padding-left: var(--s3); padding-right: var(--s3); }
   .wcag-summary { padding: var(--s3) var(--s4) var(--s4); }
 }

@@ -38,11 +38,14 @@ function wcagFields(rule: RuleId): Partial<ReportBarrier> {
  * in §11. `impact` is Barrier.message, renamed at the boundary: spoken to the applicant,
  * read by the employer.
  */
-export function toReport(scan: Pick<ScanResult, 'url' | 'scannedAt' | 'fields' | 'pageBarriers'>): BarrierReport {
+export function toReport(scan: Pick<ScanResult, 'url' | 'scannedAt' | 'fields' | 'pageBarriers' | 'heading'>): BarrierReport {
   const url = new URL(scan.url);
   return {
     portal: url.host,
     pagePath: url.pathname,
+    // The page's own heading, which is what the posting calls itself. Omitted rather than
+    // guessed when the page has none.
+    ...(scan.heading ? { postingTitle: scan.heading } : {}),
     generatedAt: scan.scannedAt,
     standard: STANDARD,
     barriers: scan.fields.flatMap((f) =>
