@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Acme Careers — Additional questions</title>
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; }
+    dialog { position: static; width: 520px; border: 1px solid #888; border-radius: 8px; padding: 20px; }
+    fieldset { border: 0; padding: 0; margin: 0; }
+    .opt { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+    .box { position: relative; }
+    .box input { position: absolute; width: 0; height: 0; margin: 0; opacity: 0; appearance: none; }
+    .box label { display: block; width: 24px; height: 24px; border: 2px solid #333; border-radius: 4px; cursor: pointer; }
+    .box input:checked + label { background: #333; }
+  </style>
+</head>
+<body>
+  <!-- LinkedIn Easy Apply step 3. The gender radios are ASSUMED to share the checkboxes'
+       markup; what was seen (2026-09-22) is that each option's accessible name is the
+       question while its visible text is its own. The ethnicity question, copied from the DOM on 2026-09-22:
+       23 checkboxes with no name attribute in one unnamed fieldset; each is 0 by 0, has no
+       aria-label and an EMPTY <label for>, and its text is a <p> beside its wrapper. So a
+       screen reader hears only "checkbox". ASSUMED, not recorded: where the question's own
+       text sits relative to the fieldset. Nothing is sent anywhere. -->
+  <dialog open aria-labelledby="t">
+    <h2 id="t">Apply to Acme Corp</h2>
+    <p>3/4 pages</p>
+    <h3>Additional Questions</h3>
+    <p>What term best describes your gender identity?</p>
+    <fieldset aria-describedby="err-g">
+      <div><div>
+        <div class="opt"><div class="box"><input id="g1" aria-label="What term best describes your gender identity?" tabindex="0" type="radio" name="g"><label for="g1"></label></div><p>Woman</p></div>
+        <div class="opt"><div class="box"><input id="g2" aria-label="What term best describes your gender identity?" tabindex="0" type="radio" name="g"><label for="g2"></label></div><p>Man</p></div>
+        <div class="opt"><div class="box"><input id="g3" aria-label="What term best describes your gender identity?" tabindex="0" type="radio" name="g"><label for="g3"></label></div><p>Prefer not to disclose</p></div>
+      </div></div>
+      <p id="err-g"></p>
+    </fieldset>
+    <p>Which ethnicity do you identify with?</p>
+    <fieldset aria-describedby="err">
+      <div><div>
+        <div class="opt"><div class="box"><input id="c1" tabindex="0" type="checkbox"><label for="c1"></label></div><p>Arab</p></div>
+        <div class="opt"><div class="box"><input id="c2" tabindex="0" type="checkbox"><label for="c2"></label></div><p>Burmese</p></div>
+        <div class="opt"><div class="box"><input id="c3" tabindex="0" type="checkbox"><label for="c3"></label></div><p>Chinese</p></div>
+        <div class="opt"><div class="box"><input id="c4" tabindex="0" type="checkbox"><label for="c4"></label></div><p>Eurasian</p></div>
+      </div></div>
+      <p id="err"></p>
+    </fieldset>
+    <!-- A lone checkbox outside any group stays its own question. -->
+    <p><label><input type="checkbox" id="follow"> Follow Acme Corp</label></p>
+    <button type="button">Next</button>
+  </dialog>
+</body>
+</html>

@@ -860,6 +860,64 @@ try {
     check('the tab is gone: the write fails loudly', /^Could not fill.*Lost contact with the page/.test(lost), lost);
   });
 
+  await section('radios drawn by their label', async () => {
+    // hidden-radios.html: LinkedIn's resume list, measured 2026-09-22. Every real radio is
+    // 0 by 0 at opacity 0; the page draws each option around it.
+    const { page, panel, tabId } = await open('hidden-radios.html');
+    const summary = await panel.textContent('#summary');
+    check('hidden radios: the resume list is one question', /^1 question found/.test(summary), summary);
+    await panel.getByLabel('Full list').check();
+    const q = panel.locator('#questions .q', { has: panel.getByRole('radio', { name: 'resume_ai.pdf 9/19/2026', exact: true }) });
+    const options = await q.getByRole('radio').evaluateAll((els) => els.map((e) => e.labels[0]?.textContent.trim()));
+    check('hidden radios: options are named by the text on their card',
+      options.join() === 'resume_swe.pdf 9/19/2026,resume_ai.pdf 9/19/2026,resume_backend.pdf 8/23/2026', options.join(' | '));
+    check('hidden radios: a group inside a hidden section is not offered',
+      await panel.getByRole('radio', { name: /old_resume\.pdf/ }).count() === 0);
+    await q.getByRole('radio', { name: 'resume_ai.pdf 9/19/2026', exact: true }).check();
+    await q.getByRole('button', { name: /^Write/ }).click();
+    check('hidden radios: the write is confirmed', await arrives(spoken(panel, /resume_ai\.pdf 9\/19\/2026\. Confirmed on the page/)), await heard(panel));
+    check('hidden radios: the 0 by 0 radio is checked on the page', await page.isChecked('#r2') && !(await page.isChecked('#r1')));
+    const r = await reportFor(tabId);
+    check('hidden radios: the unnamed group is reported, as measured on LinkedIn',
+      r.barriers.some((b) => b.rule === 'group-not-labelled'), r.barriers.map((b) => b.rule).join(','));
+    check('hidden radios: a 0 by 0 input is not a tap target, so no size finding',
+      !r.barriers.some((b) => b.rule === 'target-too-small'), JSON.stringify(r.barriers.filter((b) => b.rule === 'target-too-small')));
+  });
+
+  await section('LinkedIn demographics step', async () => {
+    // demographics.html: LinkedIn's step 3, 2026-09-22. The ethnicity checkboxes have no name
+    // attribute and no accessible name; the gender radios' accessible name is the question.
+    // Each option's own text is a <p> beside it.
+    const { page, panel, tabId } = await open('demographics.html');
+    const summary = await panel.textContent('#summary');
+    check('fieldset checkboxes: gender, ethnicity and the lone box are three questions', /^3 questions found/.test(summary), summary);
+    await panel.getByLabel('Full list').check();
+    const q = panel.locator('#questions .q', { has: panel.getByRole('checkbox', { name: 'Burmese', exact: true }) });
+    const options = await q.getByRole('checkbox').evaluateAll((els) => els.map((e) => e.labels[0]?.textContent.trim()));
+    check('fieldset checkboxes: options are named by the text in their row',
+      options.join() === 'Arab,Burmese,Chinese,Eurasian', options.join(' | '));
+    await q.getByRole('checkbox', { name: 'Burmese', exact: true }).check();
+    await q.getByRole('checkbox', { name: 'Eurasian', exact: true }).check();
+    await q.getByRole('button', { name: /^Write/ }).click();
+    check('fieldset checkboxes: the write is confirmed', await arrives(spoken(panel, /Burmese.*Eurasian.*Confirmed on the page/)), await heard(panel));
+    check('fieldset checkboxes: exactly the chosen boxes are checked on the page',
+      (await page.evaluate(() => [...document.querySelectorAll('fieldset input[type=checkbox]')].map((i) => i.checked).join())) === 'false,true,false,true');
+    const gender = panel.locator('#questions .q', { has: panel.getByRole('radio', { name: 'Man', exact: true }) });
+    const genderOpts = await gender.getByRole('radio').evaluateAll((els) => els.map((e) => e.labels[0]?.textContent.trim()));
+    check('question-named radios: options are their visible text, not the question in their aria-label',
+      genderOpts.join() === 'Woman,Man,Prefer not to disclose', genderOpts.join(' | '));
+    await gender.getByRole('radio', { name: 'Man', exact: true }).check();
+    await gender.getByRole('button', { name: /^Write/ }).click();
+    check('question-named radios: the write is confirmed', await arrives(spoken(panel, /: Man\. Confirmed on the page/)), await heard(panel));
+    check('question-named radios: "Man" is checked on the page', await page.isChecked('#g2'));
+    const r = await reportFor(tabId);
+    check('question-named radios: reported as options that sound identical, naming their real words',
+      r.barriers.some((b) => b.rule === 'options-identically-named' && /"Woman" and "Man" and "Prefer not to disclose"/.test(b.impact)),
+      JSON.stringify(r.barriers.filter((b) => b.rule === 'options-identically-named')));
+    check('fieldset checkboxes: the unnamed group is reported',
+      r.barriers.some((b) => b.rule === 'group-not-labelled'), r.barriers.map((b) => b.rule).join(','));
+  });
+
   await section('target size and contrast', async () => {
     // targets.html: each 2.5.8 and 1.4.3 case beside its nearest passing case, so a
     // finding proves the measurement and its absence proves the exception (§6.2).
