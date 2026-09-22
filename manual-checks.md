@@ -462,6 +462,37 @@ three times, so listen closely here. Do it with **"Automatically speak the webpa
 4. Repeat steps 2 and 3 in **One question at a time**, on question 3.
    *Expect:* "…You were on question 3 of 13.", and question 3 is the question shown.
 
+### Dropdowns: is the hint true?
+
+Each dropdown in the panel carries the note **"Up and down arrow keys move through the
+answers."** VoiceOver's own hint for a pop-up button names Control-Option-Space and nothing
+else, which makes a dropdown sound like it needs a chord; the note is there to say the
+plain thing.
+
+Nothing automated can confirm it. Headless Chromium on macOS opens the native popup on an
+arrow key rather than moving the value, and there is no screen reader in that process.
+
+1. Tab to **Highest education completed** in the panel.
+2. Listen: after the name and "pop up button", the note should be read as its description.
+3. Press **Down arrow**. Does the answer change, and is the new one spoken?
+4. Press **Up arrow**. Does it go back?
+
+**Answered, VoiceOver on macOS, 2026-09-22.** The arrow keys move through the answers and
+each one is spoken. Control-Option-Space, which is the only method VoiceOver's own hint
+names, **works only some of the time** — it is the unreliable path, and it is the one a
+first-time user is told about. That is the reason the note exists: not that the chord is
+confusing, but that the reliable method is the one nobody mentions.
+
+Still open on **NVDA**: arrow keys move a `<select>` directly on Windows, so the note should
+be straightforwardly true there, but nobody has listened to it yet.
+
+If a future run finds the arrows do not move the answer — the list opens instead, or nothing
+moves — the note is **wrong on that platform and must be changed or removed**. A wrong
+instruction is worse than none, especially one aimed at somebody who cannot see what
+happened.
+
+---
+
 ### What counts as a failure
 
 | You hear | It means |
