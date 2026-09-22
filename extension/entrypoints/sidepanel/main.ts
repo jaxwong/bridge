@@ -6,6 +6,7 @@
 import { inferLabels } from '../../lib/infer';
 import { send, type Frame, type FormChanged, type WorkerEvent, type WorkerRequest } from '../../lib/messages';
 import { buildReport, reportFileStem, reportMarkdown } from '../../lib/report';
+import { barrier } from '../../lib/rules';
 import type {
   ApplicationSession, Barrier, FieldDescriptor, FillResult, ScanResult, StepHint,
 } from '../../lib/types';
@@ -699,12 +700,12 @@ async function scanOnce(reason: Reason) {
   const reached = new Set(scans.map((s) => s.frame.origin));
   const barriers: Barrier[] = scans.flatMap((s) => s.scan.pageBarriers);
   for (const origin of topScan.iframeOrigins.filter((o) => !reached.has(o))) {
-    barriers.push({ rule: 'cross-origin-frame-unreachable', severity: 'blocking',
-      message: `Part of this page is a frame from ${new URL(origin).host} that BRIDGE cannot reach. Any questions inside it are not listed.` });
+    barriers.push(barrier('cross-origin-frame-unreachable',
+      `Part of this page is a frame from ${new URL(origin).host} that BRIDGE cannot reach. Any questions inside it are not listed.`));
   }
   for (const frame of unresponsive) {
-    barriers.push({ rule: 'cross-origin-frame-unreachable', severity: 'blocking',
-      message: `A frame from ${new URL(frame.origin).host} did not answer BRIDGE. Any questions inside it are not listed.` });
+    barriers.push(barrier('cross-origin-frame-unreachable',
+      `A frame from ${new URL(frame.origin).host} did not answer BRIDGE. Any questions inside it are not listed.`));
   }
 
   // The frame holding the form speaks for the step: its stepper, its heading, its Continue.

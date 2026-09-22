@@ -54,6 +54,12 @@ only conversion, and the export is the only way a report leaves the browser.
   "pagePath": "/acme/jobs/12345",     // location.pathname — no query string
   "generatedAt": "2026-09-24T10:00:00Z",
 
+  // What the criterion numbers below refer to, and the criteria the scanner can fail.
+  // A criterion not in `checked` was never tested; its absence is not a pass.
+  // Optional: reports exported before it existed carry none.
+  "standard": { "name": "WCAG", "version": "2.2", "level": "AA",
+                "checked": ["1.3.1", "2.1.1", "2.5.3", "3.3.2", "4.1.2"] },
+
   "barriers": [{                      // one per field-level finding
     "rule": "options-identically-named",
     "severity": "blocking",           // "blocking" | "usability" | "ok"
@@ -130,9 +136,11 @@ The reason is not only caution. An automated scan reads a fraction of WCAG; most
 need a person. A report that reads as a pass would be wrong about the thing that matters most
 to the applicant.
 
-[`extension/lib/wcag.ts`](extension/lib/wcag.ts) holds the mapping table. Each entry names the
-line in `scan.ts` it was read from and carries a written rationale. A rule is mapped only
-where the criterion fails every time that rule fires.
+[`extension/lib/rules.ts`](extension/lib/rules.ts) is the rule catalog: for every rule, its
+severity and its mapping in one place. Each mapping names the line in `scan.ts` it was read
+from and carries a written rationale. A rule is mapped only where the criterion fails every
+time that rule fires. The catalog also emits the report's `standard.checked` list, so a
+report always says which criteria the scanner could have failed.
 
 | Rule | Criteria | Level | Review |
 |---|---|---|---|
@@ -146,6 +154,10 @@ where the criterion fails every time that rule fires.
 | `upload-unnamed` | 4.1.2 | A | — |
 | `modal-without-dialog-role` | *unmapped* | — | — |
 | `captcha` | *unmapped* | — | — |
+| `cross-origin-frame-unreachable` | *unmapped* | — | — |
+
+`cross-origin-frame-unreachable` (side panel only) reports a part of the form BRIDGE could
+not scan. It is a limit of the scan, not a defect of the page, so no criterion is claimed.
 
 Two rules are deliberately unmapped and should stay that way unless someone does the work:
 
@@ -198,9 +210,6 @@ If AA findings are wanted, those two are where the work is.
   movement and keyboard operation, but nobody has listened to it.
 - **No real public posting has been through the whole flow** end to end, extension export to
   dashboard. The local Acme fixture has, in all three versions.
-- **`bridge-user.md` §6.7 is stale.** It owns the report format, still describes a second
-  producer that no longer exists, and does not mention the four WCAG fields. It is the
-  extension owner's file and should be updated by whoever owns it.
 - **`bridge-business.md` is stale** in the same way: §2, §5 and §6.2 describe employer-side
   monitoring of URLs, which this repo no longer does. A note at the top of that file records
   the change; the spec's substance has not been rewritten.

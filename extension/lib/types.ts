@@ -1,5 +1,7 @@
 // Data model: spec §6.1.
 
+import type { RuleId, WcagLevel } from './rules';
+
 export type ControlKind =
   | 'text' | 'textarea' | 'select' | 'combobox' | 'radio-group' | 'checkbox-group'
   | 'checkbox' | 'file' | 'slider' | 'date' | 'unknown';
@@ -7,7 +9,8 @@ export type ControlKind =
 export type Severity = 'blocking' | 'usability' | 'ok';
 
 export interface Barrier {
-  rule: string;
+  /** Severity and WCAG criteria are the rule's, from lib/rules.ts. Made only by barrier() there. */
+  rule: RuleId;
   severity: Severity;
   /** Spoken to the user as-is. */
   message: string;
@@ -90,20 +93,20 @@ export interface ApplicationSession {
 /** A barrier on one field. `rule` + `label` is the key the dashboard compares scans by,
  *  so `label` is always present and always the page-derived one, never an inferred name. */
 export interface ReportBarrier {
-  rule: string;
+  rule: RuleId;
   severity: Severity;
   label: string;
   impact: string;
   /** Present only when the application has more than one step. */
   step?: number;
 
-  // --- Automated WCAG 2.2 A/AA findings. All optional: a report written before these
-  // existed is still a valid report, and a rule with no recorded mapping omits them
-  // rather than guessing one. Human review is required for a WCAG conformance claim.
+  // --- Automated WCAG 2.2 A/AA findings, from lib/rules.ts. All optional: a report written
+  // before these existed is still a valid report, and a rule with no recorded mapping omits
+  // them rather than guessing one. Human review is required for a WCAG conformance claim.
   /** Success-criterion numbers, e.g. ["4.1.2"]. Absent means no mapping is recorded. */
   wcag?: string[];
   /** The most stringent level among `wcag`: "AA" if any criterion is AA, else "A". */
-  wcagLevel?: 'A' | 'AA';
+  wcagLevel?: WcagLevel;
   /** True for anything the scanner found. Never true for a human-entered finding. */
   automated?: boolean;
   /** True when the detection is heuristic and a person should confirm the finding. */
@@ -118,6 +121,10 @@ export interface BarrierReport {
   /** Pathname only, no query string: Acme ?v=2 and ?v=3 are the same form over time. */
   pagePath: string;
   generatedAt: string;
+  /** What the criterion numbers below refer to, and the criteria a BRIDGE scan can fail.
+   *  A criterion not in `checked` was never tested, so its absence from the findings is
+   *  not a pass. Always written by this producer; absent from reports exported before it. */
+  standard: { name: 'WCAG'; version: '2.2'; level: 'AA'; checked: string[] };
   barriers: ReportBarrier[];
   pageBarriers: ReportPageBarrier[];
   steps?: { index: number; label: string; pagePath: string; barriers: ReportBarrier[]; pageBarriers: ReportPageBarrier[] }[];

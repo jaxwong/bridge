@@ -5,6 +5,7 @@ import {
   CONTROLS, accName, ariaHidden, clean, cssPath, deepQueryAll, formScope, keyboardReachable,
   lightAnchor, nearbyText, queryPath, visible,
 } from './dom';
+import { barrier } from './rules';
 import type { Barrier, ControlKind, FieldDescriptor, ScanResult, StepHint } from './types';
 
 /** What the content script keeps so ACT can find the element again. Never leaves the page. */
@@ -35,10 +36,6 @@ function classWords(el: Element): string[] {
   return cls.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 }
 const hasWord = (el: Element, words: Set<string>) => classWords(el).some((w) => words.has(w));
-
-function barrier(rule: string, severity: Barrier['severity'], message: string): Barrier {
-  return { rule, severity, message };
-}
 
 /** Candidate controls inside the form, outermost only: an ARIA wrapper and the native
  *  input inside it are one control to the user (LinkedIn's radios). */
@@ -193,18 +190,18 @@ export function scanPage(): { result: ScanResult; handles: Map<string, FieldHand
     // An unnamed file input is already reported once, by the page rule below.
     if (kind !== 'file') {
       if (named.problem === 'placeholder-only') {
-        barriers.push(barrier('label-placeholder-only', 'usability', `"${label}" is labelled only by placeholder text, which disappears once you type.`));
+        barriers.push(barrier('label-placeholder-only', `"${label}" is labelled only by placeholder text, which disappears once you type.`));
       } else if (named.problem === 'missing') {
-        barriers.push(barrier('missing-label', 'usability',
+        barriers.push(barrier('missing-label',
           `${named.inferred ? `"${named.inferred}"` : `A ${kind} field`} has no label on the page, so a screen reader does not announce it.`));
       }
     }
     if (kind === 'combobox' && !el.getAttribute('role')) {
-      barriers.push(barrier('custom-dropdown-no-role', 'blocking',
+      barriers.push(barrier('custom-dropdown-no-role',
         `"${label}" is a custom dropdown that a screen reader does not recognise as one.`));
     }
     if (kind !== 'file' && !keyboardReachable(html)) {
-      barriers.push(barrier('not-keyboard-operable', 'blocking', `"${label}" cannot be reached with the keyboard.`));
+      barriers.push(barrier('not-keyboard-operable', `"${label}" cannot be reached with the keyboard.`));
     }
 
     const field: Omit<FieldDescriptor, 'id'> = {
@@ -235,11 +232,11 @@ export function scanPage(): { result: ScanResult; handles: Map<string, FieldHand
       `Unlabelled ${kind === 'radio-group' ? 'choice' : 'checkboxes'}`;
 
     if (!named) {
-      barriers.push(barrier('group-not-labelled', 'blocking',
+      barriers.push(barrier('group-not-labelled',
         `The question "${question}" is not tied to its options, so a screen reader reads the options without it.`));
     }
     if (sharedName) {
-      barriers.push(barrier('options-identically-named', 'blocking',
+      barriers.push(barrier('options-identically-named',
         `All ${opts.length} options for "${question}" sound identical to a screen reader. The words ${opts.map(optionText).map((t) => `"${t}"`).join(' and ')} are never spoken.`));
     }
 
@@ -299,9 +296,9 @@ function pageBarriers(): Barrier[] {
     const labelIsTrigger = !!label && (keyboardReachable(label) ||
       [...label.querySelectorAll<HTMLElement>('button,[role=button],[tabindex]')].some(keyboardReachable));
     if (!keyboardReachable(inp)) {
-      if (!labelIsTrigger) out.push(barrier('drag-drop-only', 'blocking', 'The CV uploader can only be used by dragging a file onto it.'));
+      if (!labelIsTrigger) out.push(barrier('drag-drop-only', 'The CV uploader can only be used by dragging a file onto it.'));
     } else if (!accName(inp).name) {
-      out.push(barrier('upload-unnamed', 'usability', 'The upload button has no label, so it is announced only as a generic file button.'));
+      out.push(barrier('upload-unnamed', 'The upload button has no label, so it is announced only as a generic file button.'));
     }
   });
 
@@ -309,11 +306,11 @@ function pageBarriers(): Barrier[] {
     if (!visible(el) || ariaHidden(el)) return;
     if (el.closest('[role=dialog],[role=alertdialog],[aria-modal=true],dialog')) return;
     if (!el.querySelector('input,select,textarea')) return;
-    out.push(barrier('modal-without-dialog-role', 'blocking', 'A popup opened on this page but is not announced as a dialog.'));
+    out.push(barrier('modal-without-dialog-role', 'A popup opened on this page but is not announced as a dialog.'));
   });
 
   if (document.querySelector('iframe[src*=recaptcha],iframe[src*=hcaptcha],[class*=h-captcha],[class*=g-recaptcha]')) {
-    out.push(barrier('captcha', 'blocking', 'This page has a CAPTCHA. BRIDGE cannot complete it, so you may need sighted help at that point.'));
+    out.push(barrier('captcha', 'This page has a CAPTCHA. BRIDGE cannot complete it, so you may need sighted help at that point.'));
   }
   return out;
 }

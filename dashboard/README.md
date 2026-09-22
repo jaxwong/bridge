@@ -70,10 +70,15 @@ and the detail view opens with a summary of the newest report's findings by leve
 criterion.
 
 The dashboard does not decide those mappings. It displays what the report already carries.
-The table lives with the producer, in [`../extension/lib/wcag.ts`](../extension/lib/wcag.ts),
+The table lives with the producer, in [`../extension/lib/rules.ts`](../extension/lib/rules.ts),
 because a criterion is a property of the scanner rule and the rule is the extension's. A rule
 that could not be mapped confidently carries no criterion and displays as **"No WCAG mapping
 recorded"** — the dashboard never fills that gap with a guess.
+
+A report that carries a `standard` block also says which criteria its producer can fail, and
+the summary repeats that list: "Measured against WCAG 2.2, Level AA. The scanner can fail 5
+criteria: … Any other criterion was not checked." That sentence is what keeps a finding-free
+report from reading as a pass.
 
 Findings whose detection is heuristic rather than read straight from the DOM are marked
 **"Human review required"**. That flag is about the finding being a true positive; the

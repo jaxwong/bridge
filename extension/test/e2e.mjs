@@ -149,6 +149,15 @@ try {
   check('reports the one frame it cannot reach, by host',
     (barriers.match(/cannot reach/g) || []).length === 1 && /frame from 127\.0\.0\.1:8765 that BRIDGE cannot reach/.test(barriers));
   check('a labelled checkbox group of one is not a group barrier', !/privacy notice" is not tied/.test(barriers));
+  // The two rules lib/rules.ts leaves unmapped both fire on this page: they carry no
+  // criterion rather than a guess, while every mapped finding beside them carries its own.
+  const findings = [...scanReport.barriers, ...scanReport.pageBarriers];
+  const unmapped = findings.filter((b) => ['modal-without-dialog-role', 'cross-origin-frame-unreachable'].includes(b.rule));
+  check('an unmapped rule carries no criteria rather than a guess',
+    unmapped.length === 2 && unmapped.every((b) => b.automated === true && !('wcag' in b) && !('wcagLevel' in b) && !('reviewRequired' in b)),
+    unmapped.map((b) => b.rule).join(','));
+  check('every other finding on the page carries its criteria',
+    findings.filter((b) => !unmapped.includes(b)).every((b) => b.wcag?.length && b.wcagLevel === 'A' && typeof b.reviewRequired === 'boolean'));
 
   // Before anything is written: a custom dropdown showing "Select…" is empty, not answered.
   await panel.getByRole('button', { name: 'Read back everything from the page' }).click();
@@ -461,6 +470,17 @@ try {
     check('export: the visa question\'s barrier is on step 2',
       report.steps[1].barriers.some((b) => b.rule === 'options-identically-named' && /sponsorship/.test(b.label)));
     check('export: no applicant data', !/resume\.pdf|zw@example|Zheng/.test(JSON.stringify(report)));
+    // The WCAG fields come from lib/rules.ts. A report says which standard its numbers
+    // refer to and which criteria the scanner can fail; every finding is marked automated;
+    // a mapped rule carries its criteria. (Unmapped rules are checked on apply.html above.)
+    const every = [...report.barriers, ...report.pageBarriers];
+    check('export: names the standard and the criteria BRIDGE checks',
+      report.standard?.name === 'WCAG' && report.standard.version === '2.2' && report.standard.level === 'AA' &&
+      report.standard.checked.join(',') === '1.3.1,2.1.1,2.5.3,3.3.2,4.1.2', JSON.stringify(report.standard));
+    check('export: every finding is marked automated', every.length > 0 && every.every((b) => b.automated === true));
+    check('export: a mapped rule carries its criteria and level',
+      every.filter((b) => b.rule === 'options-identically-named').every((b) => b.wcag?.join(',') === '4.1.2,2.5.3' && b.wcagLevel === 'A' && b.reviewRequired === false) &&
+      every.some((b) => b.rule === 'options-identically-named'));
     const [md] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as Markdown' }).click()]);
     check('export: Markdown twin', /^# Accessibility barrier report: localhost:8765\/modal\.html/.test(readFileSync(await md.path(), 'utf8')));
   });
@@ -675,6 +695,9 @@ try {
       v3.keys.filter((k) => !v2.keys.includes(k)).join() === 'drag-drop-only', v3.keys.join(' ; '));
     check('a one-step export carries no steps and no step numbers',
       !('steps' in v1.r) && v1.r.barriers.every((b) => !('step' in b)));
+    check('every version states the standard, and the fixture\'s findings all map to a criterion',
+      [v1, v2, v3].every((v) => v.r.standard?.version === '2.2' &&
+        [...v.r.barriers, ...v.r.pageBarriers].every((b) => b.automated === true && b.wcag?.length && b.wcagLevel === 'A')));
   });
 
   await section('no page to work on', async () => {
