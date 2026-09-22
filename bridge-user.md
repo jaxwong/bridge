@@ -499,6 +499,15 @@ The session goes dormant, not destroyed, when the tab leaves the origin: that is
 SSO detour, not an abandoned application. The side panel does not reload on page
 navigation, so its UI state stays continuous on its own.
 
+Beside the session, `drafts:{tabId}:{origin}` holds what the user has chosen in the panel
+but not yet written — control values by field key, plus which question they were on —
+saved as they type (2026-09-22). It exists because Alt+Shift+B reloads the panel (the only
+way to move focus back from the page, above), and that reload must cost nothing: on the
+next scan the drafts are restored if the page is still on the recorded step, and BRIDGE
+says "Back in BRIDGE. Your answers are kept. You were on question N of M." A draft whose
+step the page has left is not restored — the same "the page moved on" rule unwritten
+answers always had. Files are not drafted; the CV store above already covers them.
+
 #### Announce every step change
 
 On a `new-step` event the panel announces the new position through its live region:
@@ -562,6 +571,10 @@ useful, and POSTing to advance the wizard is submitting on the user's behalf —
 BRIDGE is useless if BRIDGE itself is inaccessible.
 
 - Native HTML elements only. Proper `<h1>`–`<h3>` structure so users can navigate by heading.
+  Headings, not named regions: a section named by its own heading is spoken twice ("Application
+  pre-check, region … heading level 2, Application pre-check"). Groups are named only where
+  the name carries meaning — a question's options — never for chrome like the mode picker
+  (2026-09-22).
 - One `aria-live="polite"` region for status ("Slider set to 2 years", "Could not fill Start date").
   It is visually hidden: announcements often repeat what the UI already shows, so rendering
   them printed the same sentence twice. And it stays silent on open: a freshly loaded panel
@@ -1037,7 +1050,8 @@ user's password manager. Say this out loud in the pitch; it reads as judgement, 
   by hand** on Chrome 154, macOS, 2026-09-21. After Alt+Shift+B opens the panel, Tab moves
   inside it. A panel that is already open cannot take focus from the page: `window.focus()` in
   the panel was tried and did nothing. So Alt+Shift+B closes an open panel and shows it again.
-  The panel reloads, and answers typed but not written are lost. Checked by hand the same
+  The panel reloads; typed answers survive it as session-storage drafts (§6.5), restored
+  while the page is still on the same step. Checked by hand the same
   day: the panel reopens and Tab moves inside it. F6 does nothing on macOS;
   Cmd+Option+Down arrow reaches the panel in four presses.
 - ~~Can a content script's `focus()` take keyboard focus *out of* the side panel?~~ **No, measured
