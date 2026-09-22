@@ -874,6 +874,17 @@ function focusHeading() {
 // Every keystroke and choice becomes a draft (debounced), so a panel reload loses nothing.
 $('questions').addEventListener('input', saveDraftsSoon);
 $('questions').addEventListener('change', saveDraftsSoon);
+// "Which question the user is on" is owned by keyboard focus, not by the pager: in the
+// full list the user moves by Tab and the pager never runs, so tracking only goTo()
+// told a reopened panel "question 1" regardless of where they really were.
+$('questions').addEventListener('focusin', (e) => {
+  const key = (e.target as HTMLElement).closest<HTMLElement>('.q')?.dataset.key;
+  const i = key ? fields.findIndex((f) => f.key === key) : -1;
+  if (i >= 0 && i !== current) {
+    current = i;
+    saveDraftsSoon();
+  }
+});
 
 $('rescan').addEventListener('click', () => void runScan('manual'));
 $('verify').addEventListener('click', () => void verifyAll());
