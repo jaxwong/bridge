@@ -73,7 +73,7 @@ export interface StepRecord {
   url: string;
   /** "My Experience", from the page's stepper or the step's heading. */
   label: string;
-  scan: Pick<ScanResult, 'url' | 'scannedAt' | 'fields' | 'pageBarriers' | 'stepHint'>;
+  scan: Pick<ScanResult, 'url' | 'scannedAt' | 'fields' | 'pageBarriers' | 'stepHint' | 'heading'>;
   status: 'current' | 'completed';
   /** Keys of the fields BRIDGE confirmed on the page. Never values. */
   filledFieldIds: string[];
@@ -122,6 +122,14 @@ export interface BarrierReport {
   portal: string;
   /** Pathname only, no query string: Acme ?v=2 and ?v=3 are the same form over time. */
   pagePath: string;
+  /** The posting's own heading, as the page gives it ("Junior Analyst — Apply"). Read from
+   *  the page, never composed: a form with no heading has none, and the consumer falls back
+   *  to the URL. Absent from reports exported before this existed. */
+  postingTitle?: string;
+  /** The address actually scanned, scheme included, so a reader can open the form. `portal`
+   *  and `pagePath` stay the identity across scans; this is only for linking, and is the
+   *  same address with its scheme put back. Absent from older reports. */
+  pageUrl?: string;
   generatedAt: string;
   /** What the criterion numbers below refer to, and the criteria a BRIDGE scan can fail.
    *  A criterion not in `checked` was never tested, so its absence from the findings is

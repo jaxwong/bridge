@@ -1,262 +1,536 @@
 /* BRIDGE side panel.
  *
- * Native elements only (spec §6.6). The panel is the thing a blind applicant actually
- * operates, so contrast and focus are requirements, not polish: every text token is checked
- * against the surface it sits on in both themes at 4.5:1 or better, control borders at 3:1
- * or better. The panel is narrow — assume about 340px and never rely on width.
+ * Presentation only. Native elements throughout (spec §6.6) — the panel is the thing a
+ * blind applicant actually operates, so contrast and focus are requirements, not polish.
  *
- * Colours match the employer dashboard so the two halves read as one product.
+ * The token block is shared, value for value, with the employer dashboard
+ * (dashboard/src/style.css). The two surfaces are built by different toolchains and cannot
+ * import from each other, so the tokens are duplicated rather than shared — keep them in
+ * step. What differs below the tokens is density: the panel is about 340px wide and
+ * vertical space is the scarce thing, so it is laid out for a column, not scaled down from
+ * the dashboard.
+ *
+ * Contrast is stated per token against the surface it sits on, in both themes. The e2e
+ * suite runs axe over the panel in light and in dark, so a regression fails the build.
  */
+
+/* ============================================================================
+   TOKENS — identical to dashboard/src/style.css
+   ========================================================================= */
 
 :root {
   color-scheme: light;
 
-  --bg: #f7f9fc;
+  --bg: #fbfbfc;
   --surface: #ffffff;
-  --surface-sunken: #eef2f7;
+  --surface-2: #f4f5f7;
+  --surface-3: #ecedf1;
 
-  --fg: #0c1119;           /* 17.8:1 on --surface */
-  --muted: #47535f;        /*  8.3:1 on --surface */
+  --border: #d5d9e0;
+  --border-2: #bfc5d0;
+  --border-strong: #6d7480;
 
-  --border: #d6dee8;       /* dividers */
-  --border-strong: #6b7784;/*  4.1:1 on --surface — control borders */
+  --text: #0e1116;
+  --text-2: #495260;
+  --text-3: #5d6470;
 
-  --brand: #3730a3;        /*  9.2:1 on --surface */
-  --brand-ink: #ffffff;
-  --brand-soft: #eef0fd;
-  --focus: #1b4dd8;
+  --accent: #4338ca;
+  --accent-fill: #4f46e5;
+  --accent-on: #ffffff;
+  --accent-weak: #eef0fe;
+  --accent-line: #c7cbfb;
 
-  --blocking: #9b1c31;
-  --blocking-bg: #fff1f3;
-  --blocking-line: #e8a2ae;
+  --danger: #9f1239;
+  --danger-bg: #fff1f3;
+  --danger-line: #efbcc6;
+
+  --warn: #7c4a03;
+  --warn-bg: #fff8ea;
+  --warn-line: #e8ca94;
 
   --ok: #0f5132;
-  --ok-bg: #eefaf2;
-  --ok-line: #9ed3b5;
+  --ok-bg: #edfaf2;
+  --ok-line: #a4d6ba;
 
-  --radius: 10px;
-  --radius-sm: 7px;
+  --ring: #1b4dd8;
+
+  --r-sm: 5px;
+  --r: 7px;
+  --r-lg: 10px;
+  --shadow: 0 1px 2px rgb(14 17 22 / 5%);
+
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s5: 24px; --s6: 32px;
+
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --bg: #0a0e14;
-    --surface: #121822;
-    --surface-sunken: #0e141c;
+    --bg: #0b0d11;
+    --surface: #13161c;
+    --surface-2: #191d25;
+    --surface-3: #212630;
 
-    --fg: #e8eef6;           /* 14.9:1 on --surface */
-    --muted: #a8b6c6;        /*  7.9:1 on --surface */
+    --border: #303743;
+    --border-2: #3d4554;
+    --border-strong: #79818f;
 
-    --border: #26313f;
-    --border-strong: #7d8b9b;
+    --text: #e9ecf2;
+    --text-2: #a7afbd;
+    --text-3: #8a93a2;
 
-    --brand: #a9b4ff;        /*  8.7:1 on --surface */
-    --brand-ink: #0a0e14;
-    --brand-soft: #1b2136;
-    --focus: #7aa2ff;
+    --accent: #a9b6ff;
+    --accent-fill: #5b57e8;
+    --accent-on: #ffffff;
+    --accent-weak: #191d33;
+    --accent-line: #343a63;
 
-    --blocking: #ffb3bd;
-    --blocking-bg: #2c1218;
-    --blocking-line: #7d3742;
+    --danger: #ffb3bf;
+    --danger-bg: #2a1119;
+    --danger-line: #6e3340;
+
+    --warn: #f3cd8e;
+    --warn-bg: #271d0c;
+    --warn-line: #6d5322;
 
     --ok: #8fe0b0;
-    --ok-bg: #0e2419;
-    --ok-line: #2f6b4c;
+    --ok-bg: #0d2318;
+    --ok-line: #2d654a;
+
+    --ring: #7aa2ff;
+
+    --shadow: 0 1px 2px rgb(0 0 0 / 40%);
   }
 }
 
-* { box-sizing: border-box; }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0b0d11;
+  --surface: #13161c;
+  --surface-2: #191d25;
+  --surface-3: #212630;
+
+  --border: #303743;
+  --border-2: #3d4554;
+  --border-strong: #79818f;
+
+  --text: #e9ecf2;
+  --text-2: #a7afbd;
+  --text-3: #8a93a2;
+
+  --accent: #a9b6ff;
+  --accent-fill: #5b57e8;
+  --accent-on: #ffffff;
+  --accent-weak: #191d33;
+  --accent-line: #343a63;
+
+  --danger: #ffb3bf;
+  --danger-bg: #2a1119;
+  --danger-line: #6e3340;
+
+  --warn: #f3cd8e;
+  --warn-bg: #271d0c;
+  --warn-line: #6d5322;
+
+  --ok: #8fe0b0;
+  --ok-bg: #0d2318;
+  --ok-line: #2d654a;
+
+  --ring: #7aa2ff;
+
+  --shadow: 0 1px 2px rgb(0 0 0 / 40%);
+}
+
+/* ============================================================================
+   BASE
+   ========================================================================= */
+
+*, *::before, *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
 
 body {
   margin: 0;
-  padding: 18px 16px 40px;
   background: var(--bg);
-  color: var(--fg);
-  font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--text);
+  font: 15px/1.55 var(--font);
   -webkit-font-smoothing: antialiased;
 }
 
-/* --- headings ------------------------------------------------------------------- */
-h1 {
-  font-size: 1.05rem;
-  font-weight: 800;
-  letter-spacing: 0.18em;
-  color: var(--brand);
-  margin: 0 0 14px;
-}
-h1:focus-visible { outline-offset: 4px; }
+main { padding: var(--s4) var(--s4) var(--s6); }
 
-h2 {
-  font-size: 1.12rem;
-  letter-spacing: -0.01em;
-  margin: 26px 0 10px;
-  padding-top: 18px;
-  border-top: 1px solid var(--border);
-}
-section:first-of-type h2 { margin-top: 4px; padding-top: 0; border-top: 0; }
-
-/* The "Question 2 of 5" eyebrow above each question. */
-h3 {
-  font-size: 0.72rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--muted);
-  margin: 0 0 8px;
-}
-
-#journey, #summary { margin: 6px 0; }
-#summary { font-weight: 600; }
-
-/* --- focus, one treatment everywhere ---------------------------------------------- */
-:focus-visible {
-  outline: 3px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: 3px;
-}
-
-/* --- how-to-answer switch --------------------------------------------------------- */
-#mode {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  margin: 0 0 16px;
-  background: var(--surface);
-}
-#mode .group-name { font-weight: 700; margin: 0 0 6px; }
-#mode .choice { display: block; margin: 6px 0; }
-
-/* --- lists ------------------------------------------------------------------------ */
-ul { padding-left: 0; list-style: none; margin: 10px 0; }
-li { margin: 8px 0; }
-#verify-results li {
-  border-left: 3px solid var(--border-strong);
-  padding-left: 12px;
-}
-
-/* --- a question ------------------------------------------------------------------- */
-.q {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-  margin: 0 0 14px;
-  background: var(--surface);
-  box-shadow: 0 1px 2px rgb(12 17 25 / 5%);
-}
-.q fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
-.q legend, .q > label {
-  display: block;
-  font-weight: 700;
-  font-size: 1.02rem;
-  line-height: 1.4;
-  margin-bottom: 10px;
-}
-.q input[type=text], .q input[type=date], .q input[type=number], .q textarea, .q select {
-  width: 100%;
-  font: inherit;
-  padding: 10px 12px;
-  color: var(--fg);
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-}
-.q textarea { min-height: 5.5rem; resize: vertical; }
-.q input[type=file] { width: 100%; font: inherit; color: var(--fg); }
-.q .choice {
-  display: block;
-  margin: 8px 0;
-  padding: 9px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-sunken);
-}
-.q .note { color: var(--muted); font-size: 0.9rem; margin: 8px 0 0; }
-.q .reuse { color: var(--muted); font-size: 0.9rem; margin: 8px 0 0; }
-
-/* Result of writing an answer into the page. The word carries it; colour reinforces. */
-.q .status {
-  margin: 12px 0 0;
-  padding: 9px 12px;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-  font-size: 0.95rem;
-}
-.q .status:empty { display: none; }
-.q .status.ok { color: var(--ok); background: var(--ok-bg); border: 1px solid var(--ok-line); }
-.q .status.fail { color: var(--blocking); background: var(--blocking-bg); border: 1px solid var(--blocking-line); }
-
-/* --- buttons ----------------------------------------------------------------------- */
-button {
-  font: inherit;
-  font-weight: 600;
-  padding: 10px 16px;
-  margin-top: 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--fg);
-  cursor: pointer;
-}
-button:hover { background: var(--surface-sunken); }
-section > button { margin-right: 8px; }
-
-/* Previous and Next belong side by side: stacked, they push the question off a short panel. */
-#pager { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-#pager button { flex: 1 1 8rem; margin-top: 0; margin-right: 0; }
-
-/* Writing the answer into the real page is the primary action on a question. */
-.q .write {
-  background: var(--brand);
-  color: var(--brand-ink);
-  border-color: var(--brand);
-  width: 100%;
-  margin-top: 14px;
-}
-.q .write:hover { filter: brightness(1.08); }
-
-/* Submitting is the one irreversible action, so it does not look like the rest. */
-#submit-app, #submit-yes {
-  background: var(--blocking-bg);
-  border-color: var(--blocking-line);
-  color: var(--blocking);
-  font-weight: 700;
-}
-#submit-confirm {
-  border: 1px solid var(--blocking-line);
-  border-left: 4px solid var(--blocking);
-  background: var(--blocking-bg);
-  border-radius: var(--radius-sm);
-  padding: 14px;
-  margin-top: 12px;
-}
-#submit-confirm #submit-question { margin: 0 0 6px; font-weight: 700; color: var(--blocking); }
-
-/* --- diagnostics -------------------------------------------------------------------- */
-details#diagnostics {
-  margin-top: 28px;
-  border-top: 1px solid var(--border);
-  padding-top: 14px;
-}
-details#diagnostics summary {
-  cursor: pointer;
-  font-weight: 600;
-  color: var(--muted);
-}
-dl { font-size: 0.9rem; margin: 10px 0 0; }
-dt { font-weight: 700; }
-dd { margin: 0 0 8px; color: var(--muted); }
-
-/* --- visually hidden, still spoken ---------------------------------------------------- */
+/* Spoken, never seen. Both live regions and the icon-button names live here. */
 .vh {
   position: absolute !important;
   width: 1px; height: 1px;
+  padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0 0 0 0);
-  white-space: nowrap;
+  white-space: nowrap; border: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* ============================================================================
+   HEADER — the one fixed thing in a column that scrolls
+   ========================================================================= */
+
+body > header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  height: 44px;
+  padding: 0 var(--s4);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+h1 {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.brand__mark {
+  flex: none;
+  width: 19px; height: 19px;
+  border-radius: 5px;
+  background: var(--accent-fill);
+  color: var(--accent-on);
+  display: grid;
+  place-items: center;
+}
+.brand__mark svg { width: 12px; height: 12px; display: block; }
+h1:focus-visible { outline-offset: 4px; }
+
+.header-spacer { flex: 1 1 auto; }
+
+/* ============================================================================
+   SECTIONS
+   ========================================================================= */
+
+section { margin-bottom: var(--s5); }
+
+h2 {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-3);
+  margin: 0 0 var(--s2);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+p { margin: 0 0 var(--s2); }
+
+/* ============================================================================
+   PRE-CHECK — the first thing read, so it carries the state
+   ========================================================================= */
+
+#journey {
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+}
+#journey:empty { display: none; }
+
+/* The scan result. One sentence, given room, because it is the answer to "can I use this
+   form" and it is what the demo is about. */
+#summary {
+  font-size: 1.02rem;
+  line-height: 1.4;
+  font-weight: 620;
+  letter-spacing: -0.008em;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent-fill);
+  border-radius: var(--r);
+  padding: var(--s3);
+  margin-bottom: var(--s3);
+  box-shadow: var(--shadow);
+}
+
+/* ============================================================================
+   BUTTONS — compact, with a hierarchy
+   ========================================================================= */
+
+/* inline-block, not flex: several buttons carry a visually hidden span naming the field
+   they act on ("Write <Full name> to page"). Inside a flex container that span splits the
+   label into two anonymous flex items and the gap opens a hole mid-sentence. */
+button {
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 550;
+  line-height: 1.15;
+  display: inline-block;
+  min-height: 30px;
+  padding: 7px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  text-align: center;
+  transition: background-color 90ms ease, border-color 90ms ease, color 90ms ease;
+}
+button:hover { background: var(--surface-2); border-color: var(--text-3); }
+button:active { background: var(--surface-3); }
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+  color: var(--text-2);
+  flex: none;
+}
+.btn-icon svg { width: 14px; height: 14px; display: block; }
+.btn-icon:hover { color: var(--text); }
+
+/* The icon shows what pressing it does, the same thing the accessible name says. */
+#theme-toggle .icon-sun { display: none; }
+#theme-toggle[data-mode="dark"] .icon-sun { display: block; }
+#theme-toggle[data-mode="dark"] .icon-moon { display: none; }
+
+/* Section-level actions sit on one wrapping row rather than stacking a short panel. */
+section > button { margin-right: var(--s2); margin-bottom: var(--s2); }
+
+/* ============================================================================
+   HOW TO ANSWER
+   ========================================================================= */
+
+#mode {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: var(--s2) var(--s3);
+  margin: 0 0 var(--s3);
+  background: var(--surface-2);
+}
+#mode .group-name {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-3);
+  margin: 0 0 6px;
+}
+#mode .choice { display: block; margin: 3px 0; font-size: 0.88rem; }
+
+/* ============================================================================
+   A QUESTION
+   ========================================================================= */
+
+.q {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: var(--s3);
+  margin: 0 0 var(--s2);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+/* "Question 2 of 13" — an eyebrow, not a heading that competes with the question. */
+.q .position {
+  font-size: 0.65rem;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-3);
+  margin: 0 0 5px;
+}
+
+.q fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.q legend, .q > label, .q .name {
+  display: block;
+  font-weight: 650;
+  font-size: 0.97rem;
+  line-height: 1.38;
+  letter-spacing: -0.005em;
+  margin-bottom: var(--s2);
+  color: var(--text);
+}
+
+.q input[type=text], .q input[type=date], .q input[type=number], .q textarea, .q select {
+  width: 100%;
+  font: inherit;
+  font-size: 0.92rem;
+  padding: 8px 10px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+}
+.q textarea { min-height: 4.5rem; resize: vertical; }
+.q input[type=file] { width: 100%; font: inherit; font-size: 0.86rem; color: var(--text-2); }
+.q input[type=file]::file-selector-button {
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-right: var(--s2);
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* Each option is a target in its own right, which matters on a narrow panel. */
+.q .choice {
+  display: block;
+  margin: 5px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  font-size: 0.92rem;
+}
+
+.q .note, .q .reuse {
+  color: var(--text-3);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  margin: 6px 0 0;
+}
+
+/* Writing the answer into the real page is the point of the card. */
+.q .write {
+  background: var(--accent-fill);
+  color: var(--accent-on);
+  border-color: var(--accent-fill);
+  width: 100%;
+  margin-top: var(--s3);
+  font-weight: 600;
+}
+.q .write:hover { filter: brightness(1.07); background: var(--accent-fill); border-color: var(--accent-fill); }
+
+/* What the page holds afterwards. The word carries it; colour only repeats it. */
+.q .status {
+  margin: var(--s2) 0 0;
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  font-size: 0.85rem;
+  font-weight: 550;
+  line-height: 1.4;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+.q .status:empty { display: none; }
+.q .status.ok { color: var(--ok); background: var(--ok-bg); border-color: var(--ok-line); }
+.q .status.fail { color: var(--danger); background: var(--danger-bg); border-color: var(--danger-line); }
+
+/* ============================================================================
+   PAGER
+   ========================================================================= */
+
+#pager { display: flex; flex-wrap: wrap; gap: var(--s2); margin: var(--s3) 0 var(--s2); }
+#pager button { flex: 1 1 7rem; margin: 0; }
+
+/* ============================================================================
+   READ-BACK
+   ========================================================================= */
+
+#verify-h + p { color: var(--text-2); font-size: 0.86rem; }
+
+#verify-results { list-style: none; padding: 0; margin: var(--s3) 0 0; }
+#verify-results:empty { display: none; }
+#verify-results li {
+  padding: 8px 10px;
+  margin: 0 0 5px;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-2);
+  border-radius: var(--r-sm);
+}
+
+/* ============================================================================
+   SUBMIT — the one thing that cannot be undone, so it does not look like the rest
+   ========================================================================= */
+
+#press-forward { background: var(--accent-fill); color: var(--accent-on); border-color: var(--accent-fill); font-weight: 600; }
+#press-forward:hover { filter: brightness(1.07); background: var(--accent-fill); border-color: var(--accent-fill); }
+
+#submit-app, #submit-yes {
+  background: var(--danger-bg);
+  border-color: var(--danger-line);
+  color: var(--danger);
+  font-weight: 650;
+}
+#submit-app:hover, #submit-yes:hover { background: var(--danger-bg); border-color: var(--danger); }
+
+#submit-confirm {
+  border: 1px solid var(--danger-line);
+  border-left: 3px solid var(--danger);
+  background: var(--danger-bg);
+  border-radius: var(--r);
+  padding: var(--s3);
+  margin-top: var(--s2);
+}
+#submit-confirm #submit-question {
+  margin: 0 0 var(--s2);
+  font-weight: 650;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  color: var(--danger);
+}
+#submit-confirm button { margin: 0 var(--s2) 0 0; }
+#submit-cancel { background: var(--surface); color: var(--text); border-color: var(--border-strong); }
+
+/* ============================================================================
+   DIAGNOSTICS
+   ========================================================================= */
+
+#diagnostics {
+  margin-top: var(--s5);
+  border-top: 1px solid var(--border);
+  padding-top: var(--s3);
+}
+#diagnostics summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-3);
+}
+#diagnostics summary:hover { color: var(--text-2); }
+dl { font-size: 0.8rem; margin: var(--s2) 0 0; }
+dt { font-weight: 700; color: var(--text-2); margin-top: 6px; }
+dd { margin: 0; color: var(--text-3); font-family: var(--mono); font-size: 0.74rem; word-break: break-word; }
+
+/* ============================================================================
+   NARROW
+   ========================================================================= */
+
+@media (max-width: 330px) {
+  main { padding-left: var(--s3); padding-right: var(--s3); }
+  body > header { padding-left: var(--s3); padding-right: var(--s3); }
+  #pager button { flex: 1 1 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; animation: none !important; }
+  *, *::before, *::after { transition: none !important; animation: none !important; }
 }

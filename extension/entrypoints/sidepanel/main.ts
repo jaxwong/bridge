@@ -6,6 +6,7 @@
 import { inferLabels } from '../../lib/infer';
 import { send, type Frame, type FormChanged, type WorkerEvent, type WorkerRequest } from '../../lib/messages';
 import { barrier } from '../../lib/rules';
+import { initTheme } from './theme';
 import type {
   ApplicationSession, Barrier, FieldDescriptor, FillResult, ScanResult, StepHint,
 } from '../../lib/types';
@@ -689,7 +690,7 @@ async function recordStep(s: StepState, scannedAt: string, newStep: boolean) {
   if (!session || session.origin !== s.origin) await loadSession(s.origin);
   const sn = session!;
   const index = s.index ?? (newStep || !sn.steps.length ? sn.steps.length + 1 : sn.currentStepIndex);
-  const scan = { url: s.url, scannedAt, fields: fields.map(({ frameId: _f, localId: _l, key: _k, ...d }) => d), pageBarriers, stepHint: s.hint };
+  const scan = { url: s.url, scannedAt, fields: fields.map(({ frameId: _f, localId: _l, key: _k, ...d }) => d), pageBarriers, stepHint: s.hint, heading: s.heading };
   const existing = sn.steps.find((r) => r.index === index);
   if (existing) Object.assign(existing, { url: s.url, label: s.heading, scan });
   else sn.steps.push({ index, url: s.url, label: s.heading, scan, status: 'current', filledFieldIds: [] });
@@ -955,6 +956,9 @@ function focusHeading() {
   window.focus();
   $('title').focus();
 }
+
+// Presentation only: sets one attribute on <html> and remembers the choice.
+initTheme($('theme-toggle'), $('theme-toggle-label'));
 
 // --- boot -----------------------------------------------------------------------------
 

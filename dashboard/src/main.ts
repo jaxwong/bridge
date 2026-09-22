@@ -6,7 +6,8 @@ import { compareLatest, countBySeverity } from './lib/compare.ts';
 import type { ComparedBarrier, Comparison } from './lib/compare.ts';
 import { groupByForm, parseReport } from './lib/report.ts';
 import type { BarrierReport, Form, Severity } from './lib/report.ts';
-import { findingsOf, summariseWcag } from './lib/wcag.ts';
+import { CRITERIA, findingsOf, summariseWcag } from './lib/wcag.ts';
+import { initTheme } from './lib/theme.ts';
 // DEMO STAND-IN. Nothing sends reports to this page yet, so it opens on one seeded report:
 // a real BRIDGE scan of the Acme Careers test form (extension/test/fixtures/acme/apply.html),
 // written by `make demo-seed` and kept equal to what the scanner reports by the extension's
@@ -38,7 +39,13 @@ const SEVERITY_WORD: Record<Severity, string> = {
   blocking: 'Blocking', usability: 'Usability', ok: 'OK',
 };
 
-const formTitle = (f: Form): string => `${f.portal}${f.pagePath}`;
+/** Where the form lives. Always available, and what identifies it across reports. */
+const formUrl = (f: Form): string => `${f.portal}${f.pagePath}`;
+
+/** What the posting calls itself, as the page gave it. A form whose page had no heading —
+ *  and any report written before postingTitle existed — falls back to its address. */
+const formTitle = (f: Form): string =>
+  f.scans[f.scans.length - 1]?.postingTitle ?? formUrl(f);
 
 // The date only, no clock time. The demo seed is captured ahead of time, so a clock time on
 // stage would read as earlier than the submit the audience just watched. The full time stays
@@ -63,7 +70,7 @@ const announce = (message: string): void => { $('live').textContent = message; }
 // --- form list -----------------------------------------------------------------------
 
 function changeSummary(c: Comparison): string {
-  if (!c.hasPrevious) return 'First scan — nothing to compare with yet';
+  if (!c.hasPrevious) return 'No earlier report';
   if (!c.new.length && !c.resolved.length) return `No change — ${c.stillOpen.length} still open`;
   const parts: string[] = [];
   if (c.new.length) parts.push(`${c.new.length} new`);
@@ -78,11 +85,11 @@ function renderList(): void {
   const forms = groupByForm(loaded);
 
   const head = el('tr', {}, [
-    el('th', { scope: 'col', text: 'Form' }),
-    el('th', { scope: 'col', text: 'Last scanned' }),
+    el('th', { scope: 'col', text: 'Job posting' }),
+    el('th', { scope: 'col', text: 'Last checked' }),
     el('th', { scope: 'col', text: 'Blocking' }),
     el('th', { scope: 'col', text: 'Usability' }),
-    el('th', { scope: 'col', text: 'Since previous scan' }),
+    el('th', { scope: 'col', text: 'Since last report' }),
   ]);
 
   const rows = forms.map((form) => {
@@ -92,7 +99,8 @@ function renderList(): void {
     const open = el('button', { type: 'button', class: 'linkish', text: formTitle(form), 'data-form-key': form.key });
     open.addEventListener('click', () => openDetail(form.key));
     return el('tr', {}, [
-      el('th', { scope: 'row' }, [open]),
+      // The posting names itself; its address is what identifies it, kept underneath.
+      el('th', { scope: 'row' }, [open, el('span', { class: 'row__url', text: formUrl(form) })]),
       el('td', {}, [when(newest.generatedAt)]),
       el('td', { class: counts.blocking ? 'count count--blocking' : 'count', text: String(counts.blocking) }),
       el('td', { class: 'count', text: String(counts.usability) }),
@@ -100,9 +108,27 @@ function renderList(): void {
     ]);
   });
 
+  // Counted from the reports on the page, never estimated: postings tracked, findings
+  // open across their newest reports, how many of those block someone outright, and how
+  // many distinct success criteria they touch.
+  const newest = forms.map((f) => f.scans[f.scans.length - 1]);
+  const allFindings = newest.flatMap((r) => findingsOf(r));
+  const criteria = new Set(allFindings.flatMap((b) => b.wcag ?? []));
+  const stat = (value: string, label: string, mod = '') =>
+    el('div', { class: `stat ${mod}`.trim() }, [
+      el('p', { class: 'stat__value', text: value }),
+      el('p', { class: 'stat__label', text: label }),
+    ]);
+  body.append(el('div', { class: 'stats' }, [
+    stat(String(forms.length), forms.length === 1 ? 'Posting tracked' : 'Postings tracked'),
+    stat(String(allFindings.length), 'Open findings'),
+    stat(String(allFindings.filter((b) => b.severity === 'blocking').length), 'Blocking', 'stat--blocking'),
+    stat(String(criteria.size), 'WCAG criteria affected'),
+  ]));
+
   const scans = totalScans(forms);
   body.append(el('table', {}, [
-    el('caption', { text: `${forms.length} ${forms.length === 1 ? 'form' : 'forms'}, from ${scans} ${scans === 1 ? 'scan' : 'scans'}.` }),
+    el('caption', { text: `${forms.length} ${forms.length === 1 ? 'posting' : 'postings'}, from ${scans} ${scans === 1 ? 'report' : 'reports'}.` }),
     el('thead', {}, [head]),
     el('tbody', {}, rows),
   ]));
@@ -127,74 +153,97 @@ function wcagLine(b: ComparedBarrier): HTMLElement {
   return line;
 }
 
+/**
+ * One finding, ordered the way the person who has to fix it reads it: what is affected,
+ * what it does to someone, what to do about it — and only then the rule id and criteria,
+ * which are for whoever files the ticket rather than for whoever decides it matters.
+ */
 function barrierItem(b: ComparedBarrier): HTMLElement {
   return el('li', { class: 'barrier' }, [
     el('p', { class: 'barrier__head' }, [
       el('span', { class: `sev sev--${b.severity}`, text: SEVERITY_WORD[b.severity] }),
-      ' ',
-      el('code', { text: b.rule }),
+      el('span', { class: 'barrier__where', text: b.scope === 'page' ? 'Affects the whole page' : `Field: ${b.label}` }),
     ]),
-    el('p', { class: 'barrier__where', text: b.scope === 'page' ? 'Affects the whole page' : `Field: ${b.label}` }),
     el('p', { class: 'barrier__impact', text: b.impact }),
     // Decided by the scanner's rule catalogue and carried in the report; the dashboard only
     // shows it. Reports from before `fix` existed have none, and show no line.
     ...(b.fix ? [el('p', { class: 'barrier__fix' }, [el('strong', { text: 'Suggested fix: ' }), b.fix])] : []),
-    wcagLine(b),
+    el('div', { class: 'barrier__meta' }, [el('code', { text: b.rule }), wcagLine(b)]),
   ]);
 }
 
 /**
- * Findings in the newest scan, counted by WCAG level and by success criterion. Counts only
- * — it says nothing about whether the form conforms, which no automated tool can decide.
+ * How the form stands against the guidelines BRIDGE checks.
+ *
+ * Every criterion the scanner reads is listed, not only the ones with findings. A table of
+ * four failing numbers answered "what did you find"; it did not answer "how does my form
+ * do", and it left the seven-criteria caveat as a run-on sentence nobody reads. Listing all
+ * of them makes the limit of the check visible instead of stated: what is on this table is
+ * what was looked at, and anything absent from it was never tested.
+ *
+ * "No findings" is not "passes", which is what the disclaimer below the table is for.
  */
 function wcagSummarySection(newest: BarrierReport): HTMLElement {
-  const s = summariseWcag(findingsOf(newest));
+  const findings = findingsOf(newest);
+  const s = summariseWcag(findings);
   const section = el('section', { class: 'wcag-summary' }, [
-    el('h3', { text: 'Automated WCAG 2.2 findings in the newest scan' }),
+    el('h3', { text: 'Accessibility check summary' }),
   ]);
 
-  // The producer says which criteria it can fail. Naming them is what stops "no finding"
-  // from reading as "passed": every other criterion was simply never tested.
-  if (newest.standard) {
-    const { name, version, level, checked } = newest.standard;
-    section.append(el('p', { class: 'wcag-checked' }, [
-      `Measured against ${name} ${version}, Level ${level}. The scanner can fail ${checked.length} criteria: `,
-      el('span', { text: checked.join(', ') }),
-      '. Any other criterion was not checked.',
-    ]));
-  }
-
   if (s.total === 0) {
-    section.append(el('p', { class: 'empty', text: 'This scan found no barriers, so there is nothing to map.' }));
+    section.append(el('p', { class: 'empty', text: 'This report found no barriers, so there is nothing to map.' }));
     return section;
   }
 
-  const levels = s.byLevel.length
-    ? s.byLevel.map((l) => `Level ${l.level}: ${l.count}`).join(' · ')
-    : 'none mapped';
-  section.append(el('p', {}, [
-    el('strong', { text: `${s.mapped} of ${s.total} findings map to a success criterion` }),
-    ` (${levels}). ${s.unmapped} with no mapping recorded.`,
-    s.reviewRequired ? ` ${s.reviewRequired} flagged for human review of the detection itself.` : '',
+  const blocking = findings.filter((b) => b.severity === 'blocking').length;
+  const usability = findings.filter((b) => b.severity === 'usability').length;
+  section.append(el('p', { class: 'summary-lead' }, [
+    el('strong', { text: `${s.total} ${s.total === 1 ? 'finding' : 'findings'} on this form` }),
+    ' — ',
+    el('strong', { class: 'lead-blocking', text: `${blocking} blocking` }),
+    ` and ${usability} usability.`,
   ]));
 
-  if (s.byCriterion.length) {
-    section.append(el('table', { class: 'wcag-table' }, [
-      el('caption', { text: 'Findings by success criterion. One finding citing two criteria is counted under each.' }),
-      el('thead', {}, [el('tr', {}, [
-        el('th', { scope: 'col', text: 'Criterion' }),
-        el('th', { scope: 'col', text: 'Level' }),
-        el('th', { scope: 'col', text: 'Findings' }),
-        el('th', { scope: 'col', text: 'From rules' }),
-      ])]),
-      el('tbody', {}, s.byCriterion.map((c) => el('tr', {}, [
-        el('th', { scope: 'row', text: c.criterion }),
-        el('td', { text: c.level }),
-        el('td', { class: 'count', text: String(c.count) }),
-        el('td', { text: c.rules.join(', ') }),
-      ]))),
+  // The producer says which criteria it can fail. Naming them all is what stops "no
+  // finding" from reading as "passed": every other criterion was simply never tested.
+  const checked = newest.standard?.checked ?? s.byCriterion.map((c) => c.criterion);
+  if (newest.standard) {
+    const { name, version, level } = newest.standard;
+    section.append(el('p', { class: 'wcag-checked' }, [
+      `Measured against ${name} ${version}, Level ${level}. BRIDGE checks the `,
+      el('span', { text: String(checked.length) }),
+      ' success criteria below. A criterion that is not on this list was not tested, so its absence from a report is not a pass.',
     ]));
   }
+
+  const found = new Map(s.byCriterion.map((c) => [c.criterion, c]));
+  section.append(el('table', { class: 'wcag-table' }, [
+    el('caption', { text: 'Findings by success criterion. One finding citing two criteria is counted under each.' }),
+    el('thead', {}, [el('tr', {}, [
+      el('th', { scope: 'col', text: 'Success criterion' }),
+      el('th', { scope: 'col', text: 'Level' }),
+      el('th', { scope: 'col', text: 'Findings' }),
+      el('th', { scope: 'col', text: 'From rules' }),
+    ])]),
+    el('tbody', {}, checked.map((id) => {
+      const hit = found.get(id);
+      const meta = CRITERIA[id];
+      return el('tr', { class: hit ? 'crit crit--hit' : 'crit crit--clear' }, [
+        el('th', { scope: 'row' }, [
+          el('span', { class: 'crit__id', text: id }),
+          ...(meta ? [el('span', { class: 'crit__name', text: meta.name })] : []),
+        ]),
+        el('td', { text: meta?.level ?? hit?.level ?? '' }),
+        el('td', { class: 'count', text: hit ? String(hit.count) : '0' }),
+        el('td', hit ? {} : { class: 'crit__none' }, [hit ? hit.rules.join(', ') : 'No findings']),
+      ]);
+    })),
+  ]));
+
+  const tail: string[] = [];
+  if (s.unmapped) tail.push(`${s.unmapped} ${s.unmapped === 1 ? 'finding is' : 'findings are'} not mapped to a criterion`);
+  if (s.reviewRequired) tail.push(`${s.reviewRequired} need a person to confirm the detection`);
+  if (tail.length) section.append(el('p', { class: 'wcag-tail', text: `${tail.join('. ')}.` }));
 
   section.append(el('p', { class: 'disclaimer', role: 'note' }, [
     el('strong', { text: 'Automated findings, not a conformance decision. ' }),
@@ -224,25 +273,29 @@ function openDetail(key: string): void {
 
   $('detail-h').textContent = formTitle(form);
 
+  // The address as a link, so the reader can open the form they are being told about.
+  // Reports without a pageUrl — older ones, or a scheme we would not link — show the
+  // address as plain text instead of a dead link.
   const meta = $('detail-meta');
-  meta.replaceChildren(
-    `${form.scans.length} ${form.scans.length === 1 ? 'scan' : 'scans'} loaded. Newest `,
-    when(newest.generatedAt),
-    previous ? ', compared with ' : ', with no earlier scan to compare against.',
-  );
-  if (previous) meta.append(when(previous.generatedAt), '.');
+  const address = newest.pageUrl
+    ? el('a', { class: 'detail-url', href: newest.pageUrl, rel: 'noreferrer' }, [formUrl(form)])
+    : el('span', { class: 'detail-url', text: formUrl(form) });
+  meta.replaceChildren(address, ' · Last checked ', when(newest.generatedAt));
+  if (previous) meta.append(', compared with ', when(previous.generatedAt));
 
   const body = $('detail-body');
+  // With nothing to compare against there is no "new" and no "resolved" — only findings.
+  // Rendering both as empty sections put two zeroes at the top of a first report and said
+  // nothing. They appear as soon as there is an earlier report to compare with.
   body.replaceChildren(
     wcagSummarySection(newest),
-    barrierSection('New since the previous scan', comparison.hasPrevious
-      ? 'Nothing new in this scan.'
-      : 'A first scan has nothing to compare with, so nothing is reported as new.',
-      comparison.new, 'bucket--new'),
-    barrierSection(comparison.hasPrevious ? 'Still open' : 'Open', 'No barriers.', comparison.stillOpen),
-    barrierSection('Resolved', comparison.hasPrevious
-      ? 'Nothing was resolved since the previous scan.'
-      : 'Nothing to compare with yet.', comparison.resolved, 'bucket--resolved'),
+    ...(comparison.hasPrevious
+      ? [
+        barrierSection('New since the previous report', 'Nothing new in this report.', comparison.new, 'bucket--new'),
+        barrierSection('Still open', 'No barriers.', comparison.stillOpen),
+        barrierSection('Resolved', 'Nothing was resolved since the previous report.', comparison.resolved, 'bucket--resolved'),
+      ]
+      : [barrierSection('Open', 'No barriers.', comparison.stillOpen)]),
   );
 
   $('list-view').hidden = true;
@@ -269,5 +322,6 @@ function render(): void {
 // --- wiring ---------------------------------------------------------------------------
 
 $('back').addEventListener('click', closeDetail);
+initTheme($('theme-toggle'), $('theme-toggle-label'));
 
 render();

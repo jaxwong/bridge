@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="BRIDGE">
+  <!-- Single-colour version: the glyph alone, no tile. Takes the colour of whatever it is
+       placed on via currentColor, or set fill/stroke directly. -->
+  <g fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round">
+    <path d="M6 42.2h52"/>
+    <path d="M19.5 17v30"/>
+    <path d="M44.5 17v30"/>
+    <path d="M19.5 19.6q12.5 13.6 25 0"/>
+  </g>
+</svg>

@@ -47,6 +47,12 @@ export interface BarrierReport {
   portal: string;
   /** Pathname only — no query string. §6.7 explains why. */
   pagePath: string;
+  /** What the posting calls itself, read from the page by the scanner. Absent on a form
+   *  with no heading, and on reports written before it existed; the list falls back to
+   *  the address. */
+  postingTitle?: string;
+  /** The address actually scanned, scheme included, for linking. Absent on older reports. */
+  pageUrl?: string;
   generatedAt: string;
   standard?: Standard;
   barriers: ReportBarrier[];
@@ -147,9 +153,25 @@ export function parseReport(raw: unknown, source: string): BarrierReport {
     if (!Array.isArray(r[k])) fail(source, `"${k}" is ${r[k] === undefined ? 'missing' : 'not an array'}`);
   }
 
+  if (r.postingTitle !== undefined && (typeof r.postingTitle !== 'string' || !r.postingTitle)) {
+    fail(source, '"postingTitle" is present but not a non-empty string');
+  }
+  // Only http(s) is rendered as a link. Anything else is dropped rather than put in an
+  // href: the report comes from another process, and a javascript: URL in a link is not
+  // something to hand to whoever clicks it.
+  let pageUrl: string | undefined;
+  if (r.pageUrl !== undefined) {
+    if (typeof r.pageUrl !== 'string' || !r.pageUrl) fail(source, '"pageUrl" is present but not a non-empty string');
+    try {
+      const u = new URL(r.pageUrl);
+      if (u.protocol === 'http:' || u.protocol === 'https:') pageUrl = u.href;
+    } catch { /* not a URL: no link, the address is still shown as text */ }
+  }
   const report: BarrierReport = {
     portal: r.portal as string,
     pagePath: r.pagePath as string,
+    ...(typeof r.postingTitle === 'string' && r.postingTitle ? { postingTitle: r.postingTitle } : {}),
+    ...(pageUrl ? { pageUrl } : {}),
     generatedAt: r.generatedAt as string,
     barriers: (r.barriers as unknown[]).map((b, i) => parseBarrier(b, source, `barriers[${i}]`, true)),
     pageBarriers: (r.pageBarriers as unknown[]).map((b, i) => parseBarrier(b, source, `pageBarriers[${i}]`, false)),

@@ -8,7 +8,16 @@
   </head>
   <body>
     <header>
-      <h1 id="title" tabindex="-1">BRIDGE</h1>
+      <h1 id="title" tabindex="-1">
+        <span class="brand__mark" aria-hidden="true">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.1"
+               stroke-linecap="round">
+            <path d="M2.5 13.2h15" />
+            <path d="M6.4 5V16.5" />
+            <path d="M13.6 5V16.5" />
+            <path d="M6.4 5.8q3.6 5.2 7.2 0" />
+          </svg>
+        </span>BRIDGE</h1>
       <!-- The two live regions (spec §6.6). Everything spoken goes through one of them.
            "live" is polite, for news from the page (a step changed, questions appeared):
            it waits for a pause. "live-now" is assertive, for the answer to the user's own
@@ -18,6 +27,19 @@
            rendering them printed the same sentence twice. -->
       <p id="live" class="vh" role="status" aria-live="polite"></p>
       <p id="live-now" class="vh" role="alert" aria-live="assertive"></p>
+      <span class="header-spacer"></span>
+      <button type="button" id="theme-toggle" class="btn-icon">
+        <span class="vh" id="theme-toggle-label">Switch to dark theme</span>
+        <svg class="icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+             stroke-linecap="round" aria-hidden="true" focusable="false">
+          <circle cx="8" cy="8" r="3.1" />
+          <path d="M8 1v1.6M8 13.4V15M15 8h-1.6M2.6 8H1M12.9 3.1l-1.1 1.1M4.2 11.8l-1.1 1.1M12.9 12.9l-1.1-1.1M4.2 4.2L3.1 3.1" />
+        </svg>
+        <svg class="icon-moon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <path d="M13.5 9.6A5.8 5.8 0 0 1 6.4 2.5a5.9 5.9 0 1 0 7.1 7.1Z" />
+        </svg>
+      </button>
     </header>
 
     <main>

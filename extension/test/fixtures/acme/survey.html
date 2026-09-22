@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Acme Careers — equal opportunities</title>
+<style>
+  body { font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif; margin: 10px; color: #101826; }
+  p { margin: 0 0 8px; font-weight: 650; }
+  label { display: inline-flex; align-items: center; gap: 6px; margin-right: 14px; }
+</style></head>
+<body>
+  <!-- Served from 127.0.0.1, which is a different origin from localhost and is not in the
+       extension's host_permissions. BRIDGE cannot read anything in here — that is the
+       point of this frame, and it reports the frame as unreachable rather than pretending
+       the questions inside do not exist.
+
+       Its content is therefore never scanned, never filled and never asserted on. It is
+       here only so the frame shows what its title says it shows: the cross-origin frame
+       used to load frame.html, which put a second "Referral code" on the page. -->
+  <form>
+    <p>Do you consider yourself to have a disability?</p>
+    <label><input type="radio" name="disability" value="yes"> Yes</label>
+    <label><input type="radio" name="disability" value="no"> No</label>
+    <label><input type="radio" name="disability" value="decline"> Prefer not to say</label>
+  </form>
+</body>
+</html>
