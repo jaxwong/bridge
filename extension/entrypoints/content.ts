@@ -157,7 +157,7 @@ export default defineContentScript({
           if (!h || !el || readValue(h)) return null;
           el.scrollIntoView({ block: 'center' });
           const r = (el.parentElement || el).getBoundingClientRect();
-          const rect: CropRect = { x: r.x, y: r.y, width: r.width, height: r.height, dpr: devicePixelRatio };
+          const rect: CropRect = { x: r.x, y: r.y, width: r.width, height: r.height, viewportWidth: innerWidth };
           return rect;
         }
       }

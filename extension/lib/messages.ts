@@ -51,7 +51,16 @@ export interface ReadBack { changed: boolean; fields: ReadBackResult[] }
 export interface ForwardAction { name: string; submits: boolean; pressed: boolean }
 
 /** Where an unlabelled, still-empty control sits in the viewport, in CSS pixels. */
-export interface CropRect { x: number; y: number; width: number; height: number; dpr: number }
+/**
+ * A crop rectangle in CSS pixels, plus the width of the viewport they were measured in.
+ *
+ * The viewport width is what turns the rectangle into image pixels. It is deliberately
+ * not devicePixelRatio: captureVisibleTab photographs at the window's backing scale,
+ * which is not always the ratio the page reports, and when the two disagree every crop
+ * lands on the wrong part of the screenshot. Dividing the captured width by this gives
+ * the scale that was actually used, whatever it was.
+ */
+export interface CropRect { x: number; y: number; width: number; height: number; viewportWidth: number }
 
 /** A frame BRIDGE has permission to run in. Frames it cannot reach are simply absent. */
 export interface Frame { frameId: number; origin: string }

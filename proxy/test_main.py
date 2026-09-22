@@ -101,6 +101,9 @@ def test_two_fields_one_model_call_labels_in_request_order(http, monkeypatch):
     # DeepSeek JSON mode needs all three: response_format, the word "json" in the prompt, max_tokens.
     assert call["response_format"] == {"type": "json_object"}
     assert isinstance(call["max_tokens"], int)
+    # Greedy decoding: two identical requests must produce the same wording, because the
+    # dashboard treats a differently-worded label as a different question.
+    assert call["temperature"] == 0
     assert [message["role"] for message in call["messages"]] == ["system", "user"]
     assert "json" in call["messages"][0]["content"]
     sent_text = "".join(part["text"] for part in call["messages"][1]["content"] if part["type"] == "text")
