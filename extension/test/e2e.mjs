@@ -67,7 +67,9 @@ const extId = new URL(sw.url()).host;
 async function open(pathname) {
   const page = await ctx.newPage();
   await page.goto(`http://localhost:8765/${pathname}`);
-  const tabId = await sw.evaluate(async (u) => (await chrome.tabs.query({})).find((t) => t.url === u)?.id, page.url());
+  // The LAST matching tab: sections never close their pages, so a second visit to the
+  // same fixture URL must not bind the new panel to an earlier section's stale tab.
+  const tabId = await sw.evaluate(async (u) => (await chrome.tabs.query({})).filter((t) => t.url === u).at(-1)?.id, page.url());
   const panel = await ctx.newPage();
   await panel.goto(`chrome-extension://${extId}/sidepanel.html?tabId=${tabId}`);
   await panel.waitForFunction(() => !document.getElementById('summary').textContent.startsWith('Scanning'), null, { timeout: 15000 });
@@ -416,8 +418,9 @@ try {
 
     await panel.click('#submit-app');
     said = await spoken(panel, /Submit your application to localhost/);
-    check('submit: the button asks first, names the site and the empty questions, and puts focus on Cancel',
-      await panelFocus() === 'submit-cancel' && /cannot be undone/.test(said) && /\d+ questions? (is|are) empty/.test(said) && !(await submitted()), said);
+    check('submit: the button asks first, names the site, the step scope, and each empty question by name',
+      await panelFocus() === 'submit-cancel' && /cannot be undone/.test(said) &&
+      /\d+ questions? on this step (is|are) empty: [A-Z]/.test(said) && !(await submitted()), said);
     await panel.click('#submit-cancel');
     said = await spoken(panel, /Nothing was submitted/);
     check('submit: Cancel submits nothing, closes the question, and returns focus',
@@ -549,6 +552,25 @@ try {
     check('export: a one-step form has pageBarriers, no steps, and no step numbers',
       report.pageBarriers.length === 1 && report.pageBarriers[0].rule === 'drag-drop-only' && !('steps' in report) && !('step' in report.pageBarriers[0]),
       JSON.stringify(report).slice(0, 300));
+  });
+
+  // =====================================================================================
+  // Going back a step: the panel presses the page's own Back button, mirror of forward.
+  // =====================================================================================
+  await section('going back a step', async () => {
+    const { page, panel } = await open('modal.html');
+    await page.getByRole('button', { name: 'Easy Apply' }).click();
+    check('back: the dialog step is announced', await arrives(spoken(panel, /Step 1 of 3/)), await panel.textContent('#live'));
+    await panel.getByRole('button', { name: 'Go back to the previous step' }).click();
+    check('back: a step with no Back button is said honestly',
+      await arrives(spoken(panel, /could not find a Back or Previous button/)), await panel.textContent('#live'));
+    await page.getByRole('button', { name: 'Next' }).click();
+    check('back: step 2 reached', await arrives(spoken(panel, /Step 2 of 3/)), await panel.textContent('#live'));
+    await panel.getByRole('button', { name: 'Go back to the previous step' }).click();
+    check('back: the press is announced', await arrives(spoken(panel, /BRIDGE pressed the Back button on the page/)), await panel.textContent('#live'));
+    check('back: the page returns to the previous step and the change is announced',
+      await arrives(spoken(panel, /Step 1 of 3/)), await panel.textContent('#live'));
+    check('back: nothing was submitted by going back', (await page.textContent('#result')) === '');
   });
 
   // =====================================================================================

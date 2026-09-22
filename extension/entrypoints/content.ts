@@ -10,6 +10,7 @@ import type { ReadBackResult, ScanResult } from '../lib/types';
 const FORWARD = /\b(submit|continue|next|review|apply|send)\b/i;
 const NOT_FORWARD = /\b(back|previous|cancel|close|dismiss|save draft)\b/i;
 const SUBMITS = /\b(submit|apply|send)\b/i;
+const BACKWARD = /\b(back|previous)\b/i;
 
 export default defineContentScript({
   matches: [
@@ -80,6 +81,19 @@ export default defineContentScript({
       return { name: hit.name, submits: true, pressed: true };
     }
 
+    /** The step's back button, first in page order (forms put Back before Next). Its name
+     *  must say it goes back and must not match FORWARD, so this can never press anything
+     *  that submits or moves on. input[type=submit] is excluded outright. */
+    function backAction(): ForwardAction | null {
+      const hit = deepQueryAll<HTMLElement>(formScope(), 'button,input[type=button],[role=button],a[href]')
+        .filter((b) => visible(b) && !(b as HTMLButtonElement).disabled)
+        .map((b) => ({ b, name: accName(b).name || clean(b.textContent) || (b as HTMLInputElement).value || '' }))
+        .find(({ name }) => BACKWARD.test(name) && !FORWARD.test(name));
+      if (!hit) return null;
+      hit.b.click();
+      return { name: hit.name, submits: false, pressed: true };
+    }
+
     async function handle(msg: Request): Promise<unknown> {
       switch (msg.type) {
         case 'bridge/ping':
@@ -128,6 +142,9 @@ export default defineContentScript({
 
         case 'bridge/submit':
           return submitApplication();
+
+        case 'bridge/back-action':
+          return backAction();
 
         case 'bridge/rect': {
           // For a label-inference crop (§6.4). Field values never leave the device, so a
