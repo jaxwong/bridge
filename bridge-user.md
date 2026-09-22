@@ -101,10 +101,10 @@ Each page control gets a native, correctly labelled equivalent in the side panel
 
 | Page control | Side panel control |
 |---|---|
-| Custom / visual slider | `<input type="number">` with min, max, step from the widget |
+| Custom / visual slider | `<input type="number">`; the widget's range stated in its description, never as min/max attributes (VoiceOver speaks a number input with min and max as a percentage of the range — 4 in 0..10 is "40%"). The page's control clamps what ACT writes and the read-back reports what it holds |
 | Div-based dropdown | Native `<select>` with the extracted options |
 | Drag-and-drop uploader | Native `<input type="file">` |
-| Custom date picker | Native `<input type="date">` |
+| Custom date picker | Plain text input, "Year-month-day, like 2026-10-31" as its description, checked in the panel before anything is sent (VoiceOver speaks Chrome's `type=date` segments as steppers with percentages — an empty Day is "-3.3%"). ACT still receives ISO |
 | Unlabelled text input | `<input>` with the inferred label, marked "label inferred" |
 
 Two modes: **one question at a time** (default, conversational) and **full list** (for users who want to review everything).
@@ -563,7 +563,18 @@ BRIDGE is useless if BRIDGE itself is inaccessible.
 
 - Native HTML elements only. Proper `<h1>`–`<h3>` structure so users can navigate by heading.
 - One `aria-live="polite"` region for status ("Slider set to 2 years", "Could not fill Start date").
-- Visible and programmatic focus management: focus moves into the panel on open, to the next question after each answer.
+  It is visually hidden: announcements often repeat what the UI already shows, so rendering
+  them printed the same sentence twice. And it stays silent on open: a freshly loaded panel
+  is read by the screen reader once, top to bottom — heading, journey, summary, questions —
+  and announcing over that pass made VoiceOver interrupt it and repeat the summary (heard
+  three times, 2026-09-22). The known cost: if a scan outlives VoiceOver's read of the
+  summary line, the user hears "Scanning the page…" and must re-read or rescan; on the
+  fixtures the scan wins by a wide margin.
+- Visible and programmatic focus management: focus moves into the panel on open. It never
+  moves on a write: a screen reader speaks whatever receives focus before a polite
+  announcement, so auto-advancing introduced the next question before confirming the one
+  just answered (2026-09-22). The confirmation says how to move on instead — Tab in the
+  full list, the Next question button in one-at-a-time.
 - Zero axe violations on the panel.
 - Tested end to end with NVDA on Windows before demo.
 
@@ -871,8 +882,8 @@ enable BRIDGE on this site", shown only when the origin is not in the built-in l
 calling `permissions.request` synchronously inside the click and then asking the service
 worker to `registerContentScripts`; the on-load announcement per the decision above.
 
-Verify: both modes render the same questions; a write in one-question mode moves focus
-to the next question's control; a second file question on `modal.html` step 3 shows the
+Verify: both modes render the same questions; a write leaves focus on the Write button
+and the confirmation says how to move on; a second file question on `modal.html` step 3 shows the
 reuse button and writes the stored CV; the exported JSON parses, has no field values
 and no identity, and its keys match `bridge-business.md` §6.1; the fixture page's
 injected status region reads "BRIDGE found N barriers on this form" about a second after
@@ -964,9 +975,11 @@ slider itself, kept because it demos well (§7).
 2. BRIDGE's status region says "BRIDGE found 12 accessibility barriers on this form. Press
    Alt+Shift+B to open BRIDGE." The panel then says 13: the extra one is the cross-origin
    frame, which only the panel can know is unreachable.
-   Press it. The panel opens, announces "13 questions found. 13 accessibility barriers, 9
-   blocking", and asks the first question.
-3. Answer "Full name". BRIDGE confirms from the page and moves to the next question.
+   Press it. The panel opens and VoiceOver reads it once, in order: "BRIDGE", "Application
+   pre-check", "13 questions found. 13 accessibility barriers, 9 blocking", then the first
+   question. Nothing is announced over that pass and nothing is spoken twice.
+3. Answer "Full name". BRIDGE confirms from the page — heard in full, since focus stays
+   put — and says how to reach the next question.
 4. "Highest education completed, label inferred": choose Bachelor's. Split screen: the
    page's dropdown shows Bachelor's.
 5. The visa question, now a real group: choose No. The page's radio is checked.

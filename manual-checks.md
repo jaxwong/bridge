@@ -116,8 +116,9 @@ yet written to the page is lost. Everything written is on the page and is read b
 **Still to do**
 
 4. Close the panel. Turn VoiceOver on (**Cmd+F5**). Click in **Full name**, press
-   **Alt+Shift+B**, and listen. *Expect:* "BRIDGE, heading level 1", then the summary. With
-   VoiceOver's default settings it then reads the whole panel; **Control** stops it (check 6,
+   **Alt+Shift+B**, and listen. *Expect:* "BRIDGE, heading level 1"; with VoiceOver's
+   default settings it then reads the whole panel once, in order — the summary is heard
+   there, once, and nothing is announced over the reading. **Control** stops it (check 6,
    "Before you start", explains the setting).
 
 **Write down**
@@ -372,16 +373,18 @@ caption panel.
 7. **One question at a time.** Tab from the mode group onward.
    *Expect:* only **one** question is reachable. The other twelve must not be spoken at all.
 8. **Full name.** Type a name. Tab to **"Write Full name to page"**. Press Space.
-   *Expect:* "Full name: … Confirmed on the page. Next: Phone." and focus on the Phone box.
+   *Expect:* "Full name: … Confirmed on the page. Press Next question for Phone." — heard
+   in full, in that order, with focus staying on the Write button. Nothing about Phone is
+   spoken before the confirmation.
 9. Use **"Next question"** to reach each of these. Write down the announced name and role.
 
    | Question | Panel control | Listen for |
    |---|---|---|
    | Highest education completed | pop-up button | "(label inferred)" is spoken. Five options |
-   | Years of experience | number field | whether 0 to 10 is announced |
+   | Years of experience | number field | its description "From 0 to 10", and the value spoken as the number itself — "4", never "40%" |
    | The visa question | radio group | the question is spoken as the group's name, the options as **"Yes"** and **"No"** |
    | Language skills | checkbox group | the group's name is "Language skills" |
-   | Earliest start date | date field | Chrome's date field has three parts. Note whether you could set all three |
+   | Earliest start date | text field | *Expect:* its description says "Year-month-day, like 2026-10-31" — no stepper, no percentages. A wrong format is refused with that sentence |
    | CV, "Drag and drop your CV here" | file button | Space opens the macOS file picker. Note whether you could choose a file with the curtain on |
    | Notice period | text field | after Write: **"Could not fill Notice period."** plus the reason |
    | I agree to the privacy notice | checkbox | |
