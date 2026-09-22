@@ -186,17 +186,37 @@ function buildQuestion(f: PanelField): HTMLElement {
       ctl.rows = 4;
     } else {
       const inp = document.createElement('input');
-      inp.type = ({ checkbox: 'checkbox', file: 'file', slider: 'number', date: 'date' } as Record<string, string>)[f.kind] || 'text';
-      if (f.kind === 'slider' && f.range) {
-        inp.min = String(f.range.min);
-        inp.max = String(f.range.max);
-        inp.step = String(f.range.step);
-      }
+      // Dates are a text input, not type=date: VoiceOver speaks Chrome's date segments
+      // as steppers with percentages (an empty Day is "-3.3%"). The format is described
+      // below and checked in write(), and the page still receives the same ISO string.
+      inp.type = ({ checkbox: 'checkbox', file: 'file', slider: 'number' } as Record<string, string>)[f.kind] || 'text';
       ctl = inp;
     }
     ctl.id = ctlId;
     if (f.required) ctl.setAttribute('aria-required', 'true');
     if (f.kind === 'checkbox') wrap.append(ctl, lab); else wrap.append(lab, ctl);
+
+    if (f.kind === 'date') {
+      const note = document.createElement('p');
+      note.className = 'note';
+      note.id = `note-${ctlId}`;
+      note.textContent = 'Year-month-day, like 2026-10-31.';
+      ctl.setAttribute('aria-describedby', note.id);
+      wrap.append(note);
+    }
+
+    if (f.kind === 'slider' && f.range) {
+      // The range is a description, never min/max attributes: VoiceOver reads a number
+      // input with min and max as a percentage of the range ("4" in 0..10 is spoken
+      // "40%"). The page's own control clamps what ACT writes, and the read-back reports
+      // what it actually holds, so the panel loses nothing by not validating here.
+      const note = document.createElement('p');
+      note.className = 'note';
+      note.id = `note-${ctlId}`;
+      note.textContent = `From ${f.range.min} to ${f.range.max}${f.range.step !== 1 ? `, in steps of ${f.range.step}` : ''}.`;
+      ctl.setAttribute('aria-describedby', note.id);
+      wrap.append(note);
+    }
 
     if (f.kind === 'combobox' && !hasOptions) {
       const note = document.createElement('p');
@@ -319,6 +339,13 @@ async function write(key: string, given: string | null) {
     firstControl(key)?.focus();
     return;
   }
+  // The boundary check for the plain-text date control above: the page-side fill expects
+  // exactly this shape, so a wrong format fails here, named, instead of on the page.
+  if (f.kind === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(answer)) {
+    announce(`Type ${nameOf(f)} as year-month-day, like 2026-10-31.`);
+    firstControl(key)?.focus();
+    return;
+  }
 
   let res: FillResult;
   try {
@@ -346,9 +373,14 @@ async function write(key: string, given: string | null) {
 
   const i = fields.findIndex((x) => x.key === key);
   const next = fields[i + 1];
-  announce(`${nameOf(f)}: ${res.readBack}. Confirmed on the page.${remembered}${next ? ` Next: ${nameOf(next)}.` : ' That was the last question.'}`);
-  // Focus moves to the next question after each answer (§6.6).
-  if (next) goTo(next.key); else $('verify').focus();
+  // Focus stays on the Write button (§6.6): a screen reader speaks whatever gets focus
+  // before a polite announcement, so moving to the next question here made VoiceOver
+  // introduce question 8 first and only then confirm question 7. The user moves on
+  // themselves; the announcement says how.
+  const onward = next
+    ? (mode === 'one' ? ` Press Next question for ${nameOf(next)}.` : ` Next: ${nameOf(next)}.`)
+    : ' That was the last question.';
+  announce(`${nameOf(f)}: ${res.readBack}. Confirmed on the page.${remembered}${onward}`);
 }
 
 async function rememberCv(cv: StoredCv): Promise<string> {
@@ -655,7 +687,11 @@ async function scanOnce(reason: Reason) {
   void offerAlwaysEnable(now.origin);
 
   if (verdict === 'first') {
-    announce(`${journey ? `${journey} ` : ''}${summaryText()}`);
+    // On open, announce nothing: the panel is a freshly loaded document, so a screen
+    // reader reads it once, top to bottom — heading, journey, this same summary, the
+    // questions. Announcing on top of that made VoiceOver interrupt the pass and speak
+    // the summary again (heard three times with the live region's own text).
+    if (reason !== 'open') announce(`${journey ? `${journey} ` : ''}${summaryText()}`);
     if (mode === 'one' && fields.length && reason !== 'open') firstControl(fields[0].key)?.focus();
   } else if (verdict === 'new-step') {
     const where = journey || (now.total === 1 ? `New page: ${now.heading}.` : `New step: ${now.heading}. Total number of steps unknown.`);

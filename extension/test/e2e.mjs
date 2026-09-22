@@ -119,10 +119,10 @@ try {
   await panel.getByRole('button', { name: 'Previous question' }).click();
   await panel.getByLabel('Full name').fill('Z. Wei');
   await panel.getByRole('button', { name: 'Write Full name to page' }).click();
-  await spoken(panel, /Full name: Z\. Wei\. Confirmed on the page\. Next: Phone/);
-  check('one-question mode: a confirmed answer advances to the next question',
-    (await panel.locator('#questions .q:visible h3').textContent()) === 'Question 2 of 13' &&
-    await panel.evaluate(() => document.activeElement?.tagName) === 'INPUT');
+  await spoken(panel, /Full name: Z\. Wei\. Confirmed on the page\. Press Next question for Phone/);
+  check('one-question mode: a confirmed answer stays put, so the confirmation is heard before anything new',
+    (await panel.locator('#questions .q:visible h3').textContent()) === 'Question 1 of 13' &&
+    await panel.evaluate(() => document.activeElement?.textContent) === 'Write Full name to page');
 
   // Most of this run answers questions out of order, so it uses the full list. The
   // default, one question at a time, has its own section below.
@@ -176,12 +176,11 @@ try {
   await status('Full name').filter({ hasText: /On the page: Zheng Wei|Could not/ }).waitFor();
   check('text: written to the page', await page.inputValue('#name') === 'Zheng Wei');
   check('text: panel reports the DOM read-back', /On the page: Zheng Wei/.test(await status('Full name').textContent()));
-  // Page order: the question after "Full name" is Phone.
-  const focusedLabel = await panel.evaluate(() => {
-    const a = document.activeElement;
-    return a?.id ? document.querySelector(`label[for="${a.id}"]`)?.textContent || '' : '';
-  });
-  check('focus moves to the NEXT question on the page after an answer', /Phone/.test(focusedLabel), focusedLabel);
+  // Focus never moves on a write: the confirmation must be heard before anything new is
+  // spoken, and a screen reader speaks whatever receives focus first.
+  check('focus stays on the Write button after an answer',
+    await panel.evaluate(() => document.activeElement?.textContent) === 'Write Full name to page',
+    await panel.evaluate(() => document.activeElement?.textContent));
 
   await panel.getByLabel(/Highest education/).selectOption("Bachelor's");
   await panel.getByRole('button', { name: /Write Highest education/ }).click();
@@ -201,6 +200,9 @@ try {
   check('re-rendered field: found again by name and written', await page.inputValue('.rerendered input[name=phone]') === '+65 8000 0000',
     await status('Phone').textContent());
 
+  check('slider: the range is a description, never min/max (VoiceOver speaks those as a percentage)',
+    await panel.locator('#questions input[type=number][max]').count() === 0 &&
+    (await panel.locator('#questions .q', { hasText: 'Years of experience' }).locator('.note').textContent()) === 'From 0 to 10.');
   await panel.getByLabel(/Years of experience/).fill('2');
   await panel.getByRole('button', { name: /Write Years of experience/ }).click();
   await status('Years of experience').filter({ hasText: /On the page|Could not/ }).waitFor();
@@ -218,6 +220,12 @@ try {
   await panel.getByRole('button', { name: /Write Language skills/ }).click();
   await page.waitForFunction(() => !document.querySelector('input[name=lang][value=zh]').checked, null, { timeout: 5000 }).catch(() => {});
   check('checkbox group: a second write unticks what was removed', await langState() === 'true,false,false');
+
+  await panel.getByLabel('Earliest start date').fill('31/10/2026');
+  await panel.getByRole('button', { name: 'Write Earliest start date to page' }).click();
+  check('date: a wrong format is refused at the panel, named, and nothing reaches the page',
+    /Type Earliest start date as year-month-day/.test(await spoken(panel, /year-month-day/)) &&
+    await page.inputValue('#start-date') === '');
 
   await panel.getByLabel('Earliest start date').fill('2026-10-01');
   await panel.getByRole('button', { name: 'Write Earliest start date to page' }).click();
@@ -459,8 +467,11 @@ try {
   // =====================================================================================
   await section('full-navigation journey', async () => {
     const { page, panel, tabId } = await open('steps/1.html');
-    let said = await spoken(panel, /Step 1 of 3/);
-    check('full-nav: the journey is read from the page\'s stepper', /Step 1 of 3: My Information\. Next: My Experience\./.test(said), said);
+    // Opening announces nothing (the freshly loaded panel is read once, in order), so the
+    // journey is checked where a reader finds it: rendered above the summary.
+    const journey = await panel.textContent('#journey');
+    check('full-nav: the journey is read from the page\'s stepper', /Step 1 of 3: My Information\. Next: My Experience\./.test(journey), journey);
+    let said;
     await panel.getByLabel('First name').fill('Zheng Wei');
     await page.getByRole('button', { name: 'Save and Continue' }).click();
     said = await spoken(panel, /Step 2 of 3/);
@@ -489,6 +500,10 @@ try {
   await section('uploaders', async () => {
     // The query string is how the employer demo versions one form (Acme ?v=2, ?v=3).
     const { page, panel } = await open('uploaders.html?v=3');
+    // Give a would-be scan announcement (60 ms debounce) time to land before asserting silence.
+    await new Promise((r) => setTimeout(r, 300));
+    check('opening the panel announces nothing: the panel itself is read once, top to bottom',
+      (await panel.textContent('#live')) === '', await panel.textContent('#live'));
     const [dl] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as JSON' }).click()]);
     const report = JSON.parse(readFileSync(await dl.path(), 'utf8'));
     const listed = [...report.pageBarriers, ...report.barriers].map((b) => b.impact);

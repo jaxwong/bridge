@@ -9,8 +9,10 @@
   <body>
     <header>
       <h1 id="title" tabindex="-1">BRIDGE</h1>
-      <!-- The one live region (spec §6.6). Everything spoken goes through it. -->
-      <p id="live" role="status" aria-live="polite"></p>
+      <!-- The one live region (spec §6.6). Everything spoken goes through it. Visually
+           hidden: announcements often repeat what the UI already shows (the scan summary),
+           so rendering them printed the same sentence twice. -->
+      <p id="live" class="vh" role="status" aria-live="polite"></p>
     </header>
 
     <main>
