@@ -49,8 +49,11 @@ try {
 
   const axeScan = async (label) => {
     await page.evaluate(AXE);
+    // Naming the element matters more than counting: a contrast failure is unfixable from
+    // a tally, and dark mode in particular fails on one token at a time.
     const violations = await page.evaluate(async () =>
-      (await window.axe.run(document)).violations.map((v) => `${v.id} x${v.nodes.length}`));
+      (await window.axe.run(document)).violations.flatMap((v) =>
+        v.nodes.map((n) => `${v.id} @ ${n.target.join(' ')} — ${(n.any[0]?.message || '').slice(0, 90)}`)));
     check(`axe: zero violations — ${label}`, violations.length === 0, violations.join(', ') || 'none');
   };
 
@@ -207,6 +210,21 @@ try {
     /Still open \(2\)/.test(still) &&
     /New since the previous scan \(1\)/.test(await page.locator('.bucket', { hasText: 'New since' }).textContent()));
   await axeScan('form detail with WCAG findings');
+
+  // --- dark mode is a second set of colours, so it needs its own contrast pass ---------
+  // The palette defines every token twice. axe only measures what is rendered, so a dark
+  // theme that was never scanned is a theme whose contrast nobody checked.
+  await page.emulateMedia({ colorScheme: 'dark' });
+  // Let the new palette paint before measuring it.
+  await page.waitForTimeout(200);
+  await axeScan('form detail, dark mode');
+  await page.getByRole('button', { name: 'Back to all forms' }).click();
+  await page.waitForSelector('#list-view:not([hidden])');
+  await axeScan('form list, dark mode');
+  check('dark mode is the page\'s own palette, not a browser inversion',
+    await page.evaluate(() => getComputedStyle(document.body).backgroundColor) !== 'rgb(247, 249, 252)',
+    await page.evaluate(() => getComputedStyle(document.body).backgroundColor));
+  await page.emulateMedia({ colorScheme: 'light' });
 
   // --- the whole page is reachable from the keyboard ----------------------------------
   const reachable = await page.evaluate(() => {

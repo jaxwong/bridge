@@ -401,10 +401,22 @@ try {
   check('BRIDGE did not submit the form', (await page.textContent('#result')) === '');
 
   // --- the panel itself is accessible (§6.6) ----------------------------------------
-  await panel.evaluate(AXE);
-  const axe = await panel.evaluate(async () => (await window.axe.run(document)).violations
-    .map((v) => `${v.id} (${v.nodes.length})`));
-  check('side panel: zero axe violations', axe.length === 0, axe.join(', ') || 'none');
+  // Naming the element beats counting: a contrast failure cannot be fixed from a tally.
+  const axeViolations = async () => {
+    await panel.evaluate(AXE);
+    return panel.evaluate(async () => (await window.axe.run(document)).violations.flatMap((v) =>
+      v.nodes.map((n) => `${v.id} @ ${n.target.join(' ')} — ${(n.any[0]?.message || '').slice(0, 80)}`)));
+  };
+  const axe = await axeViolations();
+  check('side panel: zero axe violations', axe.length === 0, axe.join(' ; ') || 'none');
+
+  // The panel defines every colour twice, for light and dark. axe measures what is
+  // rendered, so a dark theme that is never scanned is a theme nobody checked.
+  await panel.emulateMedia({ colorScheme: 'dark' });
+  await panel.waitForTimeout(200);
+  const axeDark = await axeViolations();
+  check('side panel: zero axe violations in dark mode', axeDark.length === 0, axeDark.join(' ; ') || 'none');
+  await panel.emulateMedia({ colorScheme: 'light' });
 
   // --- a full page load (§4): the content script is gone, the panel notices by itself ---
   await page.reload();
