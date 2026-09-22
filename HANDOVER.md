@@ -2,10 +2,16 @@
 
 How the applicant side and the business side connect, and what each owes the other.
 
-**The whole link is one JSON file**, exported by the applicant, loaded by a business user.
-There is no server between them, no API, no automated scanning, and no network call in
-either direction. The format is [`bridge-user.md`](bridge-user.md) §6.7 and that section owns
-it — change it there, not in the dashboard.
+**The whole link is one JSON file.** The format is [`bridge-user.md`](bridge-user.md) §6.7
+and that section owns it — change it there, not in the dashboard. The dashboard reads that
+JSON and nothing else; it does no scanning and makes no network call.
+
+> **Open, as of 2026-09-22: nothing currently produces a report.** The panel's manual export
+> button has been removed in favour of sending the report to the employer automatically when
+> the applicant submits, and that send is not built yet. `buildReport()`, `toReport()`,
+> `reportMarkdown()` and `reportFileStem()` in `extension/lib/report.ts` are untouched and
+> still tested — they are what the send should call. Until it exists, the dashboard can only
+> be fed from `fixtures/`.
 
 ---
 
@@ -14,8 +20,8 @@ it — change it there, not in the dashboard.
 ```
 1. The applicant reaches a job application form themselves, and BRIDGE scans it
    in their own browser.
-2. The applicant chooses "Export barrier report" in the side panel. Nothing leaves
-   the browser until they do.
+2. The report is sent to the employer when the applicant submits the application.
+   That send is being built separately; the manual export button has been removed.
 3. A business user opens the dashboard.
 4. They load one or more exported JSON reports through the file picker.
 5. The dashboard shows the findings, their WCAG criteria, and what changed since
@@ -28,8 +34,9 @@ Exact commands:
 # Applicant side — build and load the extension
 cd extension && npm install && npm run build
 # chrome://extensions -> Developer mode -> Load unpacked -> extension/.output/chrome-mv3
-# Open the application form, press Alt+Shift+B, scan, then
-#   "Export barrier report as JSON"      (a Markdown export is also available, for humans)
+# Open the application form, press Alt+Shift+B, scan.
+# NOTE: there is currently no way to get a report out of the panel. The manual export was
+# removed and the automated send is not built yet, so use the fixtures below instead.
 
 # Business side — open the dashboard and load what was exported
 cd dashboard && npm install && npm run dev      # http://localhost:5173

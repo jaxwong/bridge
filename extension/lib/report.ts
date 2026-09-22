@@ -11,8 +11,11 @@
 // Carries no field values and no applicant identity — only which rules fired, on which
 // labelled field, and what it means for the user. There is deliberately no selector.
 
-import type { ApplicationSession, BarrierReport, Barrier, ReportBarrier, ReportPageBarrier, ScanResult } from './types';
-import { wcagFor } from './wcag';
+// Explicit .ts specifiers so this module can be imported by Node directly (test/e2e.mjs
+// builds the report itself now that the panel has no export button). Vite resolves them
+// unchanged.
+import type { ApplicationSession, BarrierReport, Barrier, ReportBarrier, ReportPageBarrier, ScanResult } from './types.ts';
+import { wcagFor } from './wcag.ts';
 
 /**
  * The automated WCAG 2.2 A/AA fields, for one barrier. `automated` is always true here:

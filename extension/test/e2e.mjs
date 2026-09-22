@@ -4,6 +4,7 @@
 // a screen reader hears. Those are manual (probe/screen-reader-testing.md).
 
 import { chromium } from 'playwright';
+import { buildReport, reportMarkdown } from '../lib/report.ts';
 import { createServer } from 'node:http';
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -78,6 +79,20 @@ async function spoken(panel, re) {
   await panel.waitForFunction((src) => new RegExp(src, 'i').test(document.getElementById('live').textContent), re.source, { timeout: 10000 });
   return panel.textContent('#live');
 }
+/**
+ * The barrier report for a tab, built from the session the panel stored.
+ *
+ * The panel no longer has an export button — an automated send to the employer replaces it
+ * — so the report is built here from the same `buildReport()` the panel used. The report
+ * itself is unchanged, which is the point: these checks still describe §6.7's contract.
+ */
+async function reportFor(tabId) {
+  const stored = await sw.evaluate(() => chrome.storage.session.get(null));
+  const key = Object.keys(stored).find((k) => k.startsWith(`session:${tabId}:`));
+  if (!key) throw new Error(`no session stored for tab ${tabId}`);
+  return buildReport(stored[key]);
+}
+
 /** Alt+Shift+S cannot be pressed headlessly. This is the message the service worker sends for it. */
 const pressForward = (tabId) => sw.evaluate((id) => chrome.runtime.sendMessage({ type: 'bridge/command-forward', tabId: id }), tabId);
 const pageFocus = (page) => page.evaluate(() => document.activeElement?.textContent?.trim() || document.activeElement?.tagName);
@@ -135,8 +150,7 @@ try {
   // hears only the count in the summary; the sentences below exist only in the exported
   // report, which is where the detection checks now read them.
   check('the panel renders no barrier text', !/Blocking:|Usability:/.test(await panel.textContent('main')), await panel.textContent('main'));
-  const [scanDl] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as JSON' }).click()]);
-  const scanReport = JSON.parse(readFileSync(await scanDl.path(), 'utf8'));
+  const scanReport = await reportFor(tabId);
   const barriers = [...scanReport.pageBarriers, ...scanReport.barriers].map((b) => b.impact).join('\n');
   check('reports the identically-named Yes/No options', /sound identical/.test(barriers));
   check('reports the custom dropdown', /custom dropdown/.test(barriers));
@@ -312,9 +326,8 @@ try {
   // The dashboard keys on rule + label, so the report must not pick up a name that a model
   // made up and could word differently tomorrow.
   {
-    const [dl] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as JSON' }).click()]);
-    const report = JSON.parse(readFileSync(await dl.path(), 'utf8'));
-    check('export: labels are the page-derived ones, never the inferred name',
+    const report = await reportFor(tabId);
+    check('report: labels are the page-derived ones, never the inferred name',
       report.barriers.some((b) => b.rule === 'missing-label' && b.label === 'Unlabelled select') &&
       !JSON.stringify(report).includes('Preferred office'), report.barriers.map((b) => b.label).join(' | '));
   }
@@ -445,24 +458,22 @@ try {
     check('session: filled fields are recorded by key, never by value',
       session?.steps.find((r) => r.index === 2)?.filledFieldIds.length === 1 && !/resume\.pdf|zw@example/.test(JSON.stringify(session)));
 
-    const [dl] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as JSON' }).click()]);
-    const report = JSON.parse(readFileSync(await dl.path(), 'utf8'));
-    check('export: §6.7 shape, grouped by step', report.portal === 'localhost:8765' && report.pagePath === '/modal.html' &&
+    const report = buildReport(session);
+    check('report: §6.7 shape, grouped by step', report.portal === 'localhost:8765' && report.pagePath === '/modal.html' &&
       report.steps?.length === 3 && Array.isArray(report.barriers), Object.keys(report).join(','));
-    check('export: every field barrier has rule, severity, a non-empty label, impact, and no selector',
+    check('report: every field barrier has rule, severity, a non-empty label, impact, and no selector',
       report.barriers.length > 0 && report.barriers.every((b) => b.rule && b.severity && typeof b.label === 'string' && b.label && b.impact && !('selector' in b) && !('field' in b)));
-    check('export: page barriers are their own list, keyed by rule alone',
+    check('report: page barriers are their own list, keyed by rule alone',
       Array.isArray(report.pageBarriers) && report.pageBarriers.some((b) => b.rule === 'upload-unnamed') &&
       report.pageBarriers.every((b) => b.rule && b.severity && b.impact && !('label' in b)) &&
       report.steps.every((st) => Array.isArray(st.pageBarriers)));
-    check('export: the unnamed resume upload is a usability barrier, not a blocking one',
+    check('report: the unnamed resume upload is a usability barrier, not a blocking one',
       report.pageBarriers.some((b) => b.rule === 'upload-unnamed' && b.severity === 'usability' && /has no label/.test(b.impact)),
       JSON.stringify(report.pageBarriers));
-    check('export: the visa question\'s barrier is on step 2',
+    check('report: the visa question\'s barrier is on step 2',
       report.steps[1].barriers.some((b) => b.rule === 'options-identically-named' && /sponsorship/.test(b.label)));
-    check('export: no applicant data', !/resume\.pdf|zw@example|Zheng/.test(JSON.stringify(report)));
-    const [md] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as Markdown' }).click()]);
-    check('export: Markdown twin', /^# Accessibility barrier report: localhost:8765\/modal\.html/.test(readFileSync(await md.path(), 'utf8')));
+    check('report: no applicant data', !/resume\.pdf|zw@example|Zheng/.test(JSON.stringify(report)));
+    check('report: Markdown twin', /^# Accessibility barrier report: localhost:8765\/modal\.html/.test(reportMarkdown(report)));
   });
 
   // =====================================================================================
@@ -508,13 +519,12 @@ try {
   // =====================================================================================
   await section('uploaders', async () => {
     // The query string is how the employer demo versions one form (Acme ?v=2, ?v=3).
-    const { page, panel } = await open('uploaders.html?v=3');
+    const { page, panel, tabId } = await open('uploaders.html?v=3');
     // Give a would-be scan announcement (60 ms debounce) time to land before asserting silence.
     await new Promise((r) => setTimeout(r, 300));
     check('opening the panel announces nothing: the panel itself is read once, top to bottom',
       (await panel.textContent('#live')) === '', await panel.textContent('#live'));
-    const [dl] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as JSON' }).click()]);
-    const report = JSON.parse(readFileSync(await dl.path(), 'utf8'));
+    const report = await reportFor(tabId);
     const listed = [...report.pageBarriers, ...report.barriers].map((b) => b.impact);
     check('uploader: labelled but out of the tab order is still drag-drop-only',
       listed.filter((t) => /can only be used by dragging/.test(t)).length === 1, JSON.stringify(listed));
@@ -525,8 +535,8 @@ try {
     const stops = [];
     for (let i = 0; i < 3; i++) { await page.keyboard.press('Tab'); stops.push(await page.evaluate(() => document.activeElement?.id || document.activeElement?.getAttribute('for') || 'none')); }
     check('uploader: real Tab presses agree with the rule', stops.join() === 'cv-b,cv-c,none', stops.join());
-    check('export: pagePath is the pathname only, so ?v=2 and ?v=3 compare as one form', report.pagePath === '/uploaders.html', report.pagePath);
-    check('export: a one-step form has pageBarriers, no steps, and no step numbers',
+    check('report: pagePath is the pathname only, so ?v=2 and ?v=3 compare as one form', report.pagePath === '/uploaders.html', report.pagePath);
+    check('report: a one-step form has pageBarriers, no steps, and no step numbers',
       report.pageBarriers.length === 1 && report.pageBarriers[0].rule === 'drag-drop-only' && !('steps' in report) && !('step' in report.pageBarriers[0]),
       JSON.stringify(report).slice(0, 300));
   });
@@ -659,10 +669,9 @@ try {
   await section('employer demo fixture', async () => {
     // fixtures/reports/ and the dashboard demo depend on these three scans of ONE form.
     const rules = async (query) => {
-      const { panel } = await open(query);
+      const { panel, tabId } = await open(query);
       await panel.getByLabel('Full list').check();
-      const [dl] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as JSON' }).click()]);
-      const r = JSON.parse(readFileSync(await dl.path(), 'utf8'));
+      const r = await reportFor(tabId);
       return { r, keys: [...r.barriers.map((b) => `${b.rule}|${b.label}`), ...r.pageBarriers.map((b) => b.rule)].sort() };
     };
     const v1 = await rules(''), v2 = await rules('?v=2'), v3 = await rules('?v=3');
@@ -673,7 +682,7 @@ try {
     check('v2 (the fix): the dropdown\'s barriers are gone, nothing new', v2.keys.length === 2 && v2.keys.every((k) => v1.keys.includes(k)), v2.keys.join(' ; '));
     check('v3 (the regression): exactly one new barrier, drag-drop-only on the page',
       v3.keys.filter((k) => !v2.keys.includes(k)).join() === 'drag-drop-only', v3.keys.join(' ; '));
-    check('a one-step export carries no steps and no step numbers',
+    check('a one-step report carries no steps and no step numbers',
       !('steps' in v1.r) && v1.r.barriers.every((b) => !('step' in b)));
   });
 

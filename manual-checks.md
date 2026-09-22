@@ -289,42 +289,20 @@ sites, so it never appears on the localhost pages.
 
 ---
 
-## 5. Export saves a file
+## 5. Export saves a file — **removed, nothing to run**
 
-**Question:** does a download started inside the side panel actually land on disk? The
-suite proved the content of the report. It ran the panel as an ordinary tab, not as a
-real side panel.
+The side panel no longer has an export button. Sending the report to the employer becomes
+automatic once the applicant submits, and that send is being built separately; when it
+exists it needs its own check here.
 
-1. Open `http://localhost:8765/modal.html` and press **Alt+Shift+B**.
-2. Click **Easy Apply** on the page. Wait for "Step 1 of 3".
-3. Click **Next** on the page. Wait for "Step 2 of 3". This gives the report two steps.
-4. In the panel, scroll to **Barrier report**.
-5. Activate **"Export barrier report as JSON"**.
-6. Expect: "Barrier report saved as localhost-8765-modal-html-….json. N barriers. It contains
-   none of your answers and nothing about you."
-7. Open your Downloads folder. The file name starts with `localhost-8765-modal-html-`, the
-   same naming the monitor uses.
-8. Open the file and check:
-   - `portal` is `localhost:8765` and `pagePath` is `/modal.html`.
-   - `steps` has two entries, each with its own `barriers`.
-   - Step 2's `barriers` contains `options-identically-named` with the visa question as `label`.
-   - Step 2's `pageBarriers` contains `upload-unnamed`, with no `label`.
-   - No barrier has a `selector`.
-   - Nothing you typed appears anywhere in the file.
-9. Activate **"Export barrier report as Markdown"** and check that a `.md` file lands too.
-10. If the employer dashboard exists by now, load the JSON into it
-    (`bridge-business.md` §6.4).
+The report itself is unchanged and still covered: `npm run test:e2e` builds it with the
+same `buildReport()` the panel used and asserts its §6.7 shape, that page barriers are
+keyed by rule alone, that labels are the page-derived ones, and that nothing the applicant
+typed appears anywhere in it.
 
-**Write down**
-
-- Both file names, as they appear on disk.
-- Whether the announcement was spoken.
-
-**If it fails**
-
-Nothing lands in Downloads, or Chrome asks something unexpected: tell Claude. A page cannot
-detect a blocked download, so the fix is to move the save into the service worker with
-Chrome's downloads API. That adds one permission to the manifest.
+What is **not** covered any more, and was the only reason this check existed: whether a
+download started inside a real side panel lands on disk. Nothing downloads from the panel
+today, so there is nothing to lose. If the automated send ever writes a file, restore this.
 
 ---
 
