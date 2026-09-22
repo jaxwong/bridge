@@ -1,4 +1,4 @@
-// The barrier report as it arrives from the BRIDGE extension's export.
+// The barrier report as the BRIDGE extension's buildReport() produces it.
 // The format is defined in bridge-user.md §6.7 and owned there; this file only reads it.
 
 export type Severity = 'blocking' | 'usability' | 'ok';
@@ -12,6 +12,8 @@ export interface ReportBarrier {
   label?: string;
   /** One plain sentence: what a screen reader user cannot do. Shown to the employer as-is. */
   impact: string;
+  /** The scanner rule's suggested fix, shown as-is. Optional: reports from before it existed have none. */
+  fix?: string;
 
   // --- Automated WCAG 2.2 A/AA findings, all optional.
   // A report written before these existed is still valid and still loads; its findings
@@ -66,8 +68,8 @@ const CRITERION = /^\d+\.\d+\.\d+$/;
 
 /**
  * A form's identity across time: where it lives, not when it was scanned. Reports are
- * grouped by this rather than by file name, because a file picker hands over a name and
- * no directory (bridge-business.md §6.4).
+ * grouped by this rather than by anything outside the report, which carries its own
+ * identity (bridge-business.md §6.4).
  */
 export const formKey = (r: Pick<BarrierReport, 'portal' | 'pagePath'>): string => `${r.portal}${r.pagePath}`;
 
@@ -92,6 +94,10 @@ function parseBarrier(raw: unknown, source: string, where: string, needsLabel: b
 
   const out: ReportBarrier = { rule: b.rule, severity: b.severity as Severity, impact: b.impact };
   if (typeof b.label === 'string' && b.label) out.label = b.label;
+  if (b.fix !== undefined) {
+    if (typeof b.fix !== 'string' || !b.fix) fail(source, `${where} (${b.rule}) has a "fix" that is not a non-empty sentence`);
+    out.fix = b.fix;
+  }
 
   // The WCAG fields are optional, so absence is never an error. Present-but-malformed is:
   // a criterion number shown next to a finding is the part an employer would quote, and a
@@ -122,8 +128,8 @@ function parseBarrier(raw: unknown, source: string, where: string, needsLabel: b
 }
 
 /**
- * Validate one loaded file. Anything a person can pick in a file dialog reaches this, so it
- * reports what is wrong with the file by name instead of failing later inside compare.
+ * Validate one report at the page's boundary. It says what is wrong with the report by its
+ * source name instead of failing later inside compare.
  */
 export function parseReport(raw: unknown, source: string): BarrierReport {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
@@ -175,11 +181,9 @@ function parseStandard(raw: unknown, source: string): Standard {
  * Group loaded reports into forms, each form's scans oldest first, forms ordered by portal
  * then path.
  *
- * One form scanned at one instant is one scan, however many times its file was picked.
- * Without that, loading the same file twice would compare a scan against itself and report
- * a form as unchanged while hiding the previous scan it should have been compared with —
- * and picking the same file twice is easy to do when reports arrive one at a time from
- * different applicants and pile up in a downloads folder.
+ * One form scanned at one instant is one scan, however many times it is handed in.
+ * Without that, the same report twice would compare a scan against itself and report a
+ * form as unchanged while hiding the previous scan it should have been compared with.
  */
 export function groupByForm(reports: BarrierReport[]): Form[] {
   const forms = new Map<string, Form>();

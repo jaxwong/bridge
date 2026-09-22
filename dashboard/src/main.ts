@@ -7,6 +7,11 @@ import type { ComparedBarrier, Comparison } from './lib/compare.ts';
 import { groupByForm, parseReport } from './lib/report.ts';
 import type { BarrierReport, Form, Severity } from './lib/report.ts';
 import { findingsOf, summariseWcag } from './lib/wcag.ts';
+// DEMO STAND-IN. Nothing sends reports to this page yet, so it opens on one seeded report:
+// a real BRIDGE scan of the Acme Careers test form (extension/test/fixtures/acme/apply.html),
+// written by `make demo-seed` and kept equal to what the scanner reports by the extension's
+// e2e suite. It is not hand-written, and it is the only report this page shows.
+import seed from './demo-seed.json';
 
 const $ = <T extends HTMLElement>(id: string): T => {
   const node = document.getElementById(id);
@@ -39,72 +44,18 @@ const when = (iso: string): HTMLElement =>
   el('time', { datetime: iso, text: new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) });
 
 // --- state ---------------------------------------------------------------------------
-// Every report loaded so far, in load order. Forms are derived from it, never stored
-// alongside it: two sources of truth for "what have we loaded" is how a dashboard starts
-// disagreeing with itself.
-let loaded: BarrierReport[] = [];
+// Every report the page holds. Forms are derived from it, never stored alongside it: two
+// sources of truth for "what do we hold" is how a dashboard starts disagreeing with itself.
+// The seed goes through the same boundary check any report would; a seed that fails it is a
+// programmer error and stops the page here, rather than rendering an empty list.
+const loaded: BarrierReport[] = [parseReport(seed, 'demo-seed.json')];
 /** The form whose detail is open, so focus can go back to its row on the way out. */
 let openedKey: string | null = null;
 
-/** How many distinct scans we hold. Never `loaded.length`: the same file can be picked
- *  twice, and groupByForm is the one place that decides what counts as one scan. */
+/** How many distinct scans we hold. groupByForm is the one place that decides what counts as one scan. */
 const totalScans = (forms: Form[]): number => forms.reduce((n, f) => n + f.scans.length, 0);
 
 const announce = (message: string): void => { $('live').textContent = message; };
-
-// --- loading -------------------------------------------------------------------------
-
-async function readFiles(files: File[]): Promise<void> {
-  if (files.length === 0) return;
-  const failures: { name: string; reason: string }[] = [];
-  const accepted: BarrierReport[] = [];
-
-  for (const file of files) {
-    const text = await file.text();
-    let raw: unknown;
-    try {
-      raw = JSON.parse(text);
-    } catch (e) {
-      failures.push({ name: file.name, reason: `not valid JSON — ${(e as Error).message}` });
-      continue;
-    }
-    try {
-      accepted.push(parseReport(raw, file.name));
-    } catch (e) {
-      failures.push({ name: file.name, reason: (e as Error).message.replace(`${file.name} is not a BRIDGE barrier report: `, '') });
-    }
-  }
-
-  // Counted by groupByForm rather than by how many files were handed in: the same report
-  // can be picked twice and is still one report.
-  const before = totalScans(groupByForm(loaded));
-  loaded = [...loaded, ...accepted];
-  const forms = groupByForm(loaded);
-  const added = totalScans(forms) - before;
-  const alreadyHeld = accepted.length - added;
-  const scans = totalScans(forms);
-
-  renderErrors(failures);
-  render();
-
-  // Every number here is counted from what was loaded. Nothing on this page is estimated.
-  const parts: string[] = [];
-  if (added) parts.push(`${added} ${added === 1 ? 'report' : 'reports'} loaded`);
-  if (alreadyHeld) parts.push(`${alreadyHeld} ${alreadyHeld === 1 ? 'report was' : 'reports were'} already loaded`);
-  if (failures.length) parts.push(`${failures.length} ${failures.length === 1 ? 'file' : 'files'} could not be read`);
-  parts.push(`${forms.length} ${forms.length === 1 ? 'form' : 'forms'}, ${scans} ${scans === 1 ? 'scan' : 'scans'} in total`);
-  announce(`${parts.join('. ')}.`);
-}
-
-function renderErrors(failures: { name: string; reason: string }[]): void {
-  const box = $('load-errors');
-  box.replaceChildren();
-  box.hidden = failures.length === 0;
-  if (failures.length === 0) return;
-  box.append(el('h3', { text: failures.length === 1 ? 'One file could not be read' : `${failures.length} files could not be read` }));
-  box.append(el('ul', {}, failures.map((f) =>
-    el('li', {}, [el('strong', { text: f.name }), `: ${f.reason}`]))));
-}
 
 // --- form list -----------------------------------------------------------------------
 
@@ -122,11 +73,6 @@ function renderList(): void {
   const body = $('list-body');
   body.replaceChildren();
   const forms = groupByForm(loaded);
-
-  if (forms.length === 0) {
-    body.append(el('p', { class: 'empty', text: 'No reports loaded yet. Choose report files above to see what changed between scans.' }));
-    return;
-  }
 
   const head = el('tr', {}, [
     el('th', { scope: 'col', text: 'Form' }),
@@ -187,6 +133,9 @@ function barrierItem(b: ComparedBarrier): HTMLElement {
     ]),
     el('p', { class: 'barrier__where', text: b.scope === 'page' ? 'Affects the whole page' : `Field: ${b.label}` }),
     el('p', { class: 'barrier__impact', text: b.impact }),
+    // Decided by the scanner's rule catalogue and carried in the report; the dashboard only
+    // shows it. Reports from before `fix` existed have none, and show no line.
+    ...(b.fix ? [el('p', { class: 'barrier__fix' }, [el('strong', { text: 'Suggested fix: ' }), b.fix])] : []),
     wcagLine(b),
   ]);
 }
@@ -303,8 +252,7 @@ function closeDetail(): void {
   $('detail-view').hidden = true;
   $('list-view').hidden = false;
   // Back to the row the reader came from, not to the top of the page. Re-found by key
-  // rather than held as a node: loading more files while the detail was open rebuilds the
-  // table, and a focus() call on a discarded node silently does nothing.
+  // rather than held as a node, so it survives the table being rebuilt.
   const row = openedKey === null ? null
     : document.querySelector<HTMLElement>(`[data-form-key="${CSS.escape(openedKey)}"]`);
   (row ?? $('list-h')).focus();
@@ -316,24 +264,6 @@ function render(): void {
 }
 
 // --- wiring ---------------------------------------------------------------------------
-
-const input = $<HTMLInputElement>('reports');
-input.addEventListener('change', () => {
-  const files = [...(input.files ?? [])];
-  // Cleared so the same file can be chosen again, e.g. after a newer export replaced it.
-  input.value = '';
-  void readFiles(files);
-});
-
-// Drag and drop as an addition to the file input, never instead of it (§6.4).
-const dropzone = $('dropzone');
-dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('loader--over'); });
-dropzone.addEventListener('dragleave', () => dropzone.classList.remove('loader--over'));
-dropzone.addEventListener('drop', (e) => {
-  e.preventDefault();
-  dropzone.classList.remove('loader--over');
-  void readFiles([...(e.dataTransfer?.files ?? [])]);
-});
 
 $('back').addEventListener('click', closeDetail);
 

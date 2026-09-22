@@ -178,47 +178,6 @@ h2:focus { outline: 3px solid var(--focus); outline-offset: 6px; }
 /* Kept in the layout while empty — a live region that is display:none is not announced. */
 .live:empty { padding: 0; border: 0; height: 0; overflow: hidden; margin: 0; }
 
-/* --- loading ------------------------------------------------------------------------ */
-.loader {
-  border: 2px dashed var(--line-strong);
-  border-radius: var(--radius);
-  padding: 22px;
-  background: var(--surface);
-}
-.loader--over { border-color: var(--focus); background: var(--brand-soft); }
-.file-label { display: block; font-weight: 700; margin-bottom: 10px; }
-.loader__alt { margin: 14px 0 0; color: var(--ink-muted); font-size: 0.92rem; }
-
-input[type="file"] {
-  font: inherit;
-  max-width: 100%;
-  color: var(--ink);
-}
-input[type="file"]::file-selector-button {
-  font: inherit;
-  font-weight: 600;
-  margin-right: 12px;
-  padding: 9px 16px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface-sunken);
-  color: var(--ink);
-  cursor: pointer;
-}
-input[type="file"]::file-selector-button:hover { background: var(--brand-soft); }
-
-.errors {
-  margin-top: 20px;
-  border: 1px solid var(--blocking-line);
-  border-left: 4px solid var(--blocking-ink);
-  background: var(--blocking-bg);
-  color: var(--blocking-ink);
-  padding: 4px 20px 18px;
-  border-radius: var(--radius-sm);
-}
-.errors h3 { margin-top: 16px; }
-.errors li { margin-bottom: 8px; }
-
 /* --- the form list ------------------------------------------------------------------ */
 table {
   border-collapse: separate;
@@ -305,6 +264,7 @@ ul.barriers { list-style: none; margin: 0; padding: 0; }
 .barrier__head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .barrier__where { font-weight: 700; }
 .barrier__impact { color: var(--ink-muted); }
+.barrier__fix { border-left: 3px solid var(--line-strong); padding-left: 12px; }
 code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.88em;

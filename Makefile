@@ -1,11 +1,13 @@
 # Applicant-side targets only: extension/ and proxy/ (bridge-user.md).
 # The employer side (monitor/, dashboard/) is bridge-business.md's and is not covered here.
+# One exception: `make demo-seed` writes dashboard/src/demo-seed.json, because the seed is the
+# extension scanner's output and only the extension's e2e suite can produce it.
 #
 # `make test` runs everything automated. What it cannot cover stays manual by nature
 # (focus, shortcuts from a real keyboard, VoiceOver): see manual-checks.md, which
 # `make serve` + `make proxy` set up. Those can stay running while `make test` runs.
 
-.PHONY: help test typecheck test-proxy test-extension build install serve proxy manual
+.PHONY: help test typecheck test-proxy test-extension build install serve proxy manual demo-seed
 
 test: typecheck test-proxy test-extension  ## Every automated user-side check: types, proxy 16, extension e2e 214
 
@@ -42,6 +44,13 @@ serve:  ## Manual checks: fixture pages on http://localhost:8765 (leave running,
 
 proxy:  ## Manual check 3 only: label-inference proxy on http://127.0.0.1:8000 (keep OFF for check 7)
 	cd proxy && uv run --env-file ../.env uvicorn main:app --port 8000
+
+# The seed is written by the e2e suite on its own ports, so `make serve` can stay up. The
+# suite builds the extension pointing at its proxy stub, so the build afterwards puts the
+# extension back on the real proxy (localhost:8000) for the demo; reload it in Chrome.
+demo-seed:  ## Employer demo: rewrite dashboard/src/demo-seed.json from a real scan of apply.html, then rebuild the extension
+	WRITE_DEMO_SEED=1 $(MAKE) test-extension
+	$(MAKE) build
 
 manual: build  ## Build, then print how to start a manual pass
 	@echo "1. chrome://extensions -> Developer mode -> Load unpacked -> extension/.output/chrome-mv3"

@@ -6,9 +6,12 @@
 > - **§2, §3, §5 and §6.2 describe a monitor** that took a list of posting URLs and scanned
 >   them on a schedule. It has been removed. There is no monitor package, no local API and
 >   no employer-initiated scanning anywhere in the repo.
-> - **Reports now reach the dashboard one way only:** the applicant scans a form in their own
->   browser with the extension, exports a JSON report, and a business user loads that file.
->   Nothing is automatic and nothing is fetched.
+> - **Nothing reaches the dashboard yet.** The panel's export was removed (PR #10) ahead of
+>   a send on submit that is not built, and the dashboard's file upload was removed for the
+>   demo. The dashboard opens on one seeded report, a real scan of the Acme apply form kept
+>   in step by the e2e suite ([`dashboard/README.md`](dashboard/README.md)). Each finding
+>   now also shows a suggested fix from `extension/lib/rules.ts`.
+> - **§6.4's file picker and drag and drop no longer exist.**
 > - **§6.3 (compare) and §6.4 (dashboard) still hold**, including the `rule` + label key and
 >   the resolved / still open / new buckets.
 > - **§6.5's fixture versions still exist** in `extension/test/fixtures/acme`, now used for

@@ -656,10 +656,12 @@ found in VoiceOver is real; passing VoiceOver does not discharge the NVDA pass.
 
 ### 6.7 Barrier report (employer side, MVP)
 
-"Export barrier report" in the side panel produces Markdown + JSON. It is the only producer:
-the employer-side monitor that once wrote the same JSON was removed on 2026-09-22
-([`bridge-business.md`](bridge-business.md), status note), so a report reaches the dashboard
-only when an applicant exports one.
+`buildReport()` in `extension/lib/report.ts` produces this JSON, and `reportMarkdown()` its
+Markdown twin. **Nothing sends it anywhere yet.** The side panel's export buttons were removed
+on 2026-09-22 (PR #10) ahead of a send on submit that is not built. For the demo, the employer
+dashboard opens on one seeded report, `dashboard/src/demo-seed.json`. It is a real report of
+`apply.html` from this scanner, not a hand-written one, and the e2e suite fails if it stops
+matching (`make demo-seed` rewrites it).
 
 ```json
 {
@@ -672,11 +674,13 @@ only when an applicant exports one.
     { "rule": "drag-drop-only", "severity": "blocking",
       "label": "CV upload",
       "impact": "A screen reader user cannot attach a CV.",
+      "fix": "Keep the drop zone, and add a \"Choose file\" button that Tab reaches and that opens the file input.",
       "wcag": ["2.1.1"], "wcagLevel": "A", "automated": true, "reviewRequired": false }
   ],
   "pageBarriers": [
     { "rule": "captcha", "severity": "blocking",
       "impact": "A screen reader user cannot verify they are not a bot.",
+      "fix": "Offer a way through that needs no sight and no puzzle, such as an audio option or a check with no challenge.",
       "automated": true }
   ]
 }
@@ -692,6 +696,7 @@ It is a projection of one `ScanResult` (§6.1), flattened:
 | `barriers[]` | Every `FieldDescriptor.barriers` entry, in page order, each carrying its field's `label` |
 | `barriers[].impact` | `Barrier.message`. The same sentence, renamed at the boundary: it is spoken to the applicant and read by the employer |
 | `pageBarriers[]` | `ScanResult.pageBarriers`, which belong to no field and so carry no `label` |
+| `barriers[].fix`, `pageBarriers[].fix` | The rule's suggested fix in the catalogue (`extension/lib/rules.ts`): one or two sentences, the same for every field the rule fires on. Always present. A suggestion for the employer, not a patch: the report carries no page source to patch |
 | `standard` | `STANDARD` in `extension/lib/rules.ts`: `name` "WCAG", `version` "2.2", `level` "AA", and `checked`, every criterion a rule in the catalogue can cite |
 | `barriers[].wcag`, `.wcagLevel`, `.reviewRequired` | The rule's mapping in the catalogue (§6.2). **Absent when the rule is unmapped**, never a guess. `wcagLevel` is the most stringent level among `wcag` |
 | `barriers[].automated` | Always `true`: everything this producer writes came from the scanner. A person's finding would carry `false` |
@@ -733,10 +738,8 @@ A consumer that does not know `steps` or `step` ignores them, and the dashboard 
 **`label` is always the name the page itself yields**, never one from label inference
 (§6.4): a model may word it differently on the next run, and the compare key must not move.
 
-The side panel also writes the Markdown twin, for a person to paste into an email. Both
-files are named `<portal-and-path-slug>-<timestamp>`.
-
-Sending the report anywhere is a manual user action in the MVP. This format is the contract
+`reportFileStem()` names a report `<portal-and-path-slug>-<timestamp>`, for whichever send
+comes to write files. This format is the contract
 with the employer dashboard in [`bridge-business.md`](bridge-business.md) §6; change it
 here, not there.
 
