@@ -500,8 +500,10 @@
       }
     });
 
-    // Same page, other hostname: cross-origin, and outside the extension's host permissions.
-    document.getElementById('frame-cross').src = `http://127.0.0.1:${location.port}/frame.html`;
+    // Other hostname: cross-origin, and outside the extension's host permissions. It loads
+    // survey.html, not frame.html — pointing both frames at the same page put a second
+    // "Referral code" on the form. BRIDGE cannot read either way; only the origin matters.
+    document.getElementById('frame-cross').src = `http://127.0.0.1:${location.port}/survey.html`;
 
     document.getElementById('apply').addEventListener('submit', (e) => {
       e.preventDefault();
