@@ -24,6 +24,12 @@ test-extension:  ## Build the extension and drive it end to end in headless Chro
 	  echo "Stop that first: the e2e suite starts its own server on 8765."; \
 	  exit 1; \
 	fi
+	@if lsof -nP -iTCP:8000 -sTCP:LISTEN >/dev/null; then \
+	  echo "Port 8000 is in use (probably 'make proxy')."; \
+	  echo "Stop that first: the e2e suite runs its own proxy stub on 8000, and its"; \
+	  echo "'proxy not running' checks need nothing answering there."; \
+	  exit 1; \
+	fi
 	cd extension && npm run test:e2e
 
 build:  ## Build the extension into extension/.output/chrome-mv3
