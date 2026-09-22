@@ -3,6 +3,8 @@
 
 export type Severity = 'blocking' | 'usability' | 'ok';
 
+export type WcagLevel = 'A' | 'AA';
+
 export interface ReportBarrier {
   rule: string;
   severity: Severity;
@@ -10,6 +12,20 @@ export interface ReportBarrier {
   label?: string;
   /** One plain sentence: what a screen reader user cannot do. Shown to the employer as-is. */
   impact: string;
+
+  // --- Automated WCAG 2.2 A/AA findings, all optional.
+  // A report written before these existed is still valid and still loads; its findings
+  // simply carry no mapping. A rule the producer could not map confidently omits them too,
+  // and the dashboard shows "No WCAG mapping recorded" rather than inventing one here.
+  // These are automated findings. Human review is required for a WCAG conformance claim.
+  /** Success-criterion numbers, e.g. ["4.1.2"]. */
+  wcag?: string[];
+  /** The most stringent level among `wcag`: "AA" if any criterion is AA, else "A". */
+  wcagLevel?: WcagLevel;
+  /** True when a scanner produced the finding rather than a person. */
+  automated?: boolean;
+  /** True when the detection is heuristic and a person should confirm it. */
+  reviewRequired?: boolean;
 }
 
 export interface BarrierReport {
@@ -31,6 +47,9 @@ export interface Form {
 }
 
 const SEVERITIES: Severity[] = ['blocking', 'usability', 'ok'];
+const WCAG_LEVELS: WcagLevel[] = ['A', 'AA'];
+/** e.g. "4.1.2", "1.3.1". Guideline-level numbers like "4.1" are rejected as imprecise. */
+const CRITERION = /^\d+\.\d+\.\d+$/;
 
 /**
  * A form's identity across time: where it lives, not when it was scanned. Reports are
@@ -60,6 +79,32 @@ function parseBarrier(raw: unknown, source: string, where: string, needsLabel: b
 
   const out: ReportBarrier = { rule: b.rule, severity: b.severity as Severity, impact: b.impact };
   if (typeof b.label === 'string' && b.label) out.label = b.label;
+
+  // The WCAG fields are optional, so absence is never an error. Present-but-malformed is:
+  // a criterion number shown next to a finding is the part an employer would quote, and a
+  // silently dropped or half-parsed one is worse than a rejected file.
+  if (b.wcag !== undefined) {
+    if (!Array.isArray(b.wcag) || b.wcag.length === 0) {
+      fail(source, `${where} (${b.rule}) has a "wcag" that is not a non-empty array`);
+    }
+    for (const c of b.wcag) {
+      if (typeof c !== 'string' || !CRITERION.test(c)) {
+        fail(source, `${where} (${b.rule}) has WCAG criterion ${JSON.stringify(c)}, expected a number like "4.1.2"`);
+      }
+    }
+    out.wcag = b.wcag as string[];
+  }
+  if (b.wcagLevel !== undefined) {
+    if (!WCAG_LEVELS.includes(b.wcagLevel as WcagLevel)) {
+      fail(source, `${where} (${b.rule}) has wcagLevel ${JSON.stringify(b.wcagLevel)}, expected "A" or "AA"`);
+    }
+    out.wcagLevel = b.wcagLevel as WcagLevel;
+  }
+  for (const flag of ['automated', 'reviewRequired'] as const) {
+    if (b[flag] === undefined) continue;
+    if (typeof b[flag] !== 'boolean') fail(source, `${where} (${b.rule}) has "${flag}" that is not true or false`);
+    out[flag] = b[flag] as boolean;
+  }
   return out;
 }
 

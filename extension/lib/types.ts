@@ -96,6 +96,18 @@ export interface ReportBarrier {
   impact: string;
   /** Present only when the application has more than one step. */
   step?: number;
+
+  // --- Automated WCAG 2.2 A/AA findings. All optional: a report written before these
+  // existed is still a valid report, and a rule with no recorded mapping omits them
+  // rather than guessing one. Human review is required for a WCAG conformance claim.
+  /** Success-criterion numbers, e.g. ["4.1.2"]. Absent means no mapping is recorded. */
+  wcag?: string[];
+  /** The most stringent level among `wcag`: "AA" if any criterion is AA, else "A". */
+  wcagLevel?: 'A' | 'AA';
+  /** True for anything the scanner found. Never true for a human-entered finding. */
+  automated?: boolean;
+  /** True when the detection is heuristic and a person should confirm the finding. */
+  reviewRequired?: boolean;
 }
 
 /** A barrier on the page as a whole (CAPTCHA, unreachable frame). Keyed by `rule` alone. */

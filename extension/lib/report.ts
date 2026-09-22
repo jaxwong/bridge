@@ -11,7 +11,23 @@
 // Carries no field values and no applicant identity — only which rules fired, on which
 // labelled field, and what it means for the user. There is deliberately no selector.
 
-import type { ApplicationSession, BarrierReport, ReportBarrier, ReportPageBarrier, ScanResult } from './types';
+import type { ApplicationSession, BarrierReport, Barrier, ReportBarrier, ReportPageBarrier, ScanResult } from './types';
+import { wcagFor } from './wcag';
+
+/**
+ * The automated WCAG 2.2 A/AA fields, for one barrier. `automated` is always true here:
+ * everything this file builds came from the scanner. `wcag`, `wcagLevel` and
+ * `reviewRequired` appear only when lib/wcag.ts records a mapping for the rule — an
+ * unmapped rule omits them entirely rather than carrying a guess, and the dashboard shows
+ * "No WCAG mapping recorded".
+ *
+ * These findings are automated. Human review is required for a WCAG conformance claim.
+ */
+function wcagFields(rule: string): Partial<ReportBarrier> {
+  const m = wcagFor(rule);
+  if (!m) return { automated: true };
+  return { wcag: m.wcag, wcagLevel: m.wcagLevel, automated: true, reviewRequired: m.reviewRequired };
+}
 
 /**
  * `pagePath` drops the query string: the dashboard identifies a form across time by
@@ -26,8 +42,12 @@ export function toReport(scan: Pick<ScanResult, 'url' | 'scannedAt' | 'fields' |
     pagePath: url.pathname,
     generatedAt: scan.scannedAt,
     barriers: scan.fields.flatMap((f) =>
-      f.barriers.map((b): ReportBarrier => ({ rule: b.rule, severity: b.severity, label: f.label, impact: b.message }))),
-    pageBarriers: scan.pageBarriers.map((b): ReportPageBarrier => ({ rule: b.rule, severity: b.severity, impact: b.message })),
+      f.barriers.map((b: Barrier): ReportBarrier => ({
+        rule: b.rule, severity: b.severity, label: f.label, impact: b.message, ...wcagFields(b.rule),
+      }))),
+    pageBarriers: scan.pageBarriers.map((b: Barrier): ReportPageBarrier => ({
+      rule: b.rule, severity: b.severity, impact: b.message, ...wcagFields(b.rule),
+    })),
   };
 }
 
@@ -67,8 +87,10 @@ export function reportFileStem(r: BarrierReport): string {
 }
 
 export function reportMarkdown(r: BarrierReport): string {
+  // WCAG numbers are stated as automated findings, never as a conformance result.
   const line = (b: ReportBarrier | ReportPageBarrier) =>
-    `- **${b.severity}** \`${b.rule}\`${'label' in b ? ` on "${b.label}"` : ''}: ${b.impact}`;
+    `- **${b.severity}** \`${b.rule}\`${'label' in b ? ` on "${b.label}"` : ''}: ${b.impact}` +
+    (b.wcag?.length ? ` _(WCAG ${b.wcagLevel} ${b.wcag.join(', ')})_` : ' _(no WCAG mapping recorded)_');
   const list = (page: ReportPageBarrier[], field: ReportBarrier[], none: string) =>
     (page.length + field.length ? [...page, ...field].map(line).join('\n') : none);
   const total = r.barriers.length + r.pageBarriers.length;
@@ -76,5 +98,8 @@ export function reportMarkdown(r: BarrierReport): string {
     ? r.steps.map((s) => `## Step ${s.index}: ${s.label}\n\n${list(s.pageBarriers, s.barriers, 'No barriers found on this step.')}`).join('\n\n')
     : list(r.pageBarriers, r.barriers, 'No barriers found.');
   return `# Accessibility barrier report: ${r.portal}${r.pagePath}\n\nGenerated ${r.generatedAt} by BRIDGE. ` +
-    `${total} barrier${total === 1 ? '' : 's'}. Contains no applicant data.\n\n${body}\n`;
+    `${total} barrier${total === 1 ? '' : 's'}. Contains no applicant data.\n\n` +
+    'These are automated WCAG 2.2 A/AA accessibility findings. They are not a conformance ' +
+    'result: human review is required for a WCAG conformance claim.\n\n' +
+    `${body}\n`;
 }

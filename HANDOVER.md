@@ -179,6 +179,9 @@ can be relabelled normally.
 
 ## 6. Still not done
 
+*(As at the §7 change below: the export button is built. A real posting URL, the NVDA pass
+and the fallback video are still open, and §7 adds more.)*
+
 - **The export button** — the thing this document is about.
 - **A real job posting in `monitor/urls.txt`.** It has a commented placeholder. A live
   Greenhouse posting needs to go in and be re-verified the morning of the demo; postings
@@ -187,3 +190,150 @@ can be relabelled normally.
 - **NVDA pass on the dashboard.** It has zero axe violations across every view, and the
   tests check focus movement and keyboard operation, but nobody has listened to it.
 - **Fallback demo video.**
+
+---
+
+## 7. Automated WCAG 2.2 A/AA findings
+
+*Added 2026-09-22 from the business side, on `feat/wcag-business-monitoring`.*
+
+### What BRIDGE now says, and what it must never say
+
+BRIDGE reports **automated WCAG 2.2 A/AA accessibility findings**.
+
+It does **not** certify WCAG compliance, does not make any company legally compliant, and
+does not replace human accessibility testing. **Human review is required for a WCAG
+conformance claim.** Those two phrasings are the wording to use everywhere — in the UI, in
+the Markdown export, in the pitch, and in anything shown to a buyer. The dashboard's
+accessibility test enforces it: it fails if any sentence on the page mentions compliance,
+certification or legal standing without a negation.
+
+The reason is not only legal caution. An automated scan reads a fraction of WCAG; most
+criteria need a person. A report that reads as a pass would be wrong about the thing that
+matters most to the applicant.
+
+### Schema, extended compatibly
+
+`ReportBarrier` in [`extension/lib/types.ts`](extension/lib/types.ts) gained four **optional**
+fields, which `ReportPageBarrier` inherits. Nothing became required, so every report written
+before this still parses and still compares exactly as it did.
+
+```jsonc
+{
+  "rule": "options-identically-named",
+  "severity": "blocking",
+  "label": "Will you now or in the future require sponsorship…",
+  "impact": "All 2 options … sound identical to a screen reader.",
+
+  "wcag": ["4.1.2", "2.5.3"],   // success-criterion numbers; absent = no mapping recorded
+  "wcagLevel": "A",             // "A" | "AA" — the most stringent among `wcag`
+  "automated": true,            // a scanner produced this, not a person
+  "reviewRequired": false       // true = the detection is heuristic, confirm it by hand
+}
+```
+
+`toReport()` attaches them, so **both producers emit them automatically** — your export
+button and the monitor alike. You do not have to do anything to opt in.
+
+The dashboard validates them at the boundary: a present-but-malformed `wcag` (a guideline
+number like `"4.1"`, prose, an empty array, an unknown level, a non-boolean flag) rejects
+the file by name. Absent is always fine.
+
+### The mapping table, and why it is short
+
+[`extension/lib/wcag.ts`](extension/lib/wcag.ts) holds the table. Each entry names the line
+in `scan.ts` it was read from and carries a written rationale. A rule is mapped **only** where
+the criterion fails every time that rule fires, given what the rule actually tests.
+
+| Rule | Criteria | Level | Review |
+|---|---|---|---|
+| `missing-label` | 4.1.2 | A | — |
+| `label-placeholder-only` | 3.3.2 | A | — |
+| `custom-dropdown-no-role` | 4.1.2 | A | yes |
+| `not-keyboard-operable` | 2.1.1 | A | yes |
+| `group-not-labelled` | 1.3.1 | A | — |
+| `options-identically-named` | 4.1.2, 2.5.3 | A | — |
+| `drag-drop-only` | 2.1.1 | A | — |
+| `upload-unnamed` | 4.1.2 | A | — |
+| `modal-without-dialog-role` | *unmapped* | — | — |
+| `captcha` | *unmapped* | — | — |
+
+Two rules are deliberately unmapped, and it matters that they stay that way unless someone
+does the work to justify a change:
+
+- **`modal-without-dialog-role`** is detected by class-name substring (`[class*=modal]`),
+  which is a naming convention rather than a semantic fact, and the criterion is contested
+  between 4.1.2, 1.3.1 and focus management under 2.4.3. It is still a real barrier and is
+  still reported — it just carries no criterion.
+- **`captcha`** is not a WCAG failure at all. The note on 1.1.1 contemplates conforming
+  CAPTCHAs given a text alternative and alternative modalities, and the rule only detects
+  that a widget is present, not whether those exist.
+
+Two near-misses worth knowing, because they will come up:
+
+- **2.5.7 Dragging Movements (AA, new in 2.2)** is *not* claimed for `drag-drop-only`, even
+  though it looks like the obvious fit. 2.5.7 is satisfied by any single-pointer alternative
+  to dragging; the rule only tests for a **keyboard** trigger. A drop zone that also opens a
+  file picker on click fails 2.1.1 and passes 2.5.7, and the scanner cannot tell them apart.
+- **3.3.8 Accessible Authentication (AA, new in 2.2)** is not claimed for `captcha`, because
+  it applies to authentication steps and a CAPTCHA on a job application is not necessarily
+  one.
+
+Both need a person. If you want AA findings on the board, those two are where the work is —
+**every criterion currently mapped is Level A**, which is the honest result, not a gap I
+papered over.
+
+### Scanning one URL and looking at it
+
+```bash
+# 1. Scan one public job-application URL. Quote it — postings contain ? and &.
+cd monitor
+node run.mjs --url 'https://boards.greenhouse.io/example/jobs/1234567'
+# -> ../reports/<slug>/<timestamp>.json
+
+# 2. Open the dashboard and pick that file
+cd ../dashboard && npm run dev      # http://localhost:5173
+```
+
+The `urls.txt` workflow is unchanged: `node run.mjs urls.txt`.
+
+For the local fixture, with `python3 -m http.server 8765 -d extension/test/fixtures/acme`
+running in another terminal:
+
+```bash
+node run.mjs --url 'http://localhost:8765/'        # 5 findings, all mapped, all Level A
+node run.mjs --url 'http://localhost:8765/?v=2'    # the fix
+node run.mjs --url 'http://localhost:8765/?v=3'    # the regression
+```
+
+### What the monitor refuses
+
+It reads pages. It never fills a field, clicks a control, submits a form, or attempts a
+CAPTCHA, and it carries no credentials. Beyond intent, non-GET document requests are aborted,
+so a submission cannot leave the browser even if a page script tries one.
+
+**A page with a password field fails instead of being scanned** — that is a sign-in or
+account-creation page, not a public application form, and BRIDGE never signs in. Workday
+applications start with account creation, so they fail here by design. Unreachable, expired,
+and no-form URLs each fail with their own message, write nothing, and exit non-zero.
+
+### Unverified, and what needs a person
+
+- **Every finding needs human review before any conformance claim.** That is the product
+  position, not a caveat about this branch.
+- **The mappings are my reading of each rule's implementation**, not an audited table. They
+  have not been reviewed by an accessibility specialist. The rationale strings in
+  `wcag.ts` exist so a reviewer can disagree with a specific one.
+- **`reviewRequired` findings** (`custom-dropdown-no-role`, `not-keyboard-operable`) come
+  from heuristics — a class-word match and a static `tabindex`/computed-style test. Neither
+  can observe real Tab traversal; `bridge-user.md` §6.2 already records that scripted key
+  presses do not move focus.
+- **Only the local Acme fixture has been scanned** with the new `--url` command. No real
+  public posting has been run through it, so `monitor/urls.txt` still has a commented
+  placeholder and no real posting's findings have been seen.
+- **No NVDA pass** on the dashboard, including the new WCAG summary and badges. axe is clean
+  across all five views and the tests cover focus and keyboard operation, but nobody has
+  listened to it.
+- **`bridge-user.md` §6.7 has not been updated.** It owns the report format and now describes
+  a schema missing these four fields. It is your file and it is actively edited, so I left it
+  alone rather than collide — it should be updated by whoever owns it.

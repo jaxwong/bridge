@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "scan": "node run.mjs urls.txt",
+    "test": "node test/args.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

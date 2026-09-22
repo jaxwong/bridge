@@ -13,6 +13,7 @@
 // (spec §6.3), but the barrier report carries no options, so the monitor has no reason to
 // touch a real employer's page at all.
 
+import { ArgError, USAGE, parseArgs } from './args.mjs';
 import * as esbuild from 'esbuild';
 import { chromium } from 'playwright';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -30,6 +31,9 @@ const CONTROL_TIMEOUT = 15_000;
 const SETTLE_MS = 1_500;
 
 const CONTROLS = 'input,select,textarea,[role=combobox],[role=radio],[role=checkbox]';
+/** A password field means a sign-in or account-creation page, not a public application
+ *  form. BRIDGE never signs in, so the URL is reported rather than scanned. */
+const PASSWORD = 'input[type=password]';
 
 /** Directory name for a form. Derived from the report, so it always matches the grouping
  *  the dashboard does — which reads portal and pagePath from inside the file, not from here. */
@@ -102,6 +106,13 @@ async function scanOne(context, scanner, url) {
       .catch(() => { throw new Error(`no form controls appeared within ${CONTROL_TIMEOUT / 1000}s — expired posting, a login wall, or a page that never finished rendering`); });
     await page.waitForTimeout(SETTLE_MS);
 
+    // Scanning the sign-in page and filing it as the employer's application form would put
+    // a wrong report on the dashboard. bridge-business.md §5 lists forms behind a login as
+    // out of what the monitor can see, so this is reported, never worked around.
+    if (await page.locator(PASSWORD).count() > 0) {
+      throw new Error('the page has a password field, so it is a sign-in or account-creation page rather than a public application form — BRIDGE never signs in');
+    }
+
     await page.evaluate(scanner);
     const report = await page.evaluate(() => window.__bridgeReport());
 
@@ -116,13 +127,16 @@ async function scanOne(context, scanner, url) {
 
 // --- run -------------------------------------------------------------------------------
 
-const urlsFile = process.argv[2];
-if (!urlsFile) {
-  console.error('usage: node run.mjs <urls-file>\n\nOne URL per line. Blank lines and lines starting with # are ignored.');
+let parsedArgs;
+try {
+  parsedArgs = parseArgs(process.argv.slice(2));
+} catch (e) {
+  if (!(e instanceof ArgError)) throw e;
+  console.error(`${e.message}\n\n${USAGE}`);
   process.exit(2);
 }
 
-const urls = await readUrls(path.resolve(urlsFile));
+const urls = parsedArgs.mode === 'url' ? [parsedArgs.url] : await readUrls(path.resolve(parsedArgs.file));
 const scanner = await buildScanner();
 console.log(`Scanning ${urls.length} ${urls.length === 1 ? 'URL' : 'URLs'} with the BRIDGE scanner. SCAN only — nothing is filled in or submitted.\n`);
 
