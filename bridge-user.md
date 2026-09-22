@@ -48,7 +48,8 @@ Screen readers can read accessible pages. They cannot make a badly built control
 Land on application page
   → BRIDGE detects known ATS domain, announces barrier count via live region
   → User presses Alt+Shift+B → side panel opens, focus moves to it
-SCAN      side panel lists fields and barriers, grouped by severity
+SCAN      side panel lists the questions and speaks the barrier count; the barriers
+          themselves go only into the §6.7 report, never into the panel
 TRANSLATE user answers each field in the side panel with native controls
 ACT       BRIDGE writes each answer into the real page control
 VERIFY    BRIDGE re-reads every value from the page DOM and reads it back
@@ -84,15 +85,15 @@ Output shown in the side panel:
 
 ```
 Application pre-check
-23 fields detected
-4 accessibility barriers
-  Blocking   Experience slider is not keyboard operable
-  Blocking   CV uploader requires drag and drop
-  Usability  Education dropdown has no accessible label
-  OK         Submit button is accessible
+23 questions found. 4 accessibility barriers, 2 blocking.
 ```
 
-Each item is a focusable list entry. Activating it jumps to that field's TRANSLATE control.
+The count is all the applicant sees and hears. The individual barriers are still detected
+and recorded — they are what the §6.7 report carries to the employer — but they are never
+rendered in the panel. That data is for the business side; an applicant opening BRIDGE
+wants to finish the form, and a screen reader reading a list of barrier sentences on
+every step is noise. Decided 2026-09-22; before that the panel listed each barrier as a
+focusable entry.
 
 ### 4.2 TRANSLATE
 
@@ -792,7 +793,7 @@ Build, in `extension/test/fixtures/acme/index.html` and `lib/`:
   selector, then by accessible name plus ordinal among controls of the same kind, then
   "Could not fill".
 
-Verify, all in `test/e2e.mjs`: each new barrier is listed; slider set to 2 moves the
+Verify, all in `test/e2e.mjs`: each new barrier lands in the exported report; slider set to 2 moves the
 page's thumb and reads back 2; CV written and rendered; date read back; two languages
 checked, one unchecked; the shadow-root checkbox offered and written; the popup reported
 as `modal-without-dialog-role`; a field the fixture re-renders after 500 ms is still

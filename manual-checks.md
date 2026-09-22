@@ -106,7 +106,7 @@ yet written to the page is lost. Everything written is on the page and is read b
 
 1. Open `http://localhost:8765/apply.html`. Close the side panel with its X.
 2. Click in the page's **Full name** field. Press **Alt+Shift+B**, wait for the scan, then
-   press **Tab**. *Expect:* the focus ring is on the first button in the panel's barrier list.
+   press **Tab**. *Expect:* the focus ring is on the panel's "Scan the page again" button.
    If `abc` typed now lands in the page's Phone field, focus stayed in the page: tell Claude.
 3. Leave the panel open. Click in **Full name** again. Press **Alt+Shift+B**, then **Tab**.
    *Expect:* the panel closes, reopens and rescans, and the focus ring is inside it.
@@ -237,7 +237,7 @@ sites, so it never appears on the localhost pages.
 1. Open `https://httpbin.org/forms/post`.
 2. Press **Alt+Shift+B**. BRIDGE scans using the one-time grant of the shortcut.
 3. Expect the pre-check to list the form's questions.
-4. Under the barrier list, next to "Scan the page again", find
+4. Next to "Scan the page again", find
    **"Always enable BRIDGE on this site"**.
 5. Activate it. Chrome shows a prompt: BRIDGE wants to read and change your data on
    httpbin.org.
@@ -333,7 +333,7 @@ This is the pass that decides whether the product works. Method and key referenc
    you can screenshot. Keep it on for the whole pass.
 4. **Decide about automatic reading.** By default VoiceOver reads a newly loaded web page
    from the top until something interrupts it, and the side panel is a web page. So opening
-   BRIDGE speaks the heading, the summary, and then every barrier and question. **Control**
+   BRIDGE speaks the heading, the summary, and then every question. **Control**
    stops it. To turn it off: VoiceOver Utility (**Control+Option+Fn+F8**), Web, General,
    untick **"Automatically speak the webpage"**. Write down which setting the pass used.
    Do part of one run with it on, because that is what a new user hears.
@@ -361,9 +361,9 @@ caption panel.
 4. **Find your way by heading.** **Control+Option+U** opens the rotor. Choose Headings.
    *Expect:* BRIDGE; Application pre-check; Questions; Question 1 of 13; Check what the
    page contains; Barrier report.
-5. **The barrier list.** Tab through it.
-   *Expect:* each field barrier is a button that speaks its severity and sentence.
-   Activating one moves you to that question.
+5. **No barrier list.** Tab from the summary onward.
+   *Expect:* "Scan the page again" comes right after the summary. No barrier sentence is
+   ever spoken in the panel; the barriers exist only in the exported report (2026-09-22).
 6. **"How to answer".**
    *Expect:* a group named "How to answer" with two radio buttons, "One question at a
    time" selected.
@@ -470,10 +470,9 @@ announce silent step changes, and turn the visa question into an answerable grou
 7. Click **Next** on the page. Expect "Step 2 of N: …". Note each step's announcement.
 8. Keep going until the step with
    *"Will you now or in the future require sponsorship for employment visa status?"*
-9. In the panel, check:
-   - The barrier list shows **"All 2 options for … sound identical to a screen reader. The
-     words "Yes" and "No" are never spoken."**
-   - The question is a group whose name is the question, with options **Yes** and **No**.
+9. In the panel, check: the question is a group whose name is the question, with options
+   **Yes** and **No**. (The panel shows no barrier sentences; the identically-named-options
+   barrier is checked in the exported report at step 15.)
 10. Choose an answer in the panel and activate its **Write** button.
 11. Expect "… Confirmed on the page", and the matching radio selected in LinkedIn's dialog.
 12. With VoiceOver on, Tab to the same two radios in LinkedIn's own dialog and listen. That
@@ -481,7 +480,8 @@ announce silent step changes, and turn the visa question into an answerable grou
 13. Activate "Read back everything from the page".
 14. **Stop here.** Close the dialog with its X and choose **Discard**.
 15. In the panel, export the barrier report as JSON. Open the file and confirm it contains
-    no answers, no name and no email.
+    no answers, no name and no email, and that it carries the `options-identically-named`
+    barrier for the visa question.
 
 **Write down**
 
