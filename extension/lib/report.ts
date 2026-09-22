@@ -14,7 +14,7 @@
 // The .ts on './rules' is load-bearing: test/e2e.mjs imports this module directly in Node,
 // which resolves value imports by exact path. Vite resolves it unchanged. './types' needs
 // none — a type-only import is erased before resolution.
-import { STANDARD, wcagFor, type RuleId } from './rules.ts';
+import { RULES, STANDARD, wcagFor, type RuleId } from './rules.ts';
 import type { ApplicationSession, BarrierReport, Barrier, ReportBarrier, ReportPageBarrier, ScanResult } from './types';
 
 /**
@@ -47,10 +47,10 @@ export function toReport(scan: Pick<ScanResult, 'url' | 'scannedAt' | 'fields' |
     standard: STANDARD,
     barriers: scan.fields.flatMap((f) =>
       f.barriers.map((b: Barrier): ReportBarrier => ({
-        rule: b.rule, severity: b.severity, label: f.label, impact: b.message, ...wcagFields(b.rule),
+        rule: b.rule, severity: b.severity, label: f.label, impact: b.message, fix: RULES[b.rule].fix, ...wcagFields(b.rule),
       }))),
     pageBarriers: scan.pageBarriers.map((b: Barrier): ReportPageBarrier => ({
-      rule: b.rule, severity: b.severity, impact: b.message, ...wcagFields(b.rule),
+      rule: b.rule, severity: b.severity, impact: b.message, fix: RULES[b.rule].fix, ...wcagFields(b.rule),
     })),
   };
 }
@@ -95,7 +95,8 @@ export function reportMarkdown(r: BarrierReport): string {
   // WCAG numbers are stated as automated findings, never as a conformance result.
   const line = (b: ReportBarrier | ReportPageBarrier) =>
     `- **${b.severity}** \`${b.rule}\`${'label' in b ? ` on "${b.label}"` : ''}: ${b.impact}` +
-    (b.wcag?.length ? ` _(WCAG ${b.wcagLevel} ${b.wcag.join(', ')})_` : ' _(no WCAG mapping recorded)_');
+    (b.wcag?.length ? ` _(WCAG ${b.wcagLevel} ${b.wcag.join(', ')})_` : ' _(no WCAG mapping recorded)_') +
+    `\n  Suggested fix: ${b.fix}`;
   const list = (page: ReportPageBarrier[], field: ReportBarrier[], none: string) =>
     (page.length + field.length ? [...page, ...field].map(line).join('\n') : none);
   const total = r.barriers.length + r.pageBarriers.length;

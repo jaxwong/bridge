@@ -97,6 +97,8 @@ export interface ReportBarrier {
   severity: Severity;
   label: string;
   impact: string;
+  /** The rule's suggested fix from lib/rules.ts: the same sentence for every field it fires on. */
+  fix: string;
   /** Present only when the application has more than one step. */
   step?: number;
 

@@ -6,7 +6,7 @@
 import { chromium } from 'playwright';
 import { buildReport, reportMarkdown } from '../lib/report.ts';
 import { createServer } from 'node:http';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -192,6 +192,23 @@ try {
     (barriers.match(/cannot reach/g) || []).length === 1 &&
     new RegExp(`frame from ${rx(`127.0.0.1:${PORT}`)} that BRIDGE cannot reach`).test(barriers));
   check('a labelled checkbox group of one is not a group barrier', !/privacy notice" is not tied/.test(barriers));
+  // The employer dashboard opens on this exact report: dashboard/src/demo-seed.json, the demo's
+  // stand-in for a send to the employer that does not exist. `make demo-seed` rewrites it from
+  // this scan; otherwise a change to apply.html that the seed does not reflect fails here.
+  // The seed describes the form as the demo serves it: `make serve`, port 8765. This suite may
+  // run on another port (BRIDGE_TEST_PORT), and the port reaches the report only through the
+  // page's own address, in `portal` and in the cross-origin frame's host. Those two hosts are
+  // mapped to the demo port; nothing else in the scan is touched.
+  const SEED = path.resolve(here, '../../dashboard/src/demo-seed.json');
+  const DEMO_PORT = 8765;
+  const asServedForDemo = (r) => JSON.parse(JSON.stringify(r)
+    .replaceAll(`localhost:${PORT}`, `localhost:${DEMO_PORT}`)
+    .replaceAll(`127.0.0.1:${PORT}`, `127.0.0.1:${DEMO_PORT}`));
+  const demoReport = asServedForDemo(scanReport);
+  if (process.env.WRITE_DEMO_SEED) writeFileSync(SEED, `${JSON.stringify(demoReport, null, 2)}\n`);
+  const undated = (r) => JSON.stringify({ ...r, generatedAt: '' });
+  check('the dashboard demo seed is exactly what BRIDGE reports on apply.html, apart from its date',
+    existsSync(SEED) && undated(JSON.parse(readFileSync(SEED, 'utf8'))) === undated(demoReport), SEED);
   // The two rules lib/rules.ts leaves unmapped both fire on this page: they carry no
   // criterion rather than a guess, while every mapped finding beside them carries its own.
   const findings = [...scanReport.barriers, ...scanReport.pageBarriers];
@@ -566,6 +583,14 @@ try {
       every.some((b) => b.rule === 'options-identically-named'));
     check('report: Markdown twin',
       new RegExp(`^# Accessibility barrier report: ${rx(`${HOST}/modal.html`)}`).test(reportMarkdown(report)));
+    // The suggested fix comes from lib/rules.ts, one sentence per rule, on every finding.
+    const visa = report.steps[1].barriers.find((b) => b.rule === 'options-identically-named');
+    check('report: a finding carries its rule\'s suggested fix', visa?.fix ===
+      'Remove the shared aria-label from each option so each is named by its own text ("Yes", "No"). Put the question in the group\'s <legend>.', visa?.fix);
+    check('report: every finding carries a suggested fix', every.every((b) => typeof b.fix === 'string' && b.fix.length > 0),
+      every.filter((b) => !b.fix).map((b) => b.rule).join(','));
+    check('report: the Markdown twin gives the fix on the line under its finding',
+      reportMarkdown(report).includes(`_(WCAG A 4.1.2, 2.5.3)_\n  Suggested fix: ${visa?.fix}`));
   });
 
   // =====================================================================================

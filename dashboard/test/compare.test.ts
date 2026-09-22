@@ -262,6 +262,24 @@ rejects('rejects a standard at an unknown level', withStandard({ name: 'WCAG', v
 rejects('rejects a standard that checks nothing', withStandard({ name: 'WCAG', version: '2.2', level: 'AA', checked: [] }), /not a non-empty array/);
 rejects('rejects a checked list holding a guideline number', withStandard({ name: 'WCAG', version: '2.2', level: 'AA', checked: ['4.1'] }), /expected a number like "4\.1\.2"/);
 
+// --- suggested fixes -----------------------------------------------------------------
+// `fix` comes from the scanner's rule catalogue. Optional: every legacy report lacks it.
+check('a legacy report with no fix still parses, and carries none', v1.barriers.every((b) => b.fix === undefined));
+check('a fix survives the parser unchanged',
+  parseReport(withBarrier({ fix: 'Add a visible <label>.' }), 'x.json').barriers[0].fix === 'Add a visible <label>.');
+rejects('rejects a fix that is not a sentence', withBarrier({ fix: 42 }), /"fix" that is not a non-empty sentence/);
+rejects('rejects an empty fix', withBarrier({ fix: '' }), /"fix" that is not a non-empty sentence/);
+
+// The page opens on src/demo-seed.json and parses it at startup, so a seed that fails the
+// boundary check would stop the page. The extension's e2e suite keeps it equal to a real scan.
+const SEED = path.resolve(here, '../src/demo-seed.json');
+const seeded = parseReport(JSON.parse(readFileSync(SEED, 'utf8')), 'demo-seed.json');
+check('the demo seed is a valid report of the Acme apply form',
+  seeded.portal === 'localhost:8765' && seeded.pagePath === '/apply.html', `${seeded.portal}${seeded.pagePath}`);
+check('every finding in the demo seed carries a suggested fix',
+  findingsOf(seeded).length > 0 && findingsOf(seeded).every((b) => typeof b.fix === 'string' && b.fix.length > 0),
+  `${findingsOf(seeded).length} findings`);
+
 const failed = results.filter((r) => !r.ok).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);
 process.exit(failed ? 1 : 0);

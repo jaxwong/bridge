@@ -18,10 +18,9 @@
     <h1>Accessibility findings from real applicants</h1>
     <p class="lede">
       When someone applies for a job using BRIDGE, the extension records the accessibility
-      barriers it found on that form and the applicant can export a report. Load those
-      reports here to see what each form is doing to the people trying to use it, and what
-      has changed between one report and the next: barriers fixed, barriers still open, and
-      barriers that are new.
+      barriers it found on that form. Their reports show here: what each form is doing to the
+      people trying to use it, a suggested fix for each barrier, and what has changed between
+      one report and the next.
     </p>
 
     <p class="disclaimer" role="note">
@@ -34,29 +33,9 @@
     <!-- Status, announced to a screen reader as it changes. One region for the whole page. -->
     <p id="live" class="live" role="status" aria-live="polite"></p>
 
-    <section aria-labelledby="load-h">
-      <h2 id="load-h">Load barrier reports</h2>
-      <p id="load-help">
-        Choose the JSON reports exported from the BRIDGE extension. You can load more than
-        once — each file adds to what is already loaded, so several reports for one form
-        build up a history. The reports carry findings only: no answers, no CV, no
-        credentials and nothing identifying the applicant.
-      </p>
-      <div class="loader" id="dropzone">
-        <label class="file-label" for="reports">Barrier report files (JSON)</label>
-        <input type="file" id="reports" name="reports" multiple accept="application/json,.json"
-               aria-describedby="load-help">
-        <p class="loader__alt">You can also drag report files onto this box. Either way works —
-          an uploader that <em>only</em> accepts a drag is one of the barriers BRIDGE reports.</p>
-      </div>
-      <div id="load-errors" class="errors" hidden></div>
-    </section>
-
     <section id="list-view" aria-labelledby="list-h">
       <h2 id="list-h" tabindex="-1">Forms reported on</h2>
-      <div id="list-body">
-        <p class="empty">No reports loaded yet.</p>
-      </div>
+      <div id="list-body"></div>
     </section>
 
     <section id="detail-view" aria-labelledby="detail-h" hidden>
@@ -114,9 +93,10 @@
 
       <h3>What this demo does not do</h3>
       <p>
-        No accounts, no billing, no automated crawling. Reports arrive only because an
-        applicant chose to export one and a person loaded it here. BRIDGE never scans a form
-        on an employer's behalf, never signs in anywhere, and never submits an application.
+        No accounts, no billing, no automated crawling. Sending a report from the extension to
+        this page is not built yet: the report shown is one real BRIDGE scan of the Acme Careers
+        test form, captured ahead of time. BRIDGE never scans a form on an employer's behalf,
+        never signs in anywhere, and never submits an application on its own.
       </p>
     </section>
   </main>

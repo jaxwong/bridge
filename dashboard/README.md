@@ -1,8 +1,8 @@
 # BRIDGE dashboard
 
-The employer side of BRIDGE. It loads accessibility reports that applicants exported from
-the BRIDGE extension, shows what each form is doing to the people using it, and compares
-each report with the last one for the same form.
+The employer side of BRIDGE. It shows the accessibility reports BRIDGE produced on
+applicants' forms, what each form is doing to the people using it, a suggested fix for each
+barrier, and how each report compares with the last one for the same form.
 
 A static page. No server, no backend, no accounts, no database, and **no scanning of its
 own** — it receives reports, it does not go and fetch them. Plain TypeScript and native
@@ -22,30 +22,39 @@ npm run typecheck
 ```
 applicant reaches a job application form
   -> BRIDGE extension scans it, in their browser
-  -> the report is sent to the employer when the applicant submits
-  -> a business user loads that JSON here
+  -> the report is sent to the employer when the applicant submits   (NOT BUILT)
+  -> it shows here
 ```
 
 The dashboard never contacts a job site, never scans anything, and has no network calls at
-all. It reads the files it is given.
+all.
 
-**The send is not built yet.** The panel's manual export button has been removed in favour
-of it, so today nothing produces a fresh report and the dashboard can only be fed from
-`../fixtures/`. The report format is unchanged, so anything the send produces will load.
+## The demo seed: the only report this page shows
 
-## Loading reports
+**The send is not built yet, so nothing reaches this page.** For the demo it opens on one
+seeded report, [`src/demo-seed.json`](src/demo-seed.json), imported at build time. There is
+no file upload: it was removed so the demo can switch straight from the applicant's window
+to the employer's.
 
-`npm run dev`, then choose report files with the file picker. Dragging files onto the box
-also works — as an addition, never as the only way in. A drag-drop-only uploader is one of
-the barriers this product exists to report, so it could hardly be the way into the
-dashboard.
+The seed is **not hand-written**. It is the report the BRIDGE scanner produces on the Acme
+Careers applicant form (`extension/test/fixtures/acme/apply.html`), written by the
+extension's e2e suite:
 
-Loading is **additive**: pick files, pick more, they accumulate. Several reports for one
-form are what makes a history, and the history is what the comparison needs.
+```bash
+make demo-seed       # from the repo root: rewrites src/demo-seed.json from a real scan
+```
 
-Reports are grouped into forms by `portal` + `pagePath` **read from inside the file**, not
-from its name: a file picker hands over a name and no directory. The same report loaded
-twice is still one report.
+Every other run of the e2e suite compares the seed with a fresh scan, ignoring only
+`generatedAt`, and fails if they differ. A change to the form therefore cannot leave the
+dashboard showing findings the form no longer has. Re-run `make demo-seed` on the morning of
+a demo so the date on the page is recent.
+
+The page passes the seed through `parseReport()` like any report. A seed that fails that
+check stops the page at load, and `npm test` fails on it too.
+
+Reports are grouped into forms by `portal` + `pagePath` read from inside the report. With
+one seed there is one form and one scan, so the page shows everything as open and nothing as
+resolved or new. The comparison code is unchanged and covered by `npm test`.
 
 ## What it shows
 
@@ -56,6 +65,12 @@ new; a first report has no history to have regressed from.
 
 Every finding shows its rule, its severity as a word, the field it is on, and the
 plain-language impact sentence the scanner wrote.
+
+**Suggested fix.** Each finding also shows the report's `fix`: one or two sentences saying
+what to change. The dashboard does not decide it. It comes from the rule catalogue in
+[`../extension/lib/rules.ts`](../extension/lib/rules.ts), one sentence per rule, and says
+only what follows from what that rule tests. It is a suggestion, not a patch: the report
+carries no page source to patch. Reports from before `fix` existed show no fix line.
 
 ## Automated WCAG 2.2 A/AA findings
 

@@ -42,6 +42,12 @@ interface Mapping {
 
 interface Rule {
   severity: Severity;
+  /**
+   * What the employer can change so the rule stops firing: one or two plain sentences, the
+   * same for every field the rule fires on. It says only what follows from what the rule
+   * actually tests, and it is a suggestion, not a patch: the report carries no page source.
+   */
+  fix: string;
   /** Null when the rule is deliberately unmapped; the reason is in the comment beside it. */
   mapping: Mapping | null;
 }
@@ -62,6 +68,7 @@ export const RULES: Record<RuleId, Rule> = {
   // label[for], a wrapping <label>, title or placeholder. No mechanism produced a name.
   'missing-label': {
     severity: 'usability',
+    fix: 'Give the field a visible <label for="…"> that names it, or point aria-labelledby at the visible question.',
     mapping: {
       wcag: ['4.1.2'],
       reviewRequired: false,
@@ -78,6 +85,7 @@ export const RULES: Record<RuleId, Rule> = {
   // (accName returns fromPlaceholder: true).
   'label-placeholder-only': {
     severity: 'usability',
+    fix: 'Add a visible <label>. A placeholder disappears as soon as the applicant types, so it cannot be the only name.',
     mapping: {
       wcag: ['3.3.2'],
       reviewRequired: false,
@@ -93,6 +101,7 @@ export const RULES: Record<RuleId, Rule> = {
   // it carries no role attribute at all.
   'custom-dropdown-no-role': {
     severity: 'blocking',
+    fix: 'Use a native <select> with a <label for="…">. If it must stay custom, give it role="combobox", aria-expanded and a role="listbox" of options.',
     mapping: {
       wcag: ['4.1.2'],
       reviewRequired: true,
@@ -108,6 +117,7 @@ export const RULES: Record<RuleId, Rule> = {
   // visibility:hidden, or inside [inert].
   'not-keyboard-operable': {
     severity: 'blocking',
+    fix: 'Make it reachable with Tab: use a native control, or remove the tabindex="-1", inert or hiding that takes it out of the tab order.',
     mapping: {
       wcag: ['2.1.1'],
       reviewRequired: true,
@@ -124,6 +134,7 @@ export const RULES: Record<RuleId, Rule> = {
   // accName() is empty, checked across fieldset, [role=radiogroup] and [role=group].
   'group-not-labelled': {
     severity: 'blocking',
+    fix: 'Wrap the options in a <fieldset> whose <legend> is the question.',
     mapping: {
       wcag: ['1.3.1'],
       reviewRequired: false,
@@ -140,6 +151,7 @@ export const RULES: Record<RuleId, Rule> = {
   // identical, so the shared name overrides each option's own visible text.
   'options-identically-named': {
     severity: 'blocking',
+    fix: 'Remove the shared aria-label from each option so each is named by its own text ("Yes", "No"). Put the question in the group\'s <legend>.',
     mapping: {
       wcag: ['4.1.2', '2.5.3'],
       reviewRequired: false,
@@ -157,6 +169,7 @@ export const RULES: Record<RuleId, Rule> = {
   // is not itself a keyboard trigger.
   'drag-drop-only': {
     severity: 'blocking',
+    fix: 'Keep the drop zone, and add a "Choose file" button that Tab reaches and that opens the file input.',
     mapping: {
       wcag: ['2.1.1'],
       reviewRequired: false,
@@ -173,6 +186,7 @@ export const RULES: Record<RuleId, Rule> = {
   // scan.ts:301 — a file input that IS keyboard reachable but has no accessible name.
   'upload-unnamed': {
     severity: 'usability',
+    fix: 'Give the file input a <label for="…"> that says what to upload, such as "CV (PDF or Word)".',
     mapping: {
       wcag: ['4.1.2'],
       reviewRequired: false,
@@ -189,6 +203,7 @@ export const RULES: Record<RuleId, Rule> = {
   // target's circle.
   'target-too-small': {
     severity: 'usability',
+    fix: 'Make the control at least 24 by 24 CSS pixels, or space it so a 24px circle around it touches no other control.',
     mapping: {
       wcag: ['2.5.8'],
       reviewRequired: false,
@@ -207,6 +222,7 @@ export const RULES: Record<RuleId, Rule> = {
   // composited colour of its ancestors' solid backgrounds.
   'low-contrast': {
     severity: 'usability',
+    fix: 'Raise the text contrast to at least 4.5:1 (3:1 for large text). This changes your colours, so you pick the shade.',
     mapping: {
       wcag: ['1.4.3'],
       reviewRequired: true,
@@ -228,7 +244,11 @@ export const RULES: Record<RuleId, Rule> = {
   // dialog is argued as 4.1.2 (role), as 1.3.1 (relationship), and as a focus-management
   // problem under 2.4.3, and the rule tests none of those directly. It remains a real,
   // reportable barrier.
-  'modal-without-dialog-role': { severity: 'blocking', mapping: null },
+  'modal-without-dialog-role': {
+    severity: 'blocking',
+    fix: 'Use a <dialog> opened with showModal(), or give the popup role="dialog", aria-modal="true" and a name from its heading.',
+    mapping: null,
+  },
 
   // scan.ts:313. The presence of a CAPTCHA is NOT a WCAG failure. The note on 1.1.1
   // Non-text Content explicitly contemplates conforming CAPTCHAs, provided a text
@@ -238,12 +258,20 @@ export const RULES: Record<RuleId, Rule> = {
   // asserted. 3.3.8 Accessible Authentication (AA, new in 2.2) is also not claimed: it
   // applies to authentication steps, and a CAPTCHA on a job application is not necessarily
   // one. Both need a person.
-  captcha: { severity: 'blocking', mapping: null },
+  captcha: {
+    severity: 'blocking',
+    fix: 'Offer a way through that needs no sight and no puzzle, such as an audio option or a check with no challenge.',
+    mapping: null,
+  },
 
   // sidepanel/main.ts, from ScanResult.iframeOrigins. A visible cross-origin frame BRIDGE
   // has no content script in: a limit of the scan, not a defect of the page, so no
   // criterion can be claimed. Reported so the reader knows part of the form went unseen.
-  'cross-origin-frame-unreachable': { severity: 'blocking', mapping: null },
+  'cross-origin-frame-unreachable': {
+    severity: 'blocking',
+    fix: 'Not a defect: BRIDGE could not look inside this embedded frame from another site. Check that part by hand.',
+    mapping: null,
+  },
 };
 
 /** The only way a barrier is made: the rule decides the severity, the caller supplies the sentence. */
