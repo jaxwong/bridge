@@ -283,6 +283,7 @@ sites, so it never appears on the localhost pages.
 | The button is not there | The site is http, already granted, or in the built-in list |
 | Spoken: "BRIDGE could not be enabled on this site. Error: This function must be called during a user gesture" | Tell Claude. The click handler lost the gesture |
 | Step 11 returns `undefined` after Allow | The content script was not registered. Tell Claude, with any error from the service worker console (`chrome://extensions`, BRIDGE, "service worker") |
+| Nothing is spoken after Deny or Allow | Open **Diagnostics** at the bottom of the panel: an "Always enable" line records `denied`, `granted` or the error, so you can tell "not announced" apart from "the click did nothing". Chrome's prompt takes focus out of the panel, and a live region is only spoken while its document holds focus — the panel now takes focus back before it speaks. If it is still silent with that line present, the announcement is reaching the live region and the screen reader is not picking it up; say so |
 
 **Clean up:** in BRIDGE's Details, Site access, remove httpbin.org.
 

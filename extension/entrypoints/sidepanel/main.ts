@@ -829,16 +829,44 @@ async function offerAlwaysEnable(origin: string) {
   $('always-enable').hidden = !enableOrigin;
 }
 
+/**
+ * Bring keyboard focus back into the panel, then say what happened.
+ *
+ * Chrome's permission prompt is browser UI: answering it leaves focus outside this
+ * document, and a live region in a document that does not hold focus is not spoken. The
+ * Deny outcome was silent for exactly this reason (manual check 4) — the sentence was
+ * written to #live and nobody was listening. Focusing a real control first makes the panel
+ * the focus context again, so the announcement that follows is heard.
+ *
+ * It also fixes a second fault on Allow: that path hides the very button the user pressed,
+ * which drops focus to nowhere. `el` is where focus should land once the button is gone.
+ */
+function settleAfterPrompt(el: HTMLElement, message: string) {
+  window.focus();
+  el.focus();
+  announce(message);
+}
+
 $('always-enable').addEventListener('click', () => {
   // permissions.request must be the first thing the click does: Chrome drops the user
   // gesture as soon as anything else is awaited.
   const origin = enableOrigin;
   browser.permissions.request({ origins: [`${origin}/*`] }).then(async (ok) => {
-    if (!ok) { announce('BRIDGE was not enabled on this site. Nothing changed.'); return; }
+    if (!ok) {
+      // The button stays, so focus goes back to what the user pressed.
+      diag('Always enable', `denied for ${origin}`);
+      settleAfterPrompt($('always-enable'), 'BRIDGE was not enabled on this site. Nothing changed.');
+      return;
+    }
     await worker({ type: 'bridge/register-site', origin });
     $('always-enable').hidden = true;
-    announce(`BRIDGE is now always enabled on ${new URL(origin).host}. It will scan this site's application pages as they load.`);
-  }).catch((e) => announce(`BRIDGE could not be enabled on this site. ${String(e)}`));
+    diag('Always enable', `granted for ${origin}`);
+    settleAfterPrompt($('rescan'), `BRIDGE is now always enabled on ${new URL(origin).host}. It will scan this site's application pages as they load.`);
+  }).catch((e) => {
+    diag('Always enable', `failed for ${origin}: ${String(e)}`);
+    const back = $('always-enable').hidden ? $('rescan') : $('always-enable');
+    settleAfterPrompt(back, `BRIDGE could not be enabled on this site. ${String(e)}`);
+  });
 });
 
 // --- barrier report (§6.7) --------------------------------------------------------------------
