@@ -140,11 +140,23 @@ try {
     /WCAG 2\.2 Level A\s*4\.1\.2, 2\.5\.3/.test(await page.locator('.barrier', { hasText: 'options-identically-named' }).textContent()));
 
   const summary = (await page.textContent('.wcag-summary')).replace(/\s+/g, ' ').trim();
-  check('the summary counts findings by WCAG level',
-    /11 of 13 findings map to a success criterion \(Level A: 11\)/.test(summary), summary.slice(0, 140));
-  const criteria = await page.locator('.wcag-table tbody th[scope=row]').allTextContents();
-  check('the summary breaks findings down by success criterion, numerically ordered',
-    criteria.join(',') === '1.3.1,2.1.1,2.5.3,4.1.2', criteria.join(','));
+  check('the summary leads with how many findings there are and how many block someone',
+    /13 findings on this form — 9 blocking and 4 usability\./.test(summary), summary.slice(0, 120));
+  check('and accounts for the findings it could not map',
+    /2 findings are not mapped to a criterion\. 3 need a person to confirm the detection\./.test(summary),
+    summary.slice(-160));
+
+  // Every criterion the scanner reads is listed, not only the ones with findings: that is
+  // what makes the limit of the check visible rather than merely stated.
+  const criteria = await page.locator('.wcag-table tbody .crit__id').allTextContents();
+  check('every criterion BRIDGE checks is listed, in WCAG order',
+    criteria.join(',') === '1.3.1,1.4.3,2.1.1,2.5.3,2.5.8,3.3.2,4.1.2', criteria.join(','));
+  check('each one is named, not just numbered',
+    (await page.locator('.wcag-table tbody .crit__name').allTextContents()).join(',')
+      === 'Info and Relationships,Contrast (Minimum),Keyboard,Label in Name,Target Size (Minimum),Labels or Instructions,Name, Role, Value');
+  check('a criterion with nothing found says so rather than being left out',
+    (await page.locator('.wcag-table tbody tr.crit--clear .crit__none').allTextContents()).join('|') === 'No findings|No findings|No findings',
+    (await page.locator('.wcag-table tbody tr.crit--clear .crit__none').allTextContents()).join('|'));
   // The page-level banner was removed; this is now the only place the disclaimer appears,
   // so it carries the whole of what the old banner said and is checked in full here.
   const reportDisclaimer = await page.locator('.wcag-summary .disclaimer').textContent();
@@ -156,9 +168,10 @@ try {
     /Measured against WCAG 2\.2, Level AA/.test(summary));
   check('no sentence in the report claims compliance, certification or legal standing',
     (await unqualifiedClaims()).length === 0, (await unqualifiedClaims()).join(' | ').slice(0, 200) || 'none');
-  check('the summary names the standard and the criteria the scanner can fail, so silence is not a pass',
-    /Measured against WCAG 2\.2, Level AA\. The scanner can fail 7 criteria: 1\.3\.1, 1\.4\.3, 2\.1\.1, 2\.5\.3, 2\.5\.8, 3\.3\.2, 4\.1\.2\. Any other criterion was not checked\./.test(summary),
-    summary.slice(0, 220));
+  check('the summary says what was measured, and that silence is not a pass',
+    /Measured against WCAG 2\.2, Level AA\. BRIDGE checks the 7 success criteria below\./.test(summary) &&
+    /not tested, so its absence from a report is not a pass/.test(summary),
+    summary.slice(0, 260));
   await axeScan('form detail');
 
   // --- back returns focus where it came from -----------------------------------------

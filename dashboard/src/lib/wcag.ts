@@ -10,6 +10,25 @@
 
 import type { BarrierReport, ReportBarrier, WcagLevel } from './report.ts';
 
+/**
+ * The success criteria BRIDGE can report against, with WCAG's own titles and levels.
+ *
+ * Display data for a fixed public standard, not a judgement about any rule: which criteria
+ * the scanner checks is the producer's to say, and the report carries that list in
+ * `standard.checked`. This only puts a name and a level beside a number, because "1.3.1"
+ * on its own tells an employer nothing. A criterion the producer starts checking before
+ * this table knows it shows as its number alone rather than being dropped.
+ */
+export const CRITERIA: Record<string, { name: string; level: WcagLevel }> = {
+  '1.3.1': { name: 'Info and Relationships', level: 'A' },
+  '1.4.3': { name: 'Contrast (Minimum)', level: 'AA' },
+  '2.1.1': { name: 'Keyboard', level: 'A' },
+  '2.5.3': { name: 'Label in Name', level: 'A' },
+  '2.5.8': { name: 'Target Size (Minimum)', level: 'AA' },
+  '3.3.2': { name: 'Labels or Instructions', level: 'A' },
+  '4.1.2': { name: 'Name, Role, Value', level: 'A' },
+};
+
 export interface CriterionCount {
   criterion: string;
   level: WcagLevel;

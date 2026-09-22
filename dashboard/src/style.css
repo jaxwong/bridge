@@ -719,7 +719,36 @@ ul.barriers { list-style: none; margin: 0; padding: 0; display: grid; gap: var(-
 .wcag-summary > h3 { margin-top: var(--s2); }
 .wcag-summary > p { font-size: 0.9rem; }
 .wcag-summary strong { font-weight: 650; }
+/* The headline: how many, and how bad. */
+.summary-lead { font-size: 1rem; color: var(--text-2); }
+.summary-lead strong { color: var(--text); font-weight: 660; }
+.summary-lead .lead-blocking { color: var(--danger); }
+
 .wcag-checked { color: var(--text-3); font-size: 0.84rem; max-width: 76ch; }
+.wcag-checked span { color: var(--text-2); font-weight: 600; }
+.wcag-tail { color: var(--text-3); font-size: 0.84rem; margin-top: -4px; }
+
+/* A criterion reads as "number, then what it is". The number is the anchor, the name is
+   what makes it mean anything to somebody who does not have WCAG memorised. */
+/* The criterion column gets the width its names need, so "Info and Relationships" does
+   not break across two lines at the cell edge. */
+.wcag-table thead th:first-child { width: 36%; }
+.wcag-table tbody th[scope="row"] { white-space: nowrap; }
+.crit__id {
+  display: inline-block;
+  min-width: 3.6em;
+  font-variant-numeric: tabular-nums;
+  font-weight: 680;
+  color: var(--text);
+}
+.crit__name { color: var(--text-2); font-weight: 500; }
+/* A row with nothing found is quieter, but still present: that it was looked at is the
+   point of listing it. */
+.crit--clear th, .crit--clear td { color: var(--text-3); }
+.crit--clear .crit__id { color: var(--text-2); font-weight: 600; }
+.crit--clear .count { color: var(--text-3); font-weight: 500; }
+.crit__none { font-style: italic; font-family: var(--font) !important; font-size: 0.82rem !important; }
+.crit--hit .count { color: var(--danger); font-weight: 700; }
 .wcag-checked span { font-variant-numeric: tabular-nums; color: var(--text-2); font-weight: 550; }
 
 .wcag-table { margin: var(--s3) 0 var(--s4); box-shadow: none; }

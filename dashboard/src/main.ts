@@ -6,7 +6,7 @@ import { compareLatest, countBySeverity } from './lib/compare.ts';
 import type { ComparedBarrier, Comparison } from './lib/compare.ts';
 import { groupByForm, parseReport } from './lib/report.ts';
 import type { BarrierReport, Form, Severity } from './lib/report.ts';
-import { findingsOf, summariseWcag } from './lib/wcag.ts';
+import { CRITERIA, findingsOf, summariseWcag } from './lib/wcag.ts';
 import { initTheme } from './lib/theme.ts';
 // DEMO STAND-IN. Nothing sends reports to this page yet, so it opens on one seeded report:
 // a real BRIDGE scan of the Acme Careers test form (extension/test/fixtures/acme/apply.html),
@@ -173,57 +173,77 @@ function barrierItem(b: ComparedBarrier): HTMLElement {
 }
 
 /**
- * Findings in the newest scan, counted by WCAG level and by success criterion. Counts only
- * — it says nothing about whether the form conforms, which no automated tool can decide.
+ * How the form stands against the guidelines BRIDGE checks.
+ *
+ * Every criterion the scanner reads is listed, not only the ones with findings. A table of
+ * four failing numbers answered "what did you find"; it did not answer "how does my form
+ * do", and it left the seven-criteria caveat as a run-on sentence nobody reads. Listing all
+ * of them makes the limit of the check visible instead of stated: what is on this table is
+ * what was looked at, and anything absent from it was never tested.
+ *
+ * "No findings" is not "passes", which is what the disclaimer below the table is for.
  */
 function wcagSummarySection(newest: BarrierReport): HTMLElement {
-  const s = summariseWcag(findingsOf(newest));
+  const findings = findingsOf(newest);
+  const s = summariseWcag(findings);
   const section = el('section', { class: 'wcag-summary' }, [
-    el('h3', { text: 'Automated WCAG 2.2 findings in this report' }),
+    el('h3', { text: 'Accessibility check summary' }),
   ]);
-
-  // The producer says which criteria it can fail. Naming them is what stops "no finding"
-  // from reading as "passed": every other criterion was simply never tested.
-  if (newest.standard) {
-    const { name, version, level, checked } = newest.standard;
-    section.append(el('p', { class: 'wcag-checked' }, [
-      `Measured against ${name} ${version}, Level ${level}. The scanner can fail ${checked.length} criteria: `,
-      el('span', { text: checked.join(', ') }),
-      '. Any other criterion was not checked.',
-    ]));
-  }
 
   if (s.total === 0) {
     section.append(el('p', { class: 'empty', text: 'This report found no barriers, so there is nothing to map.' }));
     return section;
   }
 
-  const levels = s.byLevel.length
-    ? s.byLevel.map((l) => `Level ${l.level}: ${l.count}`).join(' · ')
-    : 'none mapped';
-  section.append(el('p', {}, [
-    el('strong', { text: `${s.mapped} of ${s.total} findings map to a success criterion` }),
-    ` (${levels}). ${s.unmapped} with no mapping recorded.`,
-    s.reviewRequired ? ` ${s.reviewRequired} flagged for human review of the detection itself.` : '',
+  const blocking = findings.filter((b) => b.severity === 'blocking').length;
+  const usability = findings.filter((b) => b.severity === 'usability').length;
+  section.append(el('p', { class: 'summary-lead' }, [
+    el('strong', { text: `${s.total} ${s.total === 1 ? 'finding' : 'findings'} on this form` }),
+    ' — ',
+    el('strong', { class: 'lead-blocking', text: `${blocking} blocking` }),
+    ` and ${usability} usability.`,
   ]));
 
-  if (s.byCriterion.length) {
-    section.append(el('table', { class: 'wcag-table' }, [
-      el('caption', { text: 'Findings by success criterion. One finding citing two criteria is counted under each.' }),
-      el('thead', {}, [el('tr', {}, [
-        el('th', { scope: 'col', text: 'Criterion' }),
-        el('th', { scope: 'col', text: 'Level' }),
-        el('th', { scope: 'col', text: 'Findings' }),
-        el('th', { scope: 'col', text: 'From rules' }),
-      ])]),
-      el('tbody', {}, s.byCriterion.map((c) => el('tr', {}, [
-        el('th', { scope: 'row', text: c.criterion }),
-        el('td', { text: c.level }),
-        el('td', { class: 'count', text: String(c.count) }),
-        el('td', { text: c.rules.join(', ') }),
-      ]))),
+  // The producer says which criteria it can fail. Naming them all is what stops "no
+  // finding" from reading as "passed": every other criterion was simply never tested.
+  const checked = newest.standard?.checked ?? s.byCriterion.map((c) => c.criterion);
+  if (newest.standard) {
+    const { name, version, level } = newest.standard;
+    section.append(el('p', { class: 'wcag-checked' }, [
+      `Measured against ${name} ${version}, Level ${level}. BRIDGE checks the `,
+      el('span', { text: String(checked.length) }),
+      ' success criteria below. A criterion that is not on this list was not tested, so its absence from a report is not a pass.',
     ]));
   }
+
+  const found = new Map(s.byCriterion.map((c) => [c.criterion, c]));
+  section.append(el('table', { class: 'wcag-table' }, [
+    el('caption', { text: 'Findings by success criterion. One finding citing two criteria is counted under each.' }),
+    el('thead', {}, [el('tr', {}, [
+      el('th', { scope: 'col', text: 'Success criterion' }),
+      el('th', { scope: 'col', text: 'Level' }),
+      el('th', { scope: 'col', text: 'Findings' }),
+      el('th', { scope: 'col', text: 'From rules' }),
+    ])]),
+    el('tbody', {}, checked.map((id) => {
+      const hit = found.get(id);
+      const meta = CRITERIA[id];
+      return el('tr', { class: hit ? 'crit crit--hit' : 'crit crit--clear' }, [
+        el('th', { scope: 'row' }, [
+          el('span', { class: 'crit__id', text: id }),
+          ...(meta ? [el('span', { class: 'crit__name', text: meta.name })] : []),
+        ]),
+        el('td', { text: meta?.level ?? hit?.level ?? '' }),
+        el('td', { class: 'count', text: hit ? String(hit.count) : '0' }),
+        el('td', hit ? {} : { class: 'crit__none' }, [hit ? hit.rules.join(', ') : 'No findings']),
+      ]);
+    })),
+  ]));
+
+  const tail: string[] = [];
+  if (s.unmapped) tail.push(`${s.unmapped} ${s.unmapped === 1 ? 'finding is' : 'findings are'} not mapped to a criterion`);
+  if (s.reviewRequired) tail.push(`${s.reviewRequired} need a person to confirm the detection`);
+  if (tail.length) section.append(el('p', { class: 'wcag-tail', text: `${tail.join('. ')}.` }));
 
   section.append(el('p', { class: 'disclaimer', role: 'note' }, [
     el('strong', { text: 'Automated findings, not a conformance decision. ' }),
