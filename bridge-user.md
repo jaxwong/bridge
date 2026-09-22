@@ -554,9 +554,19 @@ user's toolbars. Four chords per step is not a usable flow, so:
   name whatever the panel asks.
 - A button that submits is **never pressed by the shortcut**. While the step's read-back is
   current, the panel shows **"Submit my application"**; the second Alt+Shift+S only moves
-  focus to it. Activating it asks "Submit your application to <site>? N questions are empty.
-  This cannot be undone.", with focus on Cancel. Only "Yes, submit now" sends `bridge/submit`.
-  Any write, step change or reload withdraws the button until the step is read back again.
+  focus to it. Activating it asks "Submit your application to <site>? N questions on this
+  step are empty: <their names>. This cannot be undone.", with focus on Cancel. The names,
+  not just the count, and the scope said out loud: read-back can only see the step the page
+  is showing, and a bare count implied it had covered the whole journey (found in check 2,
+  2026-09-22). On a one-page form the scope clause is dropped. Only "Yes, submit now" sends
+  `bridge/submit`. Any write, step change or reload withdraws the button until the step is
+  read back again.
+- **Going back is the panel's "Go back to the previous step" button**, the mirror of the
+  forward press and the way to re-check an earlier step: `bridge/back-action` presses the
+  first visible button whose name says back or previous and never one matching the forward
+  names, so it cannot submit or advance. No back button on the step is said honestly. The
+  returned step is a new-step scan like any other, and its drafts are gone — the standing
+  rule for unwritten answers.
 - Two locks, one on each side. The panel has a single path to `bridge/submit`, the confirm
   button's handler. The page side presses only a button whose name says it submits, so that
   message cannot press Next, and `bridge/forward-action` cannot press Submit.

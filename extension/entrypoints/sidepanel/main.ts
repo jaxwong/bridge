@@ -79,8 +79,9 @@ let step: StepState | null = null;
 let session: ApplicationSession | null = null;
 /** True once VERIFY has run since the last write on this step: the gate on Alt+Shift+S. */
 let verified = false;
-/** Set only while the gate is open on a step whose forward button submits (§6.5). */
-let submitOffer: { name: string; empty: number } | null = null;
+/** Set only while the gate is open on a step whose forward button submits (§6.5).
+ *  `empty` holds the names, so the confirmation can say which, not just how many. */
+let submitOffer: { name: string; empty: string[] } | null = null;
 
 /** The one place the VERIFY gate opens or closes. The panel's submit button exists only
  *  while the gate is open, so anything that changes the page withdraws it. */
@@ -502,10 +503,10 @@ async function verifyAll(): Promise<boolean> {
     // The read-back above is still true and still worth hearing; only the button's name is missing.
     diag('Forward action', String(e));
   }
-  setVerified(true, forward?.submits ? { name: forward.name, empty: empty.length } : null);
+  setVerified(true, forward?.submits ? { name: forward.name, empty } : null);
   announce(
     (filled.length ? `Your application contains: ${filled.join('. ')}.` : 'Nothing has been filled yet.') +
-    (empty.length ? ` ${empty.length} ${empty.length === 1 ? 'question is' : 'questions are'} empty: ${empty.join(', ')}.` : '') +
+    (empty.length ? ` ${empty.length} ${empty.length === 1 ? 'question' : 'questions'}${stepScope()} ${empty.length === 1 ? 'is' : 'are'} empty: ${empty.join(', ')}.` : '') +
     (forward
       ? (forward.submits
           ? ' BRIDGE submits only when you tell it to. Press Alt+Shift+S again to move to the Submit my application button in BRIDGE.'
@@ -567,9 +568,16 @@ async function forwardCommand() {
 // application", which exists only while this step's read-back is current. No shortcut,
 // scan or message leads here.
 
+/** " on this step" only when there are steps: read-back can only see the step the page is
+ *  showing, and a bare "3 questions are empty" implied it had covered the whole journey. */
+function stepScope() {
+  return (step?.total ?? 1) > 1 || (session?.steps.length ?? 0) > 1 ? ' on this step' : '';
+}
+
 function askBeforeSubmitting() {
   if (!submitOffer || !step) return;
-  const empty = submitOffer.empty ? `${submitOffer.empty} ${submitOffer.empty === 1 ? 'question is' : 'questions are'} empty. ` : '';
+  const n = submitOffer.empty.length;
+  const empty = n ? `${n} ${n === 1 ? 'question' : 'questions'}${stepScope()} ${n === 1 ? 'is' : 'are'} empty: ${submitOffer.empty.join(', ')}. ` : '';
   const question = `Submit your application to ${new URL(step.origin).host}? ${empty}This cannot be undone.`;
   $('submit-question').textContent = question;
   $('submit-confirm').hidden = false;
@@ -924,6 +932,22 @@ $('export-json').addEventListener('click', () => exportReport('json'));
 $('export-md').addEventListener('click', () => exportReport('md'));
 $('prev').addEventListener('click', () => { if (current > 0) goTo(fields[current - 1].key); });
 $('next').addEventListener('click', () => { if (current < fields.length - 1) goTo(fields[current + 1].key); });
+$('step-back').addEventListener('click', () => void (async () => {
+  if (!step) return;
+  setVerified(false);
+  const from = { session, index: session?.currentStepIndex };
+  let back;
+  try {
+    back = await send(await targetTab(), step.mainFrame, { type: 'bridge/back-action' });
+  } catch (e) {
+    announce(`BRIDGE could not reach the page. ${String(e)}`);
+    return;
+  }
+  if (!back) { announce('BRIDGE could not find a Back or Previous button on this step.'); return; }
+  diag('Back action', `${back.name}: pressed`);
+  announce(`BRIDGE pressed the ${back.name} button on the page.`);
+  await reportIfPageStays(back.name, from);
+})());
 
 // A per-viewer convenience, so plain localStorage; nothing depends on it.
 if (localStorage.getItem('bridge-mode') === 'list') mode = 'list';

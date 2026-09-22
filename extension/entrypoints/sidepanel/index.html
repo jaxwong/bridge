@@ -40,6 +40,10 @@
           <button type="button" id="prev">Previous question</button>
           <button type="button" id="next">Next question</button>
         </div>
+        <!-- Steps, not questions: BRIDGE presses the page's own Back button, the mirror of
+             Alt+Shift+S pressing Next. Read-back only sees the step the page is showing,
+             so this is also how earlier steps are re-checked. -->
+        <button type="button" id="step-back">Go back to the previous step</button>
       </section>
 
       <section>
@@ -48,7 +52,10 @@
         <button type="button" id="verify">Read back everything from the page</button>
         <ul id="verify-results"></ul>
         <button type="button" id="submit-app" hidden>Submit my application</button>
-        <div id="submit-confirm" role="group" aria-labelledby="submit-question" hidden>
+        <!-- No role=group named by the question: the name was spoken entering the group
+             and the paragraph read again right after. The announcement carries the
+             question; the paragraph is there to re-read on demand. -->
+        <div id="submit-confirm" hidden>
           <p id="submit-question"></p>
           <button type="button" id="submit-yes">Yes, submit now</button>
           <button type="button" id="submit-cancel">Cancel</button>

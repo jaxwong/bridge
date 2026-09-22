@@ -12,6 +12,7 @@ export type Request =
   | { type: 'bridge/read-back' }
   | { type: 'bridge/forward-action'; act: boolean }
   | { type: 'bridge/submit' }
+  | { type: 'bridge/back-action' }
   | { type: 'bridge/rect'; fieldId: string };
 
 export type Response<T extends Request['type']> =
@@ -21,6 +22,7 @@ export type Response<T extends Request['type']> =
   T extends 'bridge/read-back' ? ReadBackResult[] :
   T extends 'bridge/forward-action' ? ForwardAction | null :
   T extends 'bridge/submit' ? ForwardAction | null :
+  T extends 'bridge/back-action' ? ForwardAction | null :
   T extends 'bridge/rect' ? CropRect | null :
   never;
 

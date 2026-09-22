@@ -143,20 +143,27 @@ submits. This check is now about that behaviour.
 The command has a gate. The **first** press on a step reads everything back. Only the
 **second** press acts. Any write in between closes the gate again.
 
-1. Rebuild and reload the extension. Open `http://localhost:8765/modal.html`, press
-   **Alt+Shift+B**, and click **Easy Apply** on the page.
-2. Press **Alt+Shift+B** again so focus is in the panel. Do not touch the mouse from here.
+1. Rebuild and reload the extension. Close the side panel. Open
+   `http://localhost:8765/modal.html` and activate **Easy Apply** on the page, as a user
+   already on the page would.
+2. Press **Alt+Shift+B**. Focus is now in the panel. Do not touch the mouse from here.
 3. Press **Alt+Shift+S**. *Expect:* "Nothing has been filled yet." or "Your application
    contains: …", ending "Press Alt+Shift+S again and BRIDGE presses the Next button, which
    moves to the next step." The page must still show step 1.
 4. Press **Alt+Shift+S** again. *Expect:* the page moves to step 2, BRIDGE says "Step 2 of 3:
    Additional questions. …", and focus is on the first question in the panel.
-5. Repeat steps 3 and 4 to reach step 3.
+5. Repeat steps 3 and 4 to reach step 3. Then activate **"Go back to the previous step"**
+   in the panel. *Expect:* "BRIDGE pressed the Back button on the page.", the page shows
+   step 2, and the step is announced. Press **Alt+Shift+S** twice to return to step 3.
+   (On step 1, the same button says it could not find a Back or Previous button.)
 6. On step 3 press **Alt+Shift+S** twice. *Expect after the second press:* "Focus is on the
    Submit my application button in BRIDGE. Pressing it asks you to confirm before anything
    is sent." Press **Alt+Shift+S** a few more times: the page must **never** show "Submitted".
 7. Press **Space** on "Submit my application". *Expect:* "Submit your application to
-   localhost:8765? N questions are empty. This cannot be undone.", with focus on **Cancel**.
+   localhost:8765? N questions on this step are empty: <their names>. This cannot be
+   undone.", with focus on **Cancel**. The empty questions are named, and "on this step"
+   is said because read-back cannot see the steps the page has already replaced — use
+   "Go back to the previous step" to re-check those.
    Press Space: "Nothing was submitted." Press "Submit my application" again, Tab back to
    **"Yes, submit now"**, press Space. *Expect:* "BRIDGE pressed the Submit application button
    on the page, as you confirmed.", and the page shows "Submitted (test page, nothing sent)."
