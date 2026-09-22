@@ -8,7 +8,7 @@ quoted text back into the session; most failures here have a known, small fix.
 
 | # | Check | Time | Blocks the video? |
 |---|---|---|---|
-| 1 | Keyboard focus and the panel | done, 2 min left | Yes |
+| 1 | Keyboard focus and the panel | done | Yes |
 | 2 | Alt+Shift+S presses Next; submitting needs your confirmation | 10 min | Yes |
 | 3 | Screenshot crop for label inference | 10 min | Yes, if the demo shows inference |
 | 4 | "Always enable BRIDGE on this site" | 10 min | No |
@@ -16,7 +16,8 @@ quoted text back into the session; most failures here have a known, small fix.
 | 6 | VoiceOver pass with Screen Curtain | 60 min | Yes |
 | 7 | LinkedIn Easy Apply by hand | 20 min | No |
 
-**Status, 2026-09-22.** Check 1 is done apart from one VoiceOver step. Check 2 changed the
+**Status, 2026-09-22.** Check 1 is done, including what VoiceOver speaks on open. A phone
+number in a spoken confirmation was heard digit by digit, by hand. Check 2 changed the
 design twice (BRIDGE now presses Next, and submits only after a confirmation in the panel),
 and its new steps have not been run by hand yet. Checks 3 to 7 have not been started.
 
@@ -90,7 +91,7 @@ panel's console: right-click the panel, Inspect.
 
 ## 1. Keyboard focus and the panel
 
-**Done on 2026-09-21, Chrome 154 on macOS. One step is left, step 4.**
+**Done on 2026-09-21 and 2026-09-22, Chrome 154 on macOS.**
 
 What was found, by hand:
 
@@ -100,6 +101,7 @@ What was found, by hand:
 | Can a panel that is already open take focus back from the page? | **No**, not by any call BRIDGE can make. So Alt+Shift+B now closes an open panel and shows it again, which does take focus. Checked by hand: it reopens and Tab moves inside it |
 | Can the page take focus from the panel? | **No.** See check 2, which changed the design because of it |
 | Chrome's own pane key | F6 does nothing on macOS. Cmd+Option+Down arrow, or Up, reaches the other pane in four presses. Nothing in BRIDGE depends on it |
+| What does VoiceOver say when the panel opens? | **The whole panel once, top to bottom, in order** (2026-09-22, with the fixes on `main`). Nothing is announced over the reading |
 
 The reopen reloads and rescans the panel, but it costs no answers (since 2026-09-22):
 everything typed in the panel is kept as a draft in session storage and put back if the
@@ -119,17 +121,13 @@ the rule for unwritten answers.
    *Expect:* the panel closes, reopens and rescans; the focus ring is inside it; what you
    typed is back in its box; VoiceOver users hear "Back in BRIDGE. Your answers are kept…".
 
-**Still to do**
-
 4. Close the panel. Turn VoiceOver on (**Cmd+F5**). Click in **Full name**, press
    **Alt+Shift+B**, and listen. *Expect:* "BRIDGE, heading level 1"; with VoiceOver's
    default settings it then reads the whole panel once, in order — the summary is heard
    there, once, and nothing is announced over the reading. **Control** stops it (check 6,
    "Before you start", explains the setting).
 
-**Write down**
-
-- What VoiceOver said when the panel opened.
+Reopening with saved answers, under VoiceOver, is check 6 Run D.
 
 ---
 
@@ -363,11 +361,16 @@ caption panel.
    speak the question and never "Yes" or "No", and the CV control is never reached.
    *This is the "before" footage for the demo.*
 2. **On load.** Reload and wait two seconds without pressing anything.
-   *Expect:* "BRIDGE found 12 accessibility barriers on this form. Press Alt+Shift+B to open BRIDGE."
+   *Expect:* "BRIDGE found N accessibility barriers on this form. Press Alt+Shift+B to open BRIDGE."
    *If silent:* the page's live region is not being spoken. Tell Claude.
-3. **Open.** Press **Alt+Shift+B**.
-   *Expect:* "BRIDGE, heading level 1", then "13 questions found. 13 accessibility
-   barriers, 9 blocking."
+3. **Open.** Press **Alt+Shift+B**. The proxy is stopped for this run.
+   *Expect:* "BRIDGE, heading level 1", then "13 questions found. N accessibility
+   barriers, M blocking." Write down both barrier counts, from step 2 and from here. They
+   may differ by one: the panel can see the `127.0.0.1` frame it cannot reach, and the
+   page cannot. That explanation is unverified, so a difference is not a failure.
+   *Also expect,* once: "Label inference is unavailable, so 2 questions have no name. The BRIDGE
+   proxy at localhost:8000 is not reachable." *Fail if* you hear an exception such as "TypeError: Failed to
+   fetch" (fixed in `fc82055`, not yet heard by ear).
 4. **Find your way by heading.** **Control+Option+U** opens the rotor. Choose Headings.
    *Expect:* BRIDGE; Application pre-check; Questions; Question 1 of 13; Check what the
    page contains; Barrier report.
@@ -424,11 +427,34 @@ BRIDGE already injects into the page.
 
 5. On step 1, choose **Yes** for the referral question on the page.
    *Expect:* "2 new questions appeared: Referrer name, Referrer email."
+6. **An answer left behind.** Reload `modal.html` and reopen BRIDGE on step 1. Type into a
+   panel **text box** and **do not** press its Write button. (Only typed text and dropdown
+   choices count as left behind; a chosen radio or checkbox is not reported.) Press **Alt+Shift+S** twice.
+   *Expect:* "Step 2 of 3: … The page moved on before X was written; that answer was not
+   saved.", with X the question's name.
 
 ### Run C: the full-page journey
 
 Open `http://localhost:8765/steps/1.html`, open BRIDGE, then activate **Save and Continue**
 on the page. Expect "Step 2 of 3: My Experience. Next: Review." with nothing reopened.
+
+### Run D: leaving the panel and coming back
+
+Alt+Shift+B on an open panel closes it and opens it again, and the reopened panel puts back
+what you typed (check 1). On reopen, VoiceOver starts reading the panel from the top, and
+BRIDGE announces "Back in BRIDGE…" at the same time. It is the one announcement BRIDGE
+still makes on open. That is the same kind of overlap that once made the summary heard
+three times, so listen closely here. Do it with **"Automatically speak the webpage"** on.
+
+1. Open `http://localhost:8765/apply.html` and press **Alt+Shift+B**. Choose **Full list**.
+2. Tab to question 11. Type into it and **do not** press Write.
+3. Click in the page's **Full name** field. Press **Alt+Shift+B**.
+   *Expect:* "Back in BRIDGE. Your answers are kept. You were on question 11 of 13.",
+   heard in full, and what you typed is back in its box.
+   Write down whether that sentence was spoken in full, was cut off, or broke into the
+   top-to-bottom reading. Note where in the reading it came.
+4. Repeat steps 2 and 3 in **One question at a time**, on question 3.
+   *Expect:* "…You were on question 3 of 13.", and question 3 is the question shown.
 
 ### What counts as a failure
 
