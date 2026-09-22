@@ -4,14 +4,41 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>BRIDGE — accessibility findings for application forms</title>
+  <!-- Applied before the stylesheet so a chosen theme never flashes the other one. -->
+  <script>
+    try {
+      var t = localStorage.getItem('bridge-theme');
+      if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+    } catch (e) { /* storage blocked: fall back to the system preference */ }
+  </script>
   <link rel="stylesheet" href="/src/style.css">
 </head>
 <body>
   <a class="skip" href="#main">Skip to main content</a>
 
   <header class="banner">
-    <p class="wordmark">BRIDGE</p>
+    <div class="brand">
+      <span class="brand__mark" aria-hidden="true">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <path d="M2 4.5h3M11 4.5h3M2 11.5h3M11 11.5h3M8 3v10"/>
+        </svg>
+      </span>
+      <p class="wordmark">BRIDGE</p>
+    </div>
     <p class="tagline">Accessibility findings from real applicants</p>
+    <span class="banner__spacer"></span>
+    <button type="button" id="theme-toggle" class="btn-icon" aria-live="off">
+      <span class="vh" id="theme-toggle-label">Switch to dark theme</span>
+      <svg class="icon-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+           stroke-linecap="round" aria-hidden="true" focusable="false">
+        <circle cx="8" cy="8" r="3.1"/>
+        <path d="M8 1v1.6M8 13.4V15M15 8h-1.6M2.6 8H1M12.9 3.1l-1.1 1.1M4.2 11.8l-1.1 1.1M12.9 12.9l-1.1-1.1M4.2 4.2L3.1 3.1"/>
+      </svg>
+      <svg class="icon-moon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+        <path d="M13.5 9.6A5.8 5.8 0 0 1 6.4 2.5a5.9 5.9 0 1 0 7.1 7.1Z"/>
+      </svg>
+    </button>
   </header>
 
   <main id="main" tabindex="-1">

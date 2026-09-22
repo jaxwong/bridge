@@ -1,362 +1,705 @@
 /* BRIDGE dashboard.
  *
- * Native elements, high contrast, visible focus. The dashboard for an accessibility
- * product is the one page that cannot have accessibility defects (bridge-business.md §6.4).
+ * Presentation only. Every control on this page is a native element, because a dashboard
+ * for an accessibility product has to be operable by the people it is about.
  *
- * Contrast: every text token is checked against the surface it sits on in BOTH themes, at
- * 4.5:1 or better for body text and 3:1 or better for control borders and focus rings.
- * npm run test:a11y runs axe in light and dark, so a regression here fails the build.
+ * The token block below is shared, value for value, with the extension side panel
+ * (extension/entrypoints/sidepanel/style.css). The two surfaces are built by different
+ * toolchains and cannot import from each other, so the tokens are duplicated rather than
+ * shared — keep them in step.
+ *
+ * Contrast is stated per token against the surface it sits on, in both themes: 4.5:1 or
+ * better for text, 3:1 or better for control borders. npm run test:a11y runs axe in light
+ * and in dark, so a regression fails the build.
  */
+
+/* ============================================================================
+   TOKENS
+   ========================================================================= */
 
 :root {
   color-scheme: light;
 
-  --bg: #f7f9fc;
+  /* Surfaces, lightest to most recessed. */
+  --bg: #fbfbfc;
   --surface: #ffffff;
-  --surface-sunken: #eef2f7;
+  --surface-2: #f4f5f7;
+  --surface-3: #ecedf1;
 
-  --ink: #0c1119;          /* 17.8:1 on --surface */
-  --ink-muted: #47535f;    /*  8.3:1 on --surface */
-  --ink-faint: #5b6773;    /*  6.2:1 on --surface */
+  --border: #e4e6eb;        /* hairlines between rows and around cards */
+  --border-2: #d2d6de;      /* a card that needs to read as a container */
+  --border-strong: #6d7480; /* 4.0:1 on --surface — anything interactive */
 
-  --line: #d6dee8;         /* dividers, decorative only */
-  --line-strong: #6b7784;  /*  4.1:1 on --surface — control borders */
+  --text: #0e1116;          /* 17.6:1 on --surface */
+  --text-2: #495260;        /*  8.0:1 on --surface */
+  --text-3: #5d6470;        /*  6.0:1 on --surface, 5.6:1 on --surface-2 — table headers
+                               sit on the recessed surface, so it is measured against the
+                               darker of the two, not against white. */
 
-  --brand: #3730a3;        /*  9.2:1 on --surface */
-  --brand-soft: #eef0fd;
-  --focus: #1b4dd8;
+  --accent: #4338ca;        /*  8.6:1 on --surface — links, active state */
+  --accent-fill: #4f46e5;   /* white on it is 6.1:1 */
+  --accent-on: #ffffff;
+  --accent-weak: #eef0fe;
+  --accent-line: #c7cbfb;
 
-  --blocking-ink: #9b1c31;
-  --blocking-bg: #fff1f3;
-  --blocking-line: #e8a2ae;
+  --danger: #9f1239;        /*  8.7:1 on --surface */
+  --danger-bg: #fff1f3;
+  --danger-line: #efbcc6;
 
-  --usability-ink: #7a4405;
-  --usability-bg: #fff8ea;
-  --usability-line: #e3c089;
+  --warn: #7c4a03;          /*  7.6:1 on --surface */
+  --warn-bg: #fff8ea;
+  --warn-line: #e8ca94;
 
-  --ok-ink: #0f5132;
-  --ok-bg: #eefaf2;
-  --ok-line: #9ed3b5;
+  --ok: #0f5132;            /* 10.2:1 on --surface */
+  --ok-bg: #edfaf2;
+  --ok-line: #a4d6ba;
 
-  --radius: 10px;
-  --radius-sm: 7px;
-  --shadow: 0 1px 2px rgb(12 17 25 / 6%), 0 8px 24px -12px rgb(12 17 25 / 14%);
-  --gutter: clamp(16px, 4vw, 32px);
+  --ring: #1b4dd8;
+
+  /* Shape and depth. Restrained: borders carry structure, shadows only lift. */
+  --r-sm: 5px;
+  --r: 7px;
+  --r-lg: 10px;
+  --shadow: 0 1px 2px rgb(14 17 22 / 5%);
+  --shadow-lift: 0 1px 2px rgb(14 17 22 / 6%), 0 6px 16px -8px rgb(14 17 22 / 14%);
+
+  /* Rhythm. Everything spaces on this scale. */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s5: 24px; --s6: 32px; --s7: 48px;
+  --gutter: clamp(16px, 3.5vw, 40px);
+
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 }
 
+/* Dark is designed, not inverted: surfaces are layered blue-greys, borders carry the
+   structure that shadows carry in light, and the accent is lifted so it reads on a dark
+   field. Declared twice — once for the system preference, once for an explicit choice. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --bg: #0a0e14;
-    --surface: #121822;
-    --surface-sunken: #0e141c;
+    --bg: #0b0d11;
+    --surface: #13161c;
+    --surface-2: #191d25;
+    --surface-3: #212630;
 
-    --ink: #e8eef6;          /* 14.9:1 on --surface */
-    --ink-muted: #a8b6c6;    /*  7.9:1 on --surface */
-    --ink-faint: #93a2b3;    /*  6.3:1 on --surface */
+    --border: #232833;
+    --border-2: #2f3642;
+    --border-strong: #79818f;  /* 5.2:1 on --surface */
 
-    --line: #26313f;
-    --line-strong: #7d8b9b;  /*  5.4:1 on --surface */
+    --text: #e9ecf2;           /* 14.6:1 on --surface */
+    --text-2: #a7afbd;         /*  7.4:1 on --surface */
+    --text-3: #8a93a2;         /*  5.1:1 on --surface */
 
-    --brand: #a9b4ff;        /*  8.7:1 on --surface */
-    --brand-soft: #1b2136;
-    --focus: #7aa2ff;
+    --accent: #a9b6ff;         /*  8.3:1 on --surface */
+    --accent-fill: #5b57e8;
+    --accent-on: #ffffff;
+    --accent-weak: #191d33;
+    --accent-line: #343a63;
 
-    --blocking-ink: #ffb3bd;
-    --blocking-bg: #2c1218;
-    --blocking-line: #7d3742;
+    --danger: #ffb3bf;
+    --danger-bg: #2a1119;
+    --danger-line: #6e3340;
 
-    --usability-ink: #f5cd8a;
-    --usability-bg: #2a1f0d;
-    --usability-line: #7a5b23;
+    --warn: #f3cd8e;
+    --warn-bg: #271d0c;
+    --warn-line: #6d5322;
 
-    --ok-ink: #8fe0b0;
-    --ok-bg: #0e2419;
-    --ok-line: #2f6b4c;
+    --ok: #8fe0b0;
+    --ok-bg: #0d2318;
+    --ok-line: #2d654a;
 
-    --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px -12px rgb(0 0 0 / 70%);
+    --ring: #7aa2ff;
+
+    --shadow: 0 1px 2px rgb(0 0 0 / 40%);
+    --shadow-lift: 0 1px 2px rgb(0 0 0 / 40%), 0 6px 16px -8px rgb(0 0 0 / 70%);
   }
 }
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0b0d11;
+  --surface: #13161c;
+  --surface-2: #191d25;
+  --surface-3: #212630;
+
+  --border: #232833;
+  --border-2: #2f3642;
+  --border-strong: #79818f;
+
+  --text: #e9ecf2;
+  --text-2: #a7afbd;
+  --text-3: #8a93a2;
+
+  --accent: #a9b6ff;
+  --accent-fill: #5b57e8;
+  --accent-on: #ffffff;
+  --accent-weak: #191d33;
+  --accent-line: #343a63;
+
+  --danger: #ffb3bf;
+  --danger-bg: #2a1119;
+  --danger-line: #6e3340;
+
+  --warn: #f3cd8e;
+  --warn-bg: #271d0c;
+  --warn-line: #6d5322;
+
+  --ok: #8fe0b0;
+  --ok-bg: #0d2318;
+  --ok-line: #2d654a;
+
+  --ring: #7aa2ff;
+
+  --shadow: 0 1px 2px rgb(0 0 0 / 40%);
+  --shadow-lift: 0 1px 2px rgb(0 0 0 / 40%), 0 6px 16px -8px rgb(0 0 0 / 70%);
+}
+
+/* ============================================================================
+   BASE
+   ========================================================================= */
 
 *, *::before, *::after { box-sizing: border-box; }
 [hidden] { display: none !important; }
 
+html { -webkit-text-size-adjust: 100%; }
+
 body {
   margin: 0;
   background: var(--bg);
-  color: var(--ink);
-  font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--text);
+  font: 15px/1.6 var(--font);
   -webkit-font-smoothing: antialiased;
 }
 
-/* --- skip link and focus ---------------------------------------------------------- */
+/* Text a screen reader reads and nobody sees. */
+.vh {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0);
+  white-space: nowrap; border: 0;
+}
+
+/* One focus treatment, everywhere, on both surfaces. */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
 .skip {
   position: absolute;
   left: -9999px;
   top: 0;
-  z-index: 20;
-  background: var(--ink);
-  color: var(--bg);
-  padding: 12px 20px;
-  border-radius: 0 0 var(--radius-sm) 0;
+  z-index: 30;
+  background: var(--accent-fill);
+  color: var(--accent-on);
+  padding: 10px 16px;
+  border-radius: 0 0 var(--r) 0;
+  font-size: 0.86rem;
   font-weight: 600;
 }
 .skip:focus { left: 0; }
 
-/* One focus treatment everywhere: a thick ring that never relies on colour alone, since it
-   also offsets away from the control. */
-:focus-visible {
-  outline: 3px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: 3px;
+/* ============================================================================
+   APP BAR
+   ========================================================================= */
+
+.banner {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: 0 var(--gutter);
+  height: 52px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
 }
 
-/* --- banner ------------------------------------------------------------------------ */
-.banner {
-  border-bottom: 1px solid var(--line);
-  background: var(--surface);
-  padding: 16px var(--gutter);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 16px;
+.brand { display: flex; align-items: center; gap: 9px; min-width: 0; }
+
+/* A small mark, not a logo. */
+.brand__mark {
+  flex: none;
+  width: 22px; height: 22px;
+  border-radius: 6px;
+  background: var(--accent-fill);
+  color: var(--accent-on);
+  display: grid;
+  place-items: center;
 }
+.brand__mark svg { width: 13px; height: 13px; display: block; }
+
 .wordmark {
   margin: 0;
-  font-weight: 800;
-  letter-spacing: 0.18em;
-  font-size: 0.95rem;
-  color: var(--brand);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--text);
 }
-.tagline { margin: 0; color: var(--ink-muted); font-size: 0.92rem; }
 
-/* --- layout and type --------------------------------------------------------------- */
+.tagline {
+  margin: 0;
+  padding-left: var(--s3);
+  border-left: 1px solid var(--border);
+  color: var(--text-3);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.banner__spacer { flex: 1 1 auto; }
+
+/* ============================================================================
+   BUTTONS — compact, with a real hierarchy
+   ========================================================================= */
+
+button {
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 550;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 90ms ease, border-color 90ms ease, color 90ms ease;
+}
+button:hover { background: var(--surface-2); border-color: var(--text-3); }
+button:active { background: var(--surface-3); }
+
+/* Icon-only: square, its name in a .vh span. */
+.btn-icon {
+  width: 30px;
+  padding: 0;
+  color: var(--text-2);
+}
+.btn-icon svg { width: 15px; height: 15px; display: block; }
+.btn-icon:hover { color: var(--text); }
+
+/* The icon shows what pressing it does, the same thing the accessible name says.
+   data-mode is set by lib/theme.ts from the theme actually in force. */
+#theme-toggle .icon-sun { display: none; }
+#theme-toggle[data-mode="dark"] .icon-sun { display: block; }
+#theme-toggle[data-mode="dark"] .icon-moon { display: none; }
+
+/* Tertiary: reads as text until you need it. */
+button.linkish {
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 0.94rem;
+  font-weight: 600;
+  text-align: left;
+  white-space: normal;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+button.linkish:hover { background: none; text-decoration-thickness: 2px; }
+
+/* ============================================================================
+   LAYOUT AND TYPE
+   ========================================================================= */
+
 main {
-  max-width: 66rem;
+  max-width: 1040px;
   margin: 0 auto;
-  padding: 8px var(--gutter) 96px;
+  padding: var(--s6) var(--gutter) var(--s7);
 }
 main:focus { outline: none; }
 
 h1 {
-  font-size: clamp(1.75rem, 1.2rem + 2vw, 2.4rem);
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-  margin: 40px 0 16px;
+  font-size: 1.55rem;
+  line-height: 1.2;
+  font-weight: 680;
+  letter-spacing: -0.021em;
+  margin: 0 0 var(--s3);
 }
+
+/* Section headings sit on a rule: that separates the page instead of whitespace. */
 h2 {
-  font-size: 1.3rem;
-  letter-spacing: -0.01em;
-  margin: 48px 0 12px;
-  padding-top: 24px;
-  border-top: 1px solid var(--line);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.085em;
+  color: var(--text-3);
+  margin: var(--s6) 0 var(--s3);
+  padding-bottom: var(--s2);
+  border-bottom: 1px solid var(--border);
 }
-h3 { font-size: 1.05rem; margin: 26px 0 8px; letter-spacing: -0.005em; }
-h2:focus { outline: 3px solid var(--focus); outline-offset: 6px; }
+h2:focus { outline-offset: 4px; }
 
-.lede { font-size: 1.12rem; max-width: 46rem; color: var(--ink-muted); }
-.meta, .empty, .caveat { color: var(--ink-muted); }
-.empty { font-style: italic; }
+h3 {
+  font-size: 0.95rem;
+  font-weight: 640;
+  letter-spacing: -0.006em;
+  margin: var(--s5) 0 var(--s2);
+}
+
+p { margin: 0 0 var(--s3); }
+
+.lede {
+  font-size: 1rem;
+  line-height: 1.62;
+  color: var(--text-2);
+  max-width: 68ch;
+  margin-bottom: var(--s4);
+}
+
+.meta { color: var(--text-3); font-size: 0.86rem; }
+.empty { color: var(--text-3); font-style: italic; font-size: 0.9rem; }
 .caveat {
-  font-size: 0.92rem;
-  border-left: 3px solid var(--line-strong);
-  padding-left: 14px;
-  margin-left: 2px;
+  color: var(--text-3);
+  font-size: 0.84rem;
+  border-left: 2px solid var(--border-2);
+  padding-left: var(--s3);
 }
 
-/* --- the one live region ----------------------------------------------------------- */
+code {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+  color: var(--text-2);
+}
+
+/* ============================================================================
+   NOTICES
+   ========================================================================= */
+
+.disclaimer {
+  display: block;
+  border: 1px solid var(--warn-line);
+  border-left: 3px solid var(--warn);
+  background: var(--warn-bg);
+  color: var(--warn);
+  padding: var(--s3) var(--s4);
+  border-radius: var(--r);
+  font-size: 0.875rem;
+  line-height: 1.55;
+  max-width: 76ch;
+}
+.disclaimer strong { font-weight: 660; }
+
+/* The single live region. Kept in the layout while empty: a live region that is
+   display:none is not announced. */
 .live {
-  margin: 16px 0;
-  padding: 14px 18px;
-  background: var(--brand-soft);
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--brand);
-  border-radius: var(--radius-sm);
-  font-weight: 600;
+  margin: var(--s4) 0 0;
+  padding: 10px var(--s4);
+  border: 1px solid var(--accent-line);
+  border-left: 3px solid var(--accent-fill);
+  background: var(--accent-weak);
+  border-radius: var(--r);
+  font-size: 0.875rem;
+  font-weight: 550;
+  color: var(--text);
 }
-/* Kept in the layout while empty — a live region that is display:none is not announced. */
-.live:empty { padding: 0; border: 0; height: 0; overflow: hidden; margin: 0; }
+.live:empty { padding: 0; border: 0; height: 0; margin: 0; overflow: hidden; }
 
-/* --- the form list ------------------------------------------------------------------ */
+/* ============================================================================
+   TABLE
+   ========================================================================= */
+
 table {
+  width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  width: 100%;
-  margin-top: 14px;
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
   overflow: hidden;
   box-shadow: var(--shadow);
 }
+
 caption {
+  caption-side: top;
   text-align: left;
-  color: var(--ink-muted);
-  padding-bottom: 10px;
-  font-size: 0.95rem;
+  color: var(--text-3);
+  font-size: 0.82rem;
+  padding: 0 0 var(--s2);
 }
-th, td {
+
+thead th {
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.7rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.075em;
+  color: var(--text-3);
+  padding: 9px var(--s4);
   text-align: left;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--line);
-  vertical-align: top;
+  white-space: nowrap;
+}
+
+tbody th, tbody td {
+  padding: 13px var(--s4);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: middle;
+  font-size: 0.9rem;
 }
 tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
-thead th {
-  background: var(--surface-sunken);
-  border-bottom: 1px solid var(--line-strong);
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-muted);
-}
+tbody tr { transition: background-color 90ms ease; }
+tbody tr:hover { background: var(--surface-2); }
 tbody th { font-weight: 600; }
-tbody tr:hover td, tbody tr:hover th { background: var(--surface-sunken); }
-.count { font-variant-numeric: tabular-nums; font-size: 1.05rem; }
-.count--blocking { color: var(--blocking-ink); font-weight: 800; }
-.change--new { color: var(--blocking-ink); font-weight: 700; }
 
-/* --- buttons ------------------------------------------------------------------------ */
-button {
-  font: inherit;
+time { color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* A count reads as a figure, not prose: tabular, and chipped when it is not zero. */
+.count {
+  font-variant-numeric: tabular-nums;
   font-weight: 600;
-  padding: 10px 18px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--ink);
-  cursor: pointer;
+  color: var(--text-2);
 }
-button:hover { background: var(--surface-sunken); border-color: var(--ink-faint); }
-button.linkish {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--brand);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  text-align: left;
-  font-weight: 700;
-  font-size: 1rem;
+.count--blocking {
+  display: inline-block;
+  min-width: 24px;
+  padding: 1px 7px;
+  border-radius: 20px;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-line);
+  color: var(--danger);
+  text-align: center;
+  font-weight: 680;
 }
-button.linkish:hover { background: none; text-decoration-thickness: 2px; }
 
-/* --- findings ----------------------------------------------------------------------- */
-.bucket { margin-bottom: 14px; }
-.bucket--new h3 { color: var(--blocking-ink); }
-.bucket--resolved h3 { color: var(--ok-ink); }
+.change { color: var(--text-2); font-size: 0.86rem; }
+.change--new { color: var(--danger); font-weight: 640; }
 
-ul.barriers { list-style: none; margin: 0; padding: 0; }
+/* ============================================================================
+   FINDINGS
+   ========================================================================= */
+
+.bucket { margin-bottom: var(--s5); }
+.bucket h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: var(--s5);
+}
+/* A dot before the heading carries the bucket; the count in the text carries it again, so
+   colour is never the only signal. */
+.bucket h3::before {
+  content: "";
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--text-3);
+  flex: none;
+}
+.bucket--new h3 { color: var(--danger); }
+.bucket--new h3::before { background: var(--danger); }
+.bucket--resolved h3 { color: var(--ok); }
+.bucket--resolved h3::before { background: var(--ok); }
+
+/* An empty bucket is not news. "New since the previous scan (0)" painted red says the
+   opposite of what it means, so a bucket holding the empty line goes back to neutral and
+   red is kept for the case that earns it. */
+.bucket--new:has(> p.empty) h3,
+.bucket--resolved:has(> p.empty) h3 { color: var(--text); }
+.bucket--new:has(> p.empty) h3::before,
+.bucket--resolved:has(> p.empty) h3::before { background: var(--text-3); }
+
+ul.barriers { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s2); }
+
 .barrier {
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-left: 4px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  padding: 16px 18px;
-  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-2);
+  border-radius: var(--r);
+  padding: var(--s3) var(--s4);
   box-shadow: var(--shadow);
+  transition: box-shadow 90ms ease;
 }
-.bucket--new .barrier { border-left-color: var(--blocking-ink); }
-.bucket--resolved .barrier { border-left-color: var(--ok-ink); }
-.barrier p { margin: 0 0 7px; }
+.barrier:hover { box-shadow: var(--shadow-lift); }
+.bucket--new .barrier { border-left-color: var(--danger); }
+.bucket--resolved .barrier { border-left-color: var(--ok); }
+
+.barrier p { margin: 0 0 5px; }
 .barrier p:last-child { margin-bottom: 0; }
-.barrier__head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.barrier__where { font-weight: 700; }
-.barrier__impact { color: var(--ink-muted); }
-.barrier__fix { border-left: 3px solid var(--line-strong); padding-left: 12px; }
-code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.88em;
-  background: var(--surface-sunken);
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  padding: 2px 7px;
-}
 
-/* The word is the signal; the colour only reinforces it. */
+.barrier__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-bottom: 7px;
+}
+.barrier__where { font-weight: 620; font-size: 0.92rem; max-width: 80ch; }
+/* Capped measure: a finding is prose, and prose is unreadable at the full width of a
+   dashboard. The card keeps its width; the sentence does not. */
+.barrier__impact { color: var(--text-2); font-size: 0.89rem; max-width: 80ch; }
+
+/* The remedy, on every card. A filled panel thirteen times over is a lot of colour for
+   something that is read one card at a time, so the accent is carried by the label and a
+   rule, not by a block of green. */
+.barrier__fix {
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border-left: 2px solid var(--ok);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  padding: 7px 11px;
+  margin-top: 8px;
+  max-width: 80ch;
+}
+.barrier__fix strong { color: var(--ok); font-weight: 680; }
+
+/* Severity: the word is the signal, the colour repeats it. */
 .sev {
-  display: inline-block;
-  padding: 3px 11px;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  height: 19px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-size: 0.66rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
   white-space: nowrap;
 }
-.sev--blocking { background: var(--blocking-bg); color: var(--blocking-ink); border: 1px solid var(--blocking-line); }
-.sev--usability { background: var(--usability-bg); color: var(--usability-ink); border: 1px solid var(--usability-line); }
-.sev--ok { background: var(--ok-bg); color: var(--ok-ink); border: 1px solid var(--ok-line); }
+.sev--blocking { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger-line); }
+.sev--usability { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn-line); }
+.sev--ok { background: var(--ok-bg); color: var(--ok); border: 1px solid var(--ok-line); }
 
-/* --- WCAG ---------------------------------------------------------------------------- */
-/* The disclaimer is text, not a tooltip and not a footnote: an automated finding read as a
-   conformance result is the failure mode this product cannot afford. */
-.disclaimer {
-  border: 1px solid var(--usability-line);
-  border-left: 4px solid var(--usability-ink);
-  background: var(--usability-bg);
-  color: var(--usability-ink);
-  padding: 16px 20px;
-  border-radius: var(--radius-sm);
-  max-width: 48rem;
+/* ============================================================================
+   WCAG
+   ========================================================================= */
+
+.barrier__wcag {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  margin-top: 7px;
 }
+.barrier__wcag--none { display: block; font-style: italic; }
 
-.barrier__wcag { font-size: 0.92rem; color: var(--ink-muted); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.barrier__wcag--none { font-style: italic; display: block; }
-
+.wcag-badge, .flag {
+  display: inline-flex;
+  align-items: center;
+  height: 19px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
 .wcag-badge {
-  display: inline-block;
-  padding: 2px 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  background: var(--surface-sunken);
-  color: var(--ink);
-  font-size: 0.74rem;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-  white-space: nowrap;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  color: var(--text-2);
 }
-
-/* A word, never a colour on its own. */
 .flag {
-  display: inline-block;
-  padding: 2px 10px;
-  border: 1px solid var(--usability-line);
-  border-radius: 999px;
-  background: var(--usability-bg);
-  color: var(--usability-ink);
-  font-size: 0.74rem;
-  font-weight: 800;
-  white-space: nowrap;
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-line);
+  color: var(--warn);
 }
 
 .wcag-summary {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 4px 22px 22px;
-  margin-bottom: 26px;
   background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: var(--s4) var(--s5) var(--s5);
+  margin-bottom: var(--s5);
   box-shadow: var(--shadow);
 }
-.wcag-summary h3 { margin-top: 20px; }
-.wcag-checked { color: var(--ink-muted); font-size: 0.92rem; }
-.wcag-table { margin: 14px 0 18px; }
-.wcag-table th[scope="row"] { font-variant-numeric: tabular-nums; font-weight: 700; }
+.wcag-summary > h3 { margin-top: var(--s2); }
+.wcag-summary > p { font-size: 0.9rem; }
+.wcag-summary strong { font-weight: 650; }
+.wcag-checked { color: var(--text-3); font-size: 0.84rem; max-width: 76ch; }
+.wcag-checked span { font-variant-numeric: tabular-nums; color: var(--text-2); font-weight: 550; }
 
-/* --- pitch ---------------------------------------------------------------------------- */
-.pitch { max-width: 46rem; }
-.pitch li { margin-bottom: 8px; }
+.wcag-table { margin: var(--s3) 0 var(--s4); box-shadow: none; }
+.wcag-table caption { font-size: 0.8rem; }
+.wcag-table th[scope="row"] { font-variant-numeric: tabular-nums; font-weight: 650; }
+.wcag-table tbody th, .wcag-table tbody td { padding: 9px var(--s4); font-size: 0.86rem; }
+.wcag-table td:last-child { color: var(--text-2); font-family: var(--mono); font-size: 0.78rem; }
 
-/* --- narrow screens -------------------------------------------------------------------- */
-@media (max-width: 40rem) {
-  th, td { padding: 11px 12px; }
-  thead th { font-size: 0.72rem; }
+.wcag-summary .disclaimer { margin-top: var(--s4); margin-bottom: 0; font-size: 0.84rem; }
+
+/* ============================================================================
+   DETAIL VIEW
+   ========================================================================= */
+
+/* The report reads as a document: an identity line, its provenance, then a rule, then the
+   findings. The heading is the form's URL, so it is set in the mono face. */
+#detail-h {
+  font-size: 1.2rem;
+  font-weight: 660;
+  letter-spacing: -0.012em;
+  text-transform: none;
+  color: var(--text);
+  border-bottom: 0;
+  padding-bottom: 0;
+  margin: 0 0 var(--s1);
+  font-family: var(--mono);
+  word-break: break-word;
+}
+#detail-meta { margin-bottom: var(--s3); font-size: 0.86rem; }
+/* The report is a document, not a data grid: it gets a document's width. */
+#detail-view { max-width: 900px; }
+/* The rule under the header block is what separates provenance from findings. */
+#detail-view > p:nth-of-type(2) {
+  margin: 0 0 var(--s5);
+  padding-bottom: var(--s4);
+  border-bottom: 1px solid var(--border);
+}
+/* Back is a way out, not the point of the page. */
+#back { border-color: var(--border-2); color: var(--text-2); }
+#back::before { content: "\2190"; font-size: 0.95em; line-height: 1; }
+#back:hover { color: var(--text); }
+
+/* ============================================================================
+   PITCH
+   ========================================================================= */
+
+.pitch { max-width: 72ch; }
+.pitch p { color: var(--text-2); font-size: 0.92rem; }
+.pitch h3 { color: var(--text); margin-top: var(--s5); }
+.pitch ul { margin: 0 0 var(--s3); padding-left: var(--s4); }
+.pitch li { margin-bottom: 5px; color: var(--text-2); font-size: 0.92rem; }
+
+/* ============================================================================
+   RESPONSIVE
+   ========================================================================= */
+
+@media (max-width: 720px) {
+  .tagline { display: none; }
+  thead th, tbody th, tbody td { padding-left: var(--s3); padding-right: var(--s3); }
+  .wcag-summary { padding: var(--s3) var(--s4) var(--s4); }
 }
 
-/* No colour transitions on theme-sensitive surfaces: during the fade between a light and a
-   dark palette the element is briefly light-on-light. Hover feedback is instant instead.
-   This blanket rule stays for anything added later. */
+@media (max-width: 540px) {
+  thead th, tbody th, tbody td { font-size: 0.84rem; }
+  .change { white-space: normal; }
+}
+
+/* No colour transition on theme-sensitive surfaces: during a fade between a light and a
+   dark palette the element is briefly light-on-light. Hover feedback stays instant. */
 @media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; animation: none !important; }
+  *, *::before, *::after { transition: none !important; animation: none !important; }
 }

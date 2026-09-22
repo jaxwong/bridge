@@ -7,6 +7,7 @@ import type { ComparedBarrier, Comparison } from './lib/compare.ts';
 import { groupByForm, parseReport } from './lib/report.ts';
 import type { BarrierReport, Form, Severity } from './lib/report.ts';
 import { findingsOf, summariseWcag } from './lib/wcag.ts';
+import { initTheme } from './lib/theme.ts';
 // DEMO STAND-IN. Nothing sends reports to this page yet, so it opens on one seeded report:
 // a real BRIDGE scan of the Acme Careers test form (extension/test/fixtures/acme/apply.html),
 // written by `make demo-seed` and kept equal to what the scanner reports by the extension's
@@ -269,5 +270,6 @@ function render(): void {
 // --- wiring ---------------------------------------------------------------------------
 
 $('back').addEventListener('click', closeDetail);
+initTheme($('theme-toggle'), $('theme-toggle-label'));
 
 render();

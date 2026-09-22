@@ -6,6 +6,7 @@
 import { inferLabels } from '../../lib/infer';
 import { send, type Frame, type FormChanged, type WorkerEvent, type WorkerRequest } from '../../lib/messages';
 import { barrier } from '../../lib/rules';
+import { initTheme } from './theme';
 import type {
   ApplicationSession, Barrier, FieldDescriptor, FillResult, ScanResult, StepHint,
 } from '../../lib/types';
@@ -955,6 +956,9 @@ function focusHeading() {
   window.focus();
   $('title').focus();
 }
+
+// Presentation only: sets one attribute on <html> and remembers the choice.
+initTheme($('theme-toggle'), $('theme-toggle-label'));
 
 // --- boot -----------------------------------------------------------------------------
 
