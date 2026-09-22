@@ -4,35 +4,291 @@
   <meta charset="utf-8">
   <title>Acme Careers — Apply</title>
   <style>
-    body { font: 16px/1.5 system-ui, sans-serif; max-width: 640px; margin: 24px auto; padding: 0 16px; }
-    .row { margin: 16px 0; }
-    .q { font-weight: 600; margin-bottom: 6px; }
-    /* A custom dropdown with none of the semantics of one. react-select's shape without
-       react-select's ARIA: no role, no label, no tabindex, options rendered only on open. */
-    .dropdown { border: 1px solid #888; padding: 8px; cursor: pointer; position: relative; user-select: none; }
-    .dropdown__menu { position: absolute; left: 0; right: 0; top: 100%; background: #fff; border: 1px solid #888; z-index: 2; }
-    .dropdown__option { padding: 6px 8px; cursor: pointer; }
-    .dropdown__option:hover { background: #eee; }
-    /* A slider with no role, no tab stop and no keyboard handling: pointer only. */
-    .slider { cursor: pointer; user-select: none; }
-    .slider__track { position: relative; height: 8px; background: #ccc; border-radius: 4px; margin: 12px 0; }
-    .slider__thumb { position: absolute; top: -6px; width: 20px; height: 20px; margin-left: -10px; border-radius: 50%; background: #0b57d0; }
-    /* Ashby's uploader: the input is 1px, out of the tab order and unnamed. */
-    .dropzone { border: 2px dashed #888; padding: 24px; text-align: center; cursor: pointer; }
+    /* Acme Careers — presentation only.
+     *
+     * Every accessibility defect on this page is deliberate and load-bearing: the e2e
+     * suite and the employer demo both depend on exactly 13 findings, 9 of them blocking.
+     * Styling must not add or remove one, which rules out three things in particular:
+     *
+     *   - text below 4.5:1, which the scanner reports as 1.4.3 Contrast (Minimum);
+     *   - interactive targets under 24px, which it reports as 2.5.8 Target Size (Minimum);
+     *   - any new class carrying a widget word (dropdown, select, slider, picker, …) on a
+     *     div with cursor:pointer, which it would read as another custom control.
+     *
+     * The defect-carrying rules below are marked. Their behaviour is unchanged; only their
+     * appearance is. */
+
+    :root {
+      --ink: #101826;          /* 16.8:1 on white */
+      --ink-2: #44506a;        /*  7.9:1 on white */
+      --ink-3: #5b6479;        /*  5.9:1 on white */
+      --line: #d9dee8;
+      --line-2: #c3cad8;
+      --brand: #0f5d63;        /*  7.2:1 on white — Acme's colour, not BRIDGE's */
+      --brand-ink: #ffffff;
+      --brand-soft: #eaf4f4;
+      --surface: #ffffff;
+      --bg: #f4f6f9;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* --- site chrome ------------------------------------------------------------ */
+    .site {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      height: 56px;
+      padding: 0 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
+    }
+    .site__mark {
+      width: 26px; height: 26px;
+      border-radius: 7px;
+      background: var(--brand);
+      color: var(--brand-ink);
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      font-size: 14px;
+      letter-spacing: 0.02em;
+    }
+    .site__name { font-weight: 700; letter-spacing: -0.01em; }
+    .site__sep { color: var(--line-2); }
+    .site__section { color: var(--ink-3); font-size: 0.92rem; }
+    .site__spacer { flex: 1 1 auto; }
+    .site__link { color: var(--brand); font-size: 0.9rem; font-weight: 600; text-decoration: none; }
+    .site__link:hover { text-decoration: underline; }
+
+    .hero {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 40px 24px 20px;
+    }
+    .hero__eyebrow {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--brand);
+      margin: 0 0 8px;
+    }
+    h1 {
+      font-size: 2rem;
+      line-height: 1.15;
+      letter-spacing: -0.025em;
+      margin: 0 0 12px;
+    }
+    .hero__meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+    .hero__meta li {
+      font-size: 0.82rem;
+      color: var(--ink-2);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 12px;
+    }
+
+    /* --- the form, as a card ----------------------------------------------------- */
+    #apply {
+      max-width: 780px;
+      margin: 0 auto 40px;
+      padding: 28px 32px 32px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: 0 1px 2px rgb(16 24 38 / 5%);
+    }
+    .row { margin: 0 0 22px; }
+    .row:last-of-type { margin-bottom: 0; }
+
+    /* The visible question for a group that has no programmatic name. Deliberately NOT a
+       <label>: making it one would name the group and remove the barrier. */
+    .q { font-weight: 650; margin-bottom: 8px; color: var(--ink); }
+
+    label { font-weight: 650; }
+    input[type=text], input[type=tel], input[type=email], input:not([type]), select, .datepicker {
+      width: 100%;
+      font: inherit;
+      padding: 10px 12px;
+      margin-top: 6px;
+      color: var(--ink);
+      background: var(--surface);
+      border: 1px solid var(--line-2);
+      border-radius: 8px;
+      min-height: 42px;
+    }
+    select { max-width: 320px; }
+    input:focus-visible, select:focus-visible, button:focus-visible, [tabindex]:focus-visible,
+    .dropzone:focus-visible, a:focus-visible {
+      outline: 3px solid var(--brand);
+      outline-offset: 2px;
+    }
+
+    /* DEFECT: a custom dropdown with none of the semantics of one. react-select's shape
+       without react-select's ARIA: no role, no label, no tabindex, options only on open. */
+    .dropdown {
+      border: 1px solid var(--line-2);
+      border-radius: 8px;
+      padding: 10px 12px;
+      min-height: 42px;
+      background: var(--surface);
+      cursor: pointer;
+      position: relative;
+      user-select: none;
+      max-width: 320px;
+      color: var(--ink-2);
+    }
+    .dropdown__menu {
+      position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+      background: var(--surface);
+      border: 1px solid var(--line-2);
+      border-radius: 8px;
+      box-shadow: 0 8px 24px -10px rgb(16 24 38 / 35%);
+      z-index: 2;
+      overflow: hidden;
+    }
+    .dropdown__option { padding: 10px 12px; cursor: pointer; color: var(--ink); }
+    .dropdown__option:hover { background: var(--brand-soft); }
+
+    /* DEFECT: a slider with no role, no tab stop and no keyboard handling: pointer only. */
+    .slider { cursor: pointer; user-select: none; max-width: 320px; }
+    .slider__track { position: relative; height: 8px; background: var(--line-2); border-radius: 4px; margin: 18px 0 12px; }
+    .slider__thumb { position: absolute; top: -8px; width: 24px; height: 24px; margin-left: -12px; border-radius: 50%; background: var(--brand); box-shadow: 0 1px 3px rgb(16 24 38 / 30%); }
+    .slider__value { font-variant-numeric: tabular-nums; font-weight: 650; color: var(--ink-2); }
+
+    /* DEFECT: Ashby's uploader. The input stays 1px, out of the tab order and unnamed. */
+    .dropzone {
+      border: 2px dashed var(--line-2);
+      border-radius: 10px;
+      padding: 28px;
+      text-align: center;
+      cursor: pointer;
+      color: var(--ink-2);
+      background: var(--bg);
+    }
+    .dropzone:hover { border-color: var(--brand); background: var(--brand-soft); }
     #cv { position: absolute; width: 1px; height: 1px; opacity: 0; }
-    .calendar { border: 1px solid #888; padding: 8px; margin-top: 4px; background: #fff; }
-    .popup { position: fixed; right: 16px; bottom: 16px; width: 240px; padding: 12px; background: #fff; border: 1px solid #888; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
-    iframe { width: 100%; height: 90px; border: 1px solid #ccc; }
-    /* The label is a picture of text: visible to a sighted user, absent from the DOM. */
-    .imglabel { height: 24px; background: no-repeat left center url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='24'%3E%3Ctext x='0' y='18' font-family='sans-serif' font-size='16' font-weight='600'%3ELinkedIn profile URL%3C/text%3E%3C/svg%3E"); }
-    .imglabel--office { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='24'%3E%3Ctext x='0' y='18' font-family='sans-serif' font-size='16' font-weight='600'%3EPreferred office%3C/text%3E%3C/svg%3E"); }
+    #cv-name { margin: 8px 0 0; font-size: 0.9rem; color: var(--ink-2); }
+
+    .calendar { border: 1px solid var(--line-2); border-radius: 8px; padding: 12px; margin-top: 6px; background: var(--surface); color: var(--ink-2); font-size: 0.9rem; }
+
+    /* DEFECT: a popup holding a form control, with no dialog role. */
+    .popup {
+      position: fixed; right: 20px; bottom: 20px; width: 268px;
+      padding: 16px;
+      background: var(--surface);
+      border: 1px solid var(--line-2);
+      border-radius: 12px;
+      box-shadow: 0 10px 30px -12px rgb(16 24 38 / 45%);
+    }
+    .popup > div { font-weight: 650; margin-bottom: 8px; }
+    .popup input { margin-top: 0; margin-bottom: 8px; }
+
+    iframe { width: 100%; height: 90px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+
+    /* DEFECT: the label is a picture of text — visible to a sighted user, absent from the
+       DOM. Sized and positioned, never replaced with real text. */
+    .imglabel { height: 24px; background: no-repeat left center url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='24'%3E%3Ctext x='0' y='18' font-family='sans-serif' font-size='16' font-weight='600' fill='%23101826'%3ELinkedIn profile URL%3C/text%3E%3C/svg%3E"); }
+    .imglabel--office { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='24'%3E%3Ctext x='0' y='18' font-family='sans-serif' font-size='16' font-weight='600' fill='%23101826'%3EPreferred office%3C/text%3E%3C/svg%3E"); }
+
     fieldset { border: 0; padding: 0; margin: 0; }
-    [role=radio] { display: inline-flex; gap: 6px; margin-right: 16px; cursor: pointer; }
+
+    /* DEFECT: LinkedIn's shape — the wrapper carries the name, the native input does not.
+       Sized above 24px so the barrier stays the naming, not the target size. */
+    [role=radio] {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 12px 8px 0;
+      padding: 8px 14px;
+      min-height: 40px;
+      border: 1px solid var(--line-2);
+      border-radius: 999px;
+      cursor: pointer;
+      background: var(--surface);
+    }
+    [role=radio]:hover { border-color: var(--brand); }
+    [role=radio] input { width: 18px; height: 18px; margin: 0; }
+
+    .row > label:has(input[type=checkbox]) {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 12px 8px 0;
+      padding: 8px 14px;
+      min-height: 40px;
+      border: 1px solid var(--line-2);
+      border-radius: 999px;
+      font-weight: 500;
+      background: var(--surface);
+    }
+    .row > label input[type=checkbox] { width: 18px; height: 18px; margin: 0; }
+
+    button[type=submit] {
+      font: inherit;
+      font-weight: 650;
+      min-height: 46px;
+      padding: 0 28px;
+      border: 1px solid var(--brand);
+      border-radius: 8px;
+      background: var(--brand);
+      color: var(--brand-ink);
+      cursor: pointer;
+    }
+    button[type=submit]:hover { filter: brightness(1.1); }
+    .popup button {
+      font: inherit;
+      font-size: 0.88rem;
+      min-height: 34px;
+      padding: 0 14px;
+      border: 1px solid var(--line-2);
+      border-radius: 7px;
+      background: var(--surface);
+      color: var(--ink);
+      cursor: pointer;
+    }
+
+    #result { max-width: 780px; margin: 0 auto; padding: 0 32px; color: var(--brand); font-weight: 650; }
+
+    .site-foot {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 0 24px 56px;
+      color: var(--ink-3);
+      font-size: 0.8rem;
+      line-height: 1.6;
+    }
+    .site-foot p { margin: 0 0 6px; }
   </style>
 </head>
 <body>
-  <h1>Junior Analyst — Apply</h1>
-  <p>Acme Careers. A deliberately inaccessible test form for BRIDGE. Nothing is sent anywhere.</p>
+  <div class="site">
+    <span class="site__mark" aria-hidden="true">A</span>
+    <span class="site__name">Acme</span>
+    <span class="site__sep" aria-hidden="true">/</span>
+    <span class="site__section">Careers</span>
+    <span class="site__spacer"></span>
+    <a class="site__link" href="#apply">Apply now</a>
+  </div>
+
+  <div class="hero">
+    <p class="hero__eyebrow">Analytics · Singapore</p>
+    <h1>Junior Analyst — Apply</h1>
+    <ul class="hero__meta">
+      <li>Full-time</li>
+      <li>Hybrid · 3 days in office</li>
+      <li>Applications close 31 October</li>
+    </ul>
+  </div>
 
   <form id="apply">
     <!-- Accessible, for contrast: a properly labelled text field. -->
@@ -143,6 +399,12 @@
     <div>Get job alerts</div>
     <input type="email" placeholder="Email">
     <button type="button" onclick="this.parentElement.remove()">Close</button>
+  </div>
+
+  <div class="site-foot">
+    <p>Acme Careers is a test fixture for BRIDGE. It is deliberately inaccessible, and
+      nothing entered here is sent anywhere.</p>
+    <p>© Acme Pte Ltd</p>
   </div>
 
   <script>
