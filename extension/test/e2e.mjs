@@ -131,7 +131,13 @@ try {
   // --- SCAN -------------------------------------------------------------------------
   const summary = await panel.textContent('#summary');
   check('SCAN finds 13 questions: 12 in the page, 1 in the same-origin iframe', /^13 questions found/.test(summary), summary);
-  const barriers = await panel.textContent('#barriers');
+  // Barriers are detected exactly as before but never rendered in the panel: the applicant
+  // hears only the count in the summary; the sentences below exist only in the exported
+  // report, which is where the detection checks now read them.
+  check('the panel renders no barrier text', !/Blocking:|Usability:/.test(await panel.textContent('main')), await panel.textContent('main'));
+  const [scanDl] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as JSON' }).click()]);
+  const scanReport = JSON.parse(readFileSync(await scanDl.path(), 'utf8'));
+  const barriers = [...scanReport.pageBarriers, ...scanReport.barriers].map((b) => b.impact).join('\n');
   check('reports the identically-named Yes/No options', /sound identical/.test(barriers));
   check('reports the custom dropdown', /custom dropdown/.test(barriers));
   check('reports the dropdown is not keyboard operable', /"Highest education completed" cannot be reached with the keyboard/.test(barriers));
@@ -347,9 +353,6 @@ try {
     check('modal: an answer typed but never written is reported lost', /before Email address was written/.test(said), said);
     check('modal: the questions are the new step\'s', /sponsorship/.test(await panel.locator('#questions').textContent()) &&
       !(await panel.locator('#questions').textContent()).includes('Email address'));
-    check('modal: the unnamed resume upload is a usability barrier, not a blocking one',
-      /Usability: The upload button has no label/.test(await panel.textContent('#barriers')));
-
     await panel.getByLabel('Full list').check();
     await panel.locator('#questions input[type=file]').setInputFiles({ name: 'resume.pdf', mimeType: 'application/pdf', buffer: Buffer.alloc(50_000, 65) });
     await panel.locator('.q:has(input[type=file])').getByRole('button', { name: /^Write/ }).click();
@@ -441,6 +444,9 @@ try {
       Array.isArray(report.pageBarriers) && report.pageBarriers.some((b) => b.rule === 'upload-unnamed') &&
       report.pageBarriers.every((b) => b.rule && b.severity && b.impact && !('label' in b)) &&
       report.steps.every((st) => Array.isArray(st.pageBarriers)));
+    check('export: the unnamed resume upload is a usability barrier, not a blocking one',
+      report.pageBarriers.some((b) => b.rule === 'upload-unnamed' && b.severity === 'usability' && /has no label/.test(b.impact)),
+      JSON.stringify(report.pageBarriers));
     check('export: the visa question\'s barrier is on step 2',
       report.steps[1].barriers.some((b) => b.rule === 'options-identically-named' && /sponsorship/.test(b.label)));
     check('export: no applicant data', !/resume\.pdf|zw@example|Zheng/.test(JSON.stringify(report)));
@@ -483,7 +489,9 @@ try {
   await section('uploaders', async () => {
     // The query string is how the employer demo versions one form (Acme ?v=2, ?v=3).
     const { page, panel } = await open('uploaders.html?v=3');
-    const listed = await panel.locator('#barriers li').allTextContents();
+    const [dl] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as JSON' }).click()]);
+    const report = JSON.parse(readFileSync(await dl.path(), 'utf8'));
+    const listed = [...report.pageBarriers, ...report.barriers].map((b) => b.impact);
     check('uploader: labelled but out of the tab order is still drag-drop-only',
       listed.filter((t) => /can only be used by dragging/.test(t)).length === 1, JSON.stringify(listed));
     check('uploader: the accessible patterns (tab stop, or a focusable label) report nothing',
@@ -493,8 +501,6 @@ try {
     const stops = [];
     for (let i = 0; i < 3; i++) { await page.keyboard.press('Tab'); stops.push(await page.evaluate(() => document.activeElement?.id || document.activeElement?.getAttribute('for') || 'none')); }
     check('uploader: real Tab presses agree with the rule', stops.join() === 'cv-b,cv-c,none', stops.join());
-    const [dl] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as JSON' }).click()]);
-    const report = JSON.parse(readFileSync(await dl.path(), 'utf8'));
     check('export: pagePath is the pathname only, so ?v=2 and ?v=3 compare as one form', report.pagePath === '/uploaders.html', report.pagePath);
     check('export: a one-step form has pageBarriers, no steps, and no step numbers',
       report.pageBarriers.length === 1 && report.pageBarriers[0].rule === 'drag-drop-only' && !('steps' in report) && !('step' in report.pageBarriers[0]),

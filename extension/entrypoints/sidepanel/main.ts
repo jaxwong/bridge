@@ -7,7 +7,7 @@ import { inferLabels } from '../../lib/infer';
 import { send, type Frame, type FormChanged, type WorkerEvent, type WorkerRequest } from '../../lib/messages';
 import { buildReport, reportFileStem, reportMarkdown } from '../../lib/report';
 import type {
-  ApplicationSession, Barrier, FieldDescriptor, FillResult, ScanResult, Severity, StepHint,
+  ApplicationSession, Barrier, FieldDescriptor, FillResult, ScanResult, StepHint,
 } from '../../lib/types';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -70,6 +70,9 @@ interface StepState {
 }
 
 let fields: PanelField[] = [];
+/** Collected for the §6.7 report and the summary count only. Individual barriers are never
+ *  rendered in the panel: they are the employer's data, and a screen reader reading the
+ *  list on every step was noise to an applicant who just wants to finish the form. */
 let pageBarriers: Barrier[] = [];
 let step: StepState | null = null;
 let session: ApplicationSession | null = null;
@@ -97,7 +100,6 @@ let current = 0;
 const inferred = new Map<string, string>();
 const nameOf = (f: PanelField) => inferred.get(f.key) ?? f.label;
 
-const SEVERITY_WORD: Record<Severity, string> = { blocking: 'Blocking', usability: 'Usability', ok: 'OK' };
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 const fieldByKey = (key: string) => fields.find((f) => f.key === key);
@@ -123,34 +125,6 @@ function journeyText(s: StepState) {
     return `Step ${s.index} of ${s.total}: ${s.heading}.${next ? ` Next: ${next}.` : ''}`;
   }
   return '';
-}
-
-function renderBarriers() {
-  const ul = $('barriers');
-  ul.replaceChildren();
-  const items: { sev: Severity; message: string; key?: string }[] = [
-    ...pageBarriers.map((b) => ({ sev: b.severity, message: b.message })),
-    ...fields.flatMap((f) => f.barriers.map((b) => ({ sev: b.severity, message: b.message, key: f.key }))),
-  ].sort((a, b) => (a.sev === b.sev ? 0 : a.sev === 'blocking' ? -1 : 1));
-
-  for (const item of items) {
-    const li = document.createElement('li');
-    const sev = document.createElement('span');
-    sev.className = `sev sev-${item.sev}`;
-    sev.textContent = `${SEVERITY_WORD[item.sev]}: `;
-    if (item.key) {
-      // Each barrier tied to a field jumps to that question (§4.1).
-      const key = item.key;
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.append(sev, document.createTextNode(item.message));
-      btn.addEventListener('click', () => goTo(key));
-      li.append(btn);
-    } else {
-      li.append(sev, document.createTextNode(item.message));
-    }
-    ul.append(li);
-  }
 }
 
 /** What a question's controls were built from. A kept question whose options or range the
@@ -597,7 +571,6 @@ async function scanOnce(reason: Reason) {
     $('summary').textContent = msg;
     announce(msg);
     fields = []; pageBarriers = []; step = null;
-    renderBarriers();
     renderQuestions(true);
     return;
   }
@@ -670,7 +643,6 @@ async function scanOnce(reason: Reason) {
   const journey = journeyText(now);
   $('journey').textContent = journey;
   $('summary').textContent = summaryText();
-  renderBarriers();
   renderQuestions(verdict !== 'fields-changed');
   // Same step, new document: the page reloaded. What the user typed here is kept, but
   // every "On the page" confirmation describes a document that no longer exists.

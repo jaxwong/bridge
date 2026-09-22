@@ -5,7 +5,6 @@
   --border: #8a8a8a;
   --focus: #0b57d0;
   --blocking: #b3261e;
-  --usability: #8a5a00;
   --ok: #146c2e;
   --surface: #f3f3f3;
   color-scheme: light;
@@ -18,7 +17,6 @@
     --border: #8f8f8f;
     --focus: #8ab4f8;
     --blocking: #f2b8b5;
-    --usability: #f5c26b;
     --ok: #7fd89a;
     --surface: #262626;
     color-scheme: dark;
@@ -44,10 +42,6 @@ h3 { font-size: 1rem; margin: 0 0 6px; color: var(--muted); }
 #live { min-height: 1.5em; margin: 0 0 8px; color: var(--muted); }
 ul { padding-left: 0; list-style: none; margin: 8px 0; }
 li { margin: 6px 0; }
-.sev { font-weight: 700; }
-.sev-blocking { color: var(--blocking); }
-.sev-usability { color: var(--usability); }
-.sev-ok { color: var(--ok); }
 .q {
   border: 1px solid var(--border);
   border-radius: 6px;
