@@ -5,7 +5,9 @@ import {
   CONTROLS, accName, ariaHidden, clean, cssPath, deepQueryAll, formScope, keyboardReachable,
   lightAnchor, nearbyText, queryPath, visible,
 } from './dom';
+import { barrier } from './rules';
 import type { Barrier, ControlKind, FieldDescriptor, ScanResult, StepHint } from './types';
+import { labelElement, lowContrast, pointerTargets, targetTooSmall } from './visual';
 
 /** What the content script keeps so ACT can find the element again. Never leaves the page. */
 export interface FieldHandle {
@@ -35,10 +37,6 @@ function classWords(el: Element): string[] {
   return cls.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 }
 const hasWord = (el: Element, words: Set<string>) => classWords(el).some((w) => words.has(w));
-
-function barrier(rule: string, severity: Barrier['severity'], message: string): Barrier {
-  return { rule, severity, message };
-}
 
 /** Candidate controls inside the form, outermost only: an ARIA wrapper and the native
  *  input inside it are one control to the user (LinkedIn's radios). */
@@ -94,6 +92,42 @@ function optionText(el: Element): string {
   const wrap = el.closest('label');
   if (wrap && clean(wrap.textContent)) return clean(wrap.textContent);
   return accName(el).name;
+}
+
+/**
+ * §6.2 target-too-small and low-contrast for one control and the element that names it.
+ * `what` is how the applicant hears the control; groups pass their question and options.
+ */
+function visualBarriers(what: string, controls: Element[], labels: (Element | null)[], targets: DOMRect[]): Barrier[] {
+  const out: Barrier[] = [];
+  for (const el of controls) {
+    const size = targetTooSmall(el, targets);
+    if (size) {
+      out.push(barrier('target-too-small',
+        `${what} is only ${size.width} by ${size.height} pixels, too small to tap or click reliably, and other controls are crowded around it.`));
+      break;
+    }
+  }
+  for (const [i, el] of controls.entries()) {
+    const label = labels[i];
+    const onLabel = label ? lowContrast(label) : null;
+    const onText = lowContrast(el) || (el instanceof HTMLInputElement && !el.value ? lowContrast(el, '::placeholder') : null);
+    const hit = onLabel || onText;
+    if (!hit) continue;
+    out.push(barrier('low-contrast',
+      `${onLabel ? `The label of ${what}` : `Text in ${what}`} is hard to read: its contrast is ${hit.ratio} to 1, below the ${hit.required} to 1 minimum.`));
+    break;
+  }
+  return out;
+}
+
+/** The element optionText() read: the option's label[for], its own text, or a wrapping label. */
+function optionLabelElement(el: Element): Element | null {
+  const native = el instanceof HTMLInputElement ? el : el.querySelector('input');
+  const named = native ? labelElement(native) : null;
+  if (named) return named;
+  if (clean(el.textContent)) return el;
+  return el.closest('label');
 }
 
 function groupName(container: Element | null): string {
@@ -159,6 +193,7 @@ export function scanPage(): { result: ScanResult; handles: Map<string, FieldHand
   const entries: { anchor: Element; field: Omit<FieldDescriptor, 'id'>; handle: Omit<FieldHandle, 'ordinal'> }[] = [];
   const groups = new Map<Element | string, { kind: 'radio-group' | 'checkbox-group'; opts: Element[] }>();
   const all = candidates(scope);
+  const targets = pointerTargets();
 
   // Checkboxes sharing a name are one question (Lever's 33-box "Language Skill(s)", §11).
   const checkboxNames = new Map<string, number>();
@@ -193,19 +228,20 @@ export function scanPage(): { result: ScanResult; handles: Map<string, FieldHand
     // An unnamed file input is already reported once, by the page rule below.
     if (kind !== 'file') {
       if (named.problem === 'placeholder-only') {
-        barriers.push(barrier('label-placeholder-only', 'usability', `"${label}" is labelled only by placeholder text, which disappears once you type.`));
+        barriers.push(barrier('label-placeholder-only', `"${label}" is labelled only by placeholder text, which disappears once you type.`));
       } else if (named.problem === 'missing') {
-        barriers.push(barrier('missing-label', 'usability',
+        barriers.push(barrier('missing-label',
           `${named.inferred ? `"${named.inferred}"` : `A ${kind} field`} has no label on the page, so a screen reader does not announce it.`));
       }
     }
     if (kind === 'combobox' && !el.getAttribute('role')) {
-      barriers.push(barrier('custom-dropdown-no-role', 'blocking',
+      barriers.push(barrier('custom-dropdown-no-role',
         `"${label}" is a custom dropdown that a screen reader does not recognise as one.`));
     }
     if (kind !== 'file' && !keyboardReachable(html)) {
-      barriers.push(barrier('not-keyboard-operable', 'blocking', `"${label}" cannot be reached with the keyboard.`));
+      barriers.push(barrier('not-keyboard-operable', `"${label}" cannot be reached with the keyboard.`));
     }
+    if (kind !== 'file') barriers.push(...visualBarriers(`"${label}"`, [el], [labelElement(el)], targets));
 
     const field: Omit<FieldDescriptor, 'id'> = {
       kind, label, labelSource: named.labelSource,
@@ -235,13 +271,16 @@ export function scanPage(): { result: ScanResult; handles: Map<string, FieldHand
       `Unlabelled ${kind === 'radio-group' ? 'choice' : 'checkboxes'}`;
 
     if (!named) {
-      barriers.push(barrier('group-not-labelled', 'blocking',
+      barriers.push(barrier('group-not-labelled',
         `The question "${question}" is not tied to its options, so a screen reader reads the options without it.`));
     }
     if (sharedName) {
-      barriers.push(barrier('options-identically-named', 'blocking',
+      barriers.push(barrier('options-identically-named',
         `All ${opts.length} options for "${question}" sound identical to a screen reader. The words ${opts.map(optionText).map((t) => `"${t}"`).join(' and ')} are never spoken.`));
     }
+    // The question's own text, then each option's: a person reads both.
+    const questionLabel = container ? (container.querySelector('legend') || labelElement(container)) : null;
+    barriers.push(...visualBarriers(`each of the "${question}" options`, opts, opts.map((o) => optionLabelElement(o) ?? questionLabel), targets));
 
     const anchor = container || opts[0];
     entries.push({
@@ -299,9 +338,9 @@ function pageBarriers(): Barrier[] {
     const labelIsTrigger = !!label && (keyboardReachable(label) ||
       [...label.querySelectorAll<HTMLElement>('button,[role=button],[tabindex]')].some(keyboardReachable));
     if (!keyboardReachable(inp)) {
-      if (!labelIsTrigger) out.push(barrier('drag-drop-only', 'blocking', 'The CV uploader can only be used by dragging a file onto it.'));
+      if (!labelIsTrigger) out.push(barrier('drag-drop-only', 'The CV uploader can only be used by dragging a file onto it.'));
     } else if (!accName(inp).name) {
-      out.push(barrier('upload-unnamed', 'usability', 'The upload button has no label, so it is announced only as a generic file button.'));
+      out.push(barrier('upload-unnamed', 'The upload button has no label, so it is announced only as a generic file button.'));
     }
   });
 
@@ -309,11 +348,11 @@ function pageBarriers(): Barrier[] {
     if (!visible(el) || ariaHidden(el)) return;
     if (el.closest('[role=dialog],[role=alertdialog],[aria-modal=true],dialog')) return;
     if (!el.querySelector('input,select,textarea')) return;
-    out.push(barrier('modal-without-dialog-role', 'blocking', 'A popup opened on this page but is not announced as a dialog.'));
+    out.push(barrier('modal-without-dialog-role', 'A popup opened on this page but is not announced as a dialog.'));
   });
 
   if (document.querySelector('iframe[src*=recaptcha],iframe[src*=hcaptcha],[class*=h-captcha],[class*=g-recaptcha]')) {
-    out.push(barrier('captcha', 'blocking', 'This page has a CAPTCHA. BRIDGE cannot complete it, so you may need sighted help at that point.'));
+    out.push(barrier('captcha', 'This page has a CAPTCHA. BRIDGE cannot complete it, so you may need sighted help at that point.'));
   }
   return out;
 }

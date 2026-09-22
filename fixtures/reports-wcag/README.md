@@ -9,7 +9,8 @@ output. [`../reports/`](../reports/) is the counterpart: reports written before 
 existed, which must still load and must display as "No WCAG mapping recorded".
 
 The findings themselves are identical to `../reports/` key for key. The only difference is
-the added `wcag`, `wcagLevel`, `automated` and `reviewRequired` fields.
+the added `wcag`, `wcagLevel`, `automated` and `reviewRequired` fields on each finding, and
+the report-level `standard` block naming WCAG 2.2 AA and the criteria the scanner can fail.
 
 ## Regenerating
 
@@ -29,7 +30,7 @@ Restore a regeneration recipe here once the automated send exists.
 statement that any form does or does not conform, and not a substitute for testing with real
 assistive technology. **Human review is required for a WCAG conformance claim.**
 
-A rule appears with a criterion only where `extension/lib/wcag.ts` records one, and that file
+A rule appears with a criterion only where `extension/lib/rules.ts` records one, and that file
 maps a rule only after reading its implementation in `extension/lib/scan.ts`.
 `modal-without-dialog-role` and `captcha` are deliberately unmapped and show as "No WCAG
-mapping recorded" — see the rationale in `extension/lib/wcag.ts`.
+mapping recorded" — see the rationale in `extension/lib/rules.ts`.

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Acme Careers — Preferences</title>
+<style>
+  body { font: 16px/1.4 system-ui, sans-serif; margin: 40px; background: #fff; color: #222; }
+  label, legend, p { display: block; margin: 0 0 6px; }
+  .field { margin: 32px 0; }
+
+  /* 2.5.8 fails: 16px custom radios, 2px apart. */
+  .chip { display: inline-block; width: 16px; height: 16px; margin-right: 2px; border: 1px solid #333; border-radius: 50%; cursor: pointer; box-sizing: border-box; }
+  .chip[aria-checked=true] { background: #333; }
+
+  /* 2.5.8 fails: two 18px inputs with nothing between them. */
+  .tight { display: block; height: 18px; box-sizing: border-box; margin: 0; font-size: 12px; }
+
+  /* 2.5.8 passes by spacing: 18px tall, but nothing within 24px of it. */
+  .lonely { display: block; height: 18px; box-sizing: border-box; margin: 30px 0; font-size: 12px; }
+
+  /* 1.4.3 fails: #999 on white is 2.8:1. */
+  .faint { color: #999; }
+  /* 1.4.3 passes as large text: #777 on white is 4.5:1 — under 4.5 at 16px, over 3 at 24px. */
+  .large { color: #777; font-size: 24px; }
+  /* 1.4.3 fails on the placeholder: #bbb on white is 1.9:1. */
+  .ghost::placeholder { color: #bbb; }
+  /* 1.4.3 not measured: a gradient behind the text. */
+  .banded { background: linear-gradient(#fff, #eee); padding: 4px; }
+</style>
+</head>
+<body>
+<h1>Preferences</h1>
+<form>
+  <div class="field">
+    <p id="contact-q">Preferred contact (email, phone or post, left to right)</p>
+    <div class="chip-row" role="radiogroup" aria-labelledby="contact-q">
+      <span class="chip" role="radio" tabindex="0" aria-checked="true" aria-label="Email"></span><span class="chip" role="radio" tabindex="-1" aria-checked="false" aria-label="Phone"></span><span class="chip" role="radio" tabindex="-1" aria-checked="false" aria-label="Post"></span>
+    </div>
+  </div>
+
+  <div class="field">
+    <p>Nickname, then pronouns</p>
+    <input id="nick" class="tight" aria-label="Nickname"><input id="pron" class="tight" aria-label="Pronouns">
+  </div>
+
+  <div class="field">
+    <label for="ref">Referral code</label>
+    <input id="ref" class="lonely">
+  </div>
+
+  <div class="field">
+    <label for="email" class="faint">Email address</label>
+    <input id="email" type="email">
+  </div>
+
+  <div class="field">
+    <label for="phone" class="large">Phone number</label>
+    <input id="phone" type="tel">
+  </div>
+
+  <div class="field">
+    <label for="site">Website</label>
+    <input id="site" class="ghost" placeholder="https://">
+  </div>
+
+  <div class="field banded">
+    <label for="notes" class="faint">Notes</label>
+    <textarea id="notes"></textarea>
+  </div>
+
+  <div class="field">
+    <label><input type="checkbox" name="news"> Send me job alerts</label>
+  </div>
+
+  <button type="submit">Save preferences</button>
+</form>
+</body>
+</html>

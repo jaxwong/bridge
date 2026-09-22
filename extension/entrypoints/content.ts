@@ -3,13 +3,14 @@
 
 import { fill, harvestOptions, readValue } from '../lib/act';
 import { accName, clean, deepQueryAll, formScope, visible } from '../lib/dom';
-import type { CropRect, FormChanged, ForwardAction, HandlerThrew, Request } from '../lib/messages';
+import type { CropRect, FormChanged, ForwardAction, HandlerThrew, ReadBack, Request } from '../lib/messages';
 import { refind, scanPage, type FieldHandle } from '../lib/scan';
 import type { ReadBackResult, ScanResult } from '../lib/types';
 
 const FORWARD = /\b(submit|continue|next|review|apply|send)\b/i;
 const NOT_FORWARD = /\b(back|previous|cancel|close|dismiss|save draft)\b/i;
 const SUBMITS = /\b(submit|apply|send)\b/i;
+const BACKWARD = /\b(back|previous)\b/i;
 
 export default defineContentScript({
   matches: [
@@ -80,6 +81,19 @@ export default defineContentScript({
       return { name: hit.name, submits: true, pressed: true };
     }
 
+    /** The step's back button, first in page order (forms put Back before Next). Its name
+     *  must say it goes back and must not match FORWARD, so this can never press anything
+     *  that submits or moves on. input[type=submit] is excluded outright. */
+    function backAction(): ForwardAction | null {
+      const hit = deepQueryAll<HTMLElement>(formScope(), 'button,input[type=button],[role=button],a[href]')
+        .filter((b) => visible(b) && !(b as HTMLButtonElement).disabled)
+        .map((b) => ({ b, name: accName(b).name || clean(b.textContent) || (b as HTMLInputElement).value || '' }))
+        .find(({ name }) => BACKWARD.test(name) && !FORWARD.test(name));
+      if (!hit) return null;
+      hit.b.click();
+      return { name: hit.name, submits: false, pressed: true };
+    }
+
     async function handle(msg: Request): Promise<unknown> {
       switch (msg.type) {
         case 'bridge/ping':
@@ -114,13 +128,16 @@ export default defineContentScript({
         }
 
         case 'bridge/read-back': {
-          // VERIFY reads from the page, never from BRIDGE's own state (§4.4).
-          if (!last) return [];
-          return last.fields.map((f): ReadBackResult => {
+          // VERIFY reads from the page, never from BRIDGE's own state (§4.4). Fields the
+          // page has grown or lost since the last scan are reported as `changed`, not
+          // silently left out: the panel rescans and asks again.
+          if (!last) return { changed: false, fields: [] } satisfies ReadBack;
+          const fields = last.fields.map((f): ReadBackResult => {
             const h = handles.get(f.id)!;
             const found = !!refind(h);
             return { fieldId: f.id, label: f.label, value: found ? readValue(h) : '', found };
           });
+          return { changed: fingerprintOf(scanPage().result) !== fingerprintOf(last), fields } satisfies ReadBack;
         }
 
         case 'bridge/forward-action':
@@ -128,6 +145,9 @@ export default defineContentScript({
 
         case 'bridge/submit':
           return submitApplication();
+
+        case 'bridge/back-action':
+          return backAction();
 
         case 'bridge/rect': {
           // For a label-inference crop (§6.4). Field values never leave the device, so a

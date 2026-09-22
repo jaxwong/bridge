@@ -212,7 +212,7 @@ type ControlKind =
 type Severity = "blocking" | "usability" | "ok";
 
 interface Barrier {
-  rule: string;
+  rule: RuleId;             // the §6.2 catalogue, extension/lib/rules.ts, which owns severity
   severity: Severity;
   message: string;          // spoken to the user as-is
 }
@@ -249,21 +249,37 @@ shift when a conditional field appears.
 
 ### 6.2 SCAN: barrier rules
 
-| Rule | Severity | Detection |
-|---|---|---|
-| `missing-label` | usability | axe-core `label`, `aria-input-field-name` |
-| `not-keyboard-operable` | blocking | Element looks interactive (`cursor: pointer`, known widget class patterns, custom slider thumb) but has no focusable descendant and no ARIA role |
-| `drag-drop-only` | blocking | File input is **out of the tab order** — `tabindex=-1`, `disabled`, `display:none`, `visibility:hidden` or `inert` — and has no keyboard trigger. A `<label for>` names the input but is not a tab stop, so it only counts as a trigger when the label itself (or a button inside it) is focusable. Visually hidden is *not* out of the tab order; that is the standard accessible pattern. Known limit: a separate button that opens the input from script cannot be recognised statically |
-| `upload-unnamed` | usability | File input is keyboard-reachable but has no accessible name, so it is heard only as a generic file button |
-| `focus-trap` | blocking | **Not detectable by SCAN.** Scripted Tab presses do not move focus, so tab order can only be observed from real keypresses. Checked manually with `bridge.watchTab()` in `probe/`. Note that focus looping from a dialog's last control back to its first is *correct* modal behaviour, not a trap |
-| `custom-dropdown-no-role` | blocking | Div/ul-based option list with no `listbox` / `combobox` roles |
-| `captcha` | blocking (page) | Known CAPTCHA iframes / widgets. BRIDGE cannot solve these; it tells the user in advance |
-| ~~`closed-shadow-root`~~ | retired | Content scripts can open closed roots with `chrome.dom.openOrClosedShadowRoot`. SCAN and ACT pierce every shadow root, so a field inside one is offered like any other. Verified on the fixture's closed root |
-| `cross-origin-frame-unreachable` | blocking (page) | A visible cross-origin iframe whose origin is not among the frames Chrome lets BRIDGE run in. Derived in the side panel: the top frame lists iframe origins, the service worker lists reachable frames |
-| `modal-without-dialog-role` | blocking (page) | A visible popup containing form controls, with no `role="dialog"` / `role="alertdialog"` / `aria-modal` on it or any ancestor. Nothing announces it opened |
-| `group-not-labelled` | blocking | Radios in one group, or two or more checkboxes sharing a `name`, with no `fieldset`+`legend` and no `role="group"`/`radiogroup"` carrying a name. The question itself is unreachable |
-| `label-placeholder-only` | usability | The only name comes from `placeholder`. It vanishes on input and several screen readers skip it |
-| `options-identically-named` | blocking | Two or more options in one group compute to the **same** accessible name. `aria-label` overrides element contents, so a question stamped onto every option erases "Yes" and "No" |
+| Rule | Severity | WCAG 2.2 | Detection |
+|---|---|---|---|
+| `missing-label` | usability | 4.1.2 | axe-core `label`, `aria-input-field-name` |
+| `not-keyboard-operable` | blocking | 2.1.1, review | Element looks interactive (`cursor: pointer`, known widget class patterns, custom slider thumb) but has no focusable descendant and no ARIA role |
+| `drag-drop-only` | blocking | 2.1.1 | File input is **out of the tab order** — `tabindex=-1`, `disabled`, `display:none`, `visibility:hidden` or `inert` — and has no keyboard trigger. A `<label for>` names the input but is not a tab stop, so it only counts as a trigger when the label itself (or a button inside it) is focusable. Visually hidden is *not* out of the tab order; that is the standard accessible pattern. Known limit: a separate button that opens the input from script cannot be recognised statically |
+| `upload-unnamed` | usability | 4.1.2 | File input is keyboard-reachable but has no accessible name, so it is heard only as a generic file button |
+| `focus-trap` | blocking | never emitted | **Not detectable by SCAN.** Scripted Tab presses do not move focus, so tab order can only be observed from real keypresses. Checked manually with `bridge.watchTab()` in `probe/`. Note that focus looping from a dialog's last control back to its first is *correct* modal behaviour, not a trap |
+| `custom-dropdown-no-role` | blocking | 4.1.2, review | Div/ul-based option list with no `listbox` / `combobox` roles |
+| `captcha` | blocking (page) | unmapped | Known CAPTCHA iframes / widgets. BRIDGE cannot solve these; it tells the user in advance. Presence is not a WCAG failure: 1.1.1 allows a CAPTCHA with an alternative form, and SCAN does not check for one |
+| ~~`closed-shadow-root`~~ | retired | — | Content scripts can open closed roots with `chrome.dom.openOrClosedShadowRoot`. SCAN and ACT pierce every shadow root, so a field inside one is offered like any other. Verified on the fixture's closed root |
+| `cross-origin-frame-unreachable` | blocking (page) | unmapped | A visible cross-origin iframe whose origin is not among the frames Chrome lets BRIDGE run in. Derived in the side panel: the top frame lists iframe origins, the service worker lists reachable frames. A limit of the scan, not a defect of the page |
+| `modal-without-dialog-role` | blocking (page) | unmapped | A visible popup containing form controls, with no `role="dialog"` / `role="alertdialog"` / `aria-modal` on it or any ancestor. Nothing announces it opened. Detected by class name, and the criterion is contested (4.1.2, 1.3.1 or 2.4.3), so none is claimed |
+| `group-not-labelled` | blocking | 1.3.1 | Radios in one group, or two or more checkboxes sharing a `name`, with no `fieldset`+`legend` and no `role="group"`/`radiogroup"` carrying a name. The question itself is unreachable |
+| `label-placeholder-only` | usability | 3.3.2 | The only name comes from `placeholder`. It vanishes on input and several screen readers skip it |
+| `options-identically-named` | blocking | 4.1.2, 2.5.3 | Two or more options in one group compute to the **same** accessible name. `aria-label` overrides element contents, so a question stamped onto every option erases "Yes" and "No" |
+| `target-too-small` | usability | 2.5.8 (AA) | A control's rendered box is under 24 by 24 CSS pixels and no exception in the criterion applies: **spacing** (a 24px circle centred on it meets another pointer target, or the circle of another undersized one), **user agent** (a native checkbox or radio at its default appearance is skipped), inactive controls. Groups report once, on the first crowded option. `extension/lib/visual.ts` |
+| `low-contrast` | usability | 1.4.3 (AA), review | The label text, typed text or placeholder of a control is under 4.5:1 (3:1 for large text) against the colour composited from its ancestors' solid backgrounds. **Not measured** over a background image or gradient, a translucent ancestor, or a non-sRGB colour. Review: it reads the cascade, not the pixels, so an overlay or text shadow is invisible to it. `extension/lib/visual.ts` |
+
+**The Severity and WCAG columns are owned by `extension/lib/rules.ts`**, the rule catalogue;
+this table is a reading copy. `barrier(rule, message)` there is the only way a `Barrier` is
+made, so severity is decided once per rule, never at the call site, and `Barrier.rule` is
+the typed `RuleId`: a renamed rule fails the typecheck instead of silently losing its
+mapping. Each mapping in the catalogue names the `scan.ts` line it was read from and carries
+a rationale; a rule is mapped only where the criterion fails *every* time it fires, and
+"review" marks a heuristic detection (`reviewRequired`) a person should confirm. Two
+criteria are Level AA, 2.5.8 and 1.4.3, both measured from layout and colour in
+`extension/lib/visual.ts`; the rest are Level A. 2.5.7 Dragging Movements (AA) is not
+claimed for `drag-drop-only` because the rule tests only for a keyboard trigger, and a
+drop zone that also opens a picker on click satisfies 2.5.7. Note what "AA" means: Level AA
+conformance requires every A and AA criterion, so a Level A failure already fails AA; the
+per-finding level says which tier the failed criterion sits in, not how serious it is.
 
 Heuristics run first. The LLM is only used to **infer labels and options** for fields where heuristics produce nothing useful.
 
@@ -499,16 +515,20 @@ The session goes dormant, not destroyed, when the tab leaves the origin: that is
 SSO detour, not an abandoned application. The side panel does not reload on page
 navigation, so its UI state stays continuous on its own.
 
-Beside the session, `drafts:{tabId}:{origin}` holds what the user has chosen in the panel
-but not yet written — control values by field key, plus which question they were on —
-saved as they type (2026-09-22). The position is wherever keyboard focus last was inside
-a question, so it is right in both modes; the pager alone missed the full list, where
-the user moves by Tab. It exists because Alt+Shift+B reloads the panel (the only
-way to move focus back from the page, above), and that reload must cost nothing: on the
-next scan the drafts are restored if the page is still on the recorded step, and BRIDGE
-says "Back in BRIDGE. Your answers are kept. You were on question N of M." A draft whose
-step the page has left is not restored — the same "the page moved on" rule unwritten
-answers always had. Files are not drafted; the CV store above already covers them.
+Beside the session, `drafts:{tabId}:{origin}` holds what the user has chosen in the panel,
+one record per step index — control values by field key, plus which question they were
+on — saved as they type and flushed as the panel turns to a new step (2026-09-22). The
+position is wherever keyboard focus last was inside a question, so it is right in both
+modes; the pager alone missed the full list, where the user moves by Tab. Two things
+read it back. Alt+Shift+B reloads the panel (the only way to move focus back from the
+page, above), and that reload must cost nothing: the next scan restores the step's drafts
+and its position, and BRIDGE says "Back in BRIDGE. Your answers are kept. You were on
+question N of M." And a step returned to by Back gets what was typed there, written or
+not, with "What you typed here before is back in the panel." — found in check 2: the
+panel offering a blank step 1 read as the form having restarted. A draft only ever
+returns to its own step index, so on a page with no stepper, where a revisit is a new
+index, nothing comes back — the "the page moved on" rule unwritten answers always had.
+Files are not drafted; the CV store above already covers them.
 
 #### Announce every step change
 
@@ -539,12 +559,35 @@ user's toolbars. Four chords per step is not a usable flow, so:
 - A forward button whose name does not say submit, apply or send is **pressed by BRIDGE** on
   the second Alt+Shift+S. The user stays in the panel, the new step is announced, and focus
   goes to its first question. The page side owns this rule and refuses to click a submitting
-  name whatever the panel asks.
+  name whatever the panel asks. The same press is also a button in the panel, **"Press the
+  Next button on the page"** (named after the page's own button), shown only while the
+  read-back is current: buttons are the primary interface, discoverable and immune to
+  Chrome leaving a later-added shortcut unbound; the shortcut is the accelerator over the
+  same gate.
+- The gate is "read back since the page last changed", and questions appearing or going
+  within a step is such a change: a Yes that reveals two more questions closes it, so the
+  next press reads back instead of pressing Next over questions the read-back never saw.
+  The read-back itself checks the same thing: the page side answers `changed` when the
+  form differs from its last scan (a write that revealed questions, read back before the
+  watcher's debounced rescan lands), and the panel then rescans once and reads again.
+  Both found in check 2, 2026-09-22.
 - A button that submits is **never pressed by the shortcut**. While the step's read-back is
   current, the panel shows **"Submit my application"**; the second Alt+Shift+S only moves
-  focus to it. Activating it asks "Submit your application to <site>? N questions are empty.
-  This cannot be undone.", with focus on Cancel. Only "Yes, submit now" sends `bridge/submit`.
-  Any write, step change or reload withdraws the button until the step is read back again.
+  focus to it. Activating it asks "Submit your application to <site>? N questions on this
+  step are empty: <their names>. This cannot be undone.", with focus on Cancel. The names,
+  not just the count, and the scope said out loud: read-back can only see the step the page
+  is showing, and a bare count implied it had covered the whole journey (found in check 2,
+  2026-09-22). On a one-page form the scope clause is dropped. Only "Yes, submit now" sends
+  `bridge/submit`. Any write, step change or reload withdraws the button until the step is
+  read back again.
+- **Going back is the panel's "Go back to the previous step" button**, the mirror of the
+  forward press and the way to re-check an earlier step: `bridge/back-action` presses the
+  first visible button whose name says back or previous and never one matching the forward
+  names, so it cannot submit or advance. No back button on the step is said honestly. The
+  returned step is a new-step scan like any other; what was typed there comes back into the
+  panel by step index (drafts, above), and the page's own answers are whatever the page
+  kept — read-back is how to hear them. The `modal.html` fixture keeps each step's answers
+  across Back, as a wizard does; whether LinkedIn does is not recorded in §11.
 - Two locks, one on each side. The panel has a single path to `bridge/submit`, the confirm
   button's handler. The page side presses only a button whose name says it submits, so that
   message cannot press Next, and `bridge/forward-action` cannot press Submit.
@@ -577,9 +620,15 @@ BRIDGE is useless if BRIDGE itself is inaccessible.
   pre-check, region … heading level 2, Application pre-check"). Groups are named only where
   the name carries meaning — a question's options — never for chrome like the mode picker
   (2026-09-22).
-- One `aria-live="polite"` region for status ("Slider set to 2 years", "Could not fill Start date").
-  It is visually hidden: announcements often repeat what the UI already shows, so rendering
-  them printed the same sentence twice. And it stays silent on open: a freshly loaded panel
+- Two live regions, split by who caused the sentence (2026-09-22, check 2 by ear). The answer
+  to the user's own command — Alt+Shift+S, Write, Read back, Go back, the submit question,
+  export — goes to an `aria-live="assertive"` region (`role="alert"`) and interrupts: with
+  one polite region, a read-back pressed during VoiceOver's read-through of the panel was
+  not heard until the read-through ended. News from the page — a step changed, questions
+  appeared, "has not moved on", label inference — goes to the `aria-live="polite"` region
+  and waits for a pause, so it never cuts off the field the user has just reached. Both are
+  visually hidden: announcements often repeat what the UI already shows, so rendering
+  them printed the same sentence twice. And both stay silent on open: a freshly loaded panel
   is read by the screen reader once, top to bottom — heading, journey, summary, questions —
   and announcing over that pass made VoiceOver interrupt it and repeat the summary (heard
   three times, 2026-09-22). The known cost: if a scan outlives VoiceOver's read of the
@@ -589,9 +638,9 @@ BRIDGE is useless if BRIDGE itself is inaccessible.
   id — never a quantity) is spaced out so the reader speaks each digit instead of
   "ninety-six million…". Visible text and everything written to the page keep the real value.
 - Visible and programmatic focus management: focus moves into the panel on open. It never
-  moves on a write: a screen reader speaks whatever receives focus before a polite
-  announcement, so auto-advancing introduced the next question before confirming the one
-  just answered (2026-09-22). The confirmation says how to move on instead — Tab in the
+  moves on a write: a screen reader speaks whatever receives focus first, so auto-advancing
+  introduced the next question before confirming the one just answered (2026-09-22); now
+  that the confirmation is assertive it would instead cut that introduction off. The confirmation says how to move on instead — Tab in the
   full list, the Next question button in one-at-a-time.
 - Zero axe violations on the panel.
 - Tested end to end with NVDA on Windows before demo.
@@ -607,23 +656,28 @@ found in VoiceOver is real; passing VoiceOver does not discharge the NVDA pass.
 
 ### 6.7 Barrier report (employer side, MVP)
 
-"Export barrier report" in the side panel produces Markdown + JSON. The monitor in
-[`bridge-business.md`](bridge-business.md) §6.2 writes the same JSON, so one scanned page
-produces one report whichever side produced it:
+"Export barrier report" in the side panel produces Markdown + JSON. It is the only producer:
+the employer-side monitor that once wrote the same JSON was removed on 2026-09-22
+([`bridge-business.md`](bridge-business.md), status note), so a report reaches the dashboard
+only when an applicant exports one.
 
 ```json
 {
   "portal": "boards.greenhouse.io",
   "pagePath": "/acme/jobs/12345",
   "generatedAt": "2026-09-24T10:00:00Z",
+  "standard": { "name": "WCAG", "version": "2.2", "level": "AA",
+                "checked": ["1.3.1", "1.4.3", "2.1.1", "2.5.3", "2.5.8", "3.3.2", "4.1.2"] },
   "barriers": [
     { "rule": "drag-drop-only", "severity": "blocking",
       "label": "CV upload",
-      "impact": "A screen reader user cannot attach a CV." }
+      "impact": "A screen reader user cannot attach a CV.",
+      "wcag": ["2.1.1"], "wcagLevel": "A", "automated": true, "reviewRequired": false }
   ],
   "pageBarriers": [
     { "rule": "captcha", "severity": "blocking",
-      "impact": "A screen reader user cannot verify they are not a bot." }
+      "impact": "A screen reader user cannot verify they are not a bot.",
+      "automated": true }
   ]
 }
 ```
@@ -638,9 +692,21 @@ It is a projection of one `ScanResult` (§6.1), flattened:
 | `barriers[]` | Every `FieldDescriptor.barriers` entry, in page order, each carrying its field's `label` |
 | `barriers[].impact` | `Barrier.message`. The same sentence, renamed at the boundary: it is spoken to the applicant and read by the employer |
 | `pageBarriers[]` | `ScanResult.pageBarriers`, which belong to no field and so carry no `label` |
+| `standard` | `STANDARD` in `extension/lib/rules.ts`: `name` "WCAG", `version` "2.2", `level` "AA", and `checked`, every criterion a rule in the catalogue can cite |
+| `barriers[].wcag`, `.wcagLevel`, `.reviewRequired` | The rule's mapping in the catalogue (§6.2). **Absent when the rule is unmapped**, never a guess. `wcagLevel` is the most stringent level among `wcag` |
+| `barriers[].automated` | Always `true`: everything this producer writes came from the scanner. A person's finding would carry `false` |
 
 Fields with no barriers do not appear. The report carries no field values, no applicant
 identity, and no `stepHint`.
+
+**Automated WCAG 2.2 A/AA findings, never a conformance result.** The criterion numbers say
+what a finding fails, and `standard.checked` says which criteria the scanner could have
+failed at all. A criterion outside `checked` was never tested, so a report with no findings
+is not a pass: it is silence about most of WCAG. Human review is required for a WCAG
+conformance claim, and the Markdown twin, the dashboard and this spec all say so in those
+words. The four per-finding fields and `standard` are optional to the consumer, so a report
+exported before they existed still loads (`fixtures/reports/` is that corpus;
+`fixtures/reports-wcag/` carries them).
 
 **`label` is required on every `barriers[]` entry, and there is no `selector`.** The
 dashboard compares two scans of the same form by `rule` + `label` for field-level barriers
@@ -657,9 +723,8 @@ portals in §11 put the job in the path. It also lets the Acme fixture's `?v=2` 
 the employer demo.
 
 **One step or many.** The table above is `toReport()` in `extension/lib/report.ts`, the one
-conversion both producers use. The side panel's export is `buildReport()`: for an
-application with a single step it is exactly `toReport()` of that step, so it is the same
-JSON the monitor writes for the same page. When the applicant reached more than one step
+conversion. The side panel's export is `buildReport()`: for an application with a single
+step it is exactly `toReport()` of that step. When the applicant reached more than one step
 (§6.5), the two flat lists hold every step's barriers, each with a `step` number; the form
 is identified by its **first** step's `pagePath`; `generatedAt` is the most recent step's
 scan; and `steps: [{ index, label, pagePath, barriers, pageBarriers }]` keeps the grouping.
@@ -668,17 +733,12 @@ A consumer that does not know `steps` or `step` ignores them, and the dashboard 
 **`label` is always the name the page itself yields**, never one from label inference
 (§6.4): a model may word it differently on the next run, and the compare key must not move.
 
-**Two known differences between the producers**, both because the monitor runs in an
-ordinary page with no extension API: it cannot see inside a *closed* shadow root, and it
-cannot know which cross-origin frames the extension may reach, so
-`cross-origin-frame-unreachable` appears only in the side panel's export.
-
 The side panel also writes the Markdown twin, for a person to paste into an email. Both
-files are named like the monitor's: `<portal-and-path-slug>-<timestamp>`.
+files are named `<portal-and-path-slug>-<timestamp>`.
 
 Sending the report anywhere is a manual user action in the MVP. This format is the contract
-with the employer dashboard and monitor in [`bridge-business.md`](bridge-business.md) §6;
-change it here, not there.
+with the employer dashboard in [`bridge-business.md`](bridge-business.md) §6; change it
+here, not there.
 
 ## 7. Test fixtures
 
@@ -748,8 +808,9 @@ refactor rather than a patch:
 - **A session never ends.** It is keyed by tab and origin, so a second application on the
   same site in the same tab is recorded into the first one's steps, and the exported report
   mixes them. Needs a rule for "a new application started" that Back-to-step-1 does not trip.
-- **One live region, last writer wins.** A write confirmation that lands after VERIFY
-  replaces the read-back summary before it may have been heard.
+- **Within a live region, last writer wins.** A write confirmation that lands after VERIFY
+  replaces the read-back summary before it may have been heard (both are answers to the
+  user's command, so both go to the assertive region).
 - **A content-script handler that throws** is turned into "BRIDGE cannot read this page"
   by `send()`. Verified twice by temporarily restoring a bug; no handler throws on any
   fixture any more, so no permanent test pins it.

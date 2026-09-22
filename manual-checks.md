@@ -8,7 +8,7 @@ quoted text back into the session; most failures here have a known, small fix.
 
 | # | Check | Time | Blocks the video? |
 |---|---|---|---|
-| 1 | Keyboard focus and the panel | done, 2 min left | Yes |
+| 1 | Keyboard focus and the panel | done | Yes |
 | 2 | Alt+Shift+S presses Next; submitting needs your confirmation | 10 min | Yes |
 | 3 | Screenshot crop for label inference | 10 min | Yes, if the demo shows inference |
 | 4 | "Always enable BRIDGE on this site" | 10 min | No |
@@ -16,9 +16,13 @@ quoted text back into the session; most failures here have a known, small fix.
 | 6 | VoiceOver pass with Screen Curtain | 60 min | Yes |
 | 7 | LinkedIn Easy Apply by hand | 20 min | No |
 
-**Status, 2026-09-22.** Check 1 is done apart from one VoiceOver step. Check 2 changed the
+**Status, 2026-09-22.** Check 1 is done, including what VoiceOver speaks on open. A phone
+number in a spoken confirmation was heard digit by digit, by hand. Check 2 changed the
 design twice (BRIDGE now presses Next, and submits only after a confirmation in the panel),
-and its new steps have not been run by hand yet. Checks 3 to 7 have not been started.
+and a first pass by hand found three more things, all fixed and covered by the suite but
+not yet re-run by hand: the forward press is also a button; a read-back straight after a
+Yes that reveals questions was missing them, and the gate stayed open; Back gave a blank
+step. Steps 3, 5 and 8 below are the ones to repeat. Checks 3 to 7 have not been started.
 
 On a Mac, **Alt is the Option key**. So Alt+Shift+B is Option+Shift+B.
 
@@ -90,7 +94,7 @@ panel's console: right-click the panel, Inspect.
 
 ## 1. Keyboard focus and the panel
 
-**Done on 2026-09-21, Chrome 154 on macOS. One step is left, step 4.**
+**Done on 2026-09-21 and 2026-09-22, Chrome 154 on macOS.**
 
 What was found, by hand:
 
@@ -100,6 +104,7 @@ What was found, by hand:
 | Can a panel that is already open take focus back from the page? | **No**, not by any call BRIDGE can make. So Alt+Shift+B now closes an open panel and shows it again, which does take focus. Checked by hand: it reopens and Tab moves inside it |
 | Can the page take focus from the panel? | **No.** See check 2, which changed the design because of it |
 | Chrome's own pane key | F6 does nothing on macOS. Cmd+Option+Down arrow, or Up, reaches the other pane in four presses. Nothing in BRIDGE depends on it |
+| What does VoiceOver say when the panel opens? | **The whole panel once, top to bottom, in order** (2026-09-22, with the fixes on `main`). Nothing is announced over the reading |
 
 The reopen reloads and rescans the panel, but it costs no answers (since 2026-09-22):
 everything typed in the panel is kept as a draft in session storage and put back if the
@@ -119,17 +124,13 @@ the rule for unwritten answers.
    *Expect:* the panel closes, reopens and rescans; the focus ring is inside it; what you
    typed is back in its box; VoiceOver users hear "Back in BRIDGE. Your answers are kept…".
 
-**Still to do**
-
 4. Close the panel. Turn VoiceOver on (**Cmd+F5**). Click in **Full name**, press
    **Alt+Shift+B**, and listen. *Expect:* "BRIDGE, heading level 1"; with VoiceOver's
    default settings it then reads the whole panel once, in order — the summary is heard
    there, once, and nothing is announced over the reading. **Control** stops it (check 6,
    "Before you start", explains the setting).
 
-**Write down**
-
-- What VoiceOver said when the panel opened.
+Reopening with saved answers, under VoiceOver, is check 6 Run D.
 
 ---
 
@@ -145,20 +146,44 @@ submits. This check is now about that behaviour.
 The command has a gate. The **first** press on a step reads everything back. Only the
 **second** press acts. Any write in between closes the gate again.
 
-1. Rebuild and reload the extension. Open `http://localhost:8765/modal.html`, press
-   **Alt+Shift+B**, and click **Easy Apply** on the page.
-2. Press **Alt+Shift+B** again so focus is in the panel. Do not touch the mouse from here.
+1. Rebuild and reload the extension. Close the side panel. Open
+   `http://localhost:8765/modal.html` and activate **Easy Apply** on the page, as a user
+   already on the page would.
+2. Press **Alt+Shift+B**. Focus is now in the panel. Do not touch the mouse from here.
 3. Press **Alt+Shift+S**. *Expect:* "Nothing has been filled yet." or "Your application
    contains: …", ending "Press Alt+Shift+S again and BRIDGE presses the Next button, which
-   moves to the next step." The page must still show step 1.
+   moves to the next step. The same press is a button after this read-back." The page must
+   still show step 1. With VoiceOver on, press it while VoiceOver is still reading the
+   panel out: *expect* the reading to stop and the read-back to be spoken at once (it is
+   now assertive; news from the page, like a step change, still waits its turn). Note
+   whether the reading resumes afterwards. Tab forward from "Read back everything from the page": *expect* a
+   button **"Press the Next button on the page"** right after the list. It is there only
+   while the read-back is current; on step 3 it is "Submit my application" instead.
 4. Press **Alt+Shift+S** again. *Expect:* the page moves to step 2, BRIDGE says "Step 2 of 3:
    Additional questions. …", and focus is on the first question in the panel.
-5. Repeat steps 3 and 4 to reach step 3.
+5. Repeat steps 3 and 4 to reach step 3, but first answer something on each step: on step 1
+   write an email address and type a phone number without writing it, on step 2 write the
+   visa answer. Then activate **"Go back to the previous step"** in the panel. *Expect:*
+   "BRIDGE pressed the Back button on the page.", then "Step 2 of 3: Additional questions. …
+   What you typed here before is back in the panel.", the visa choice ticked in the panel
+   and still selected on the page. Go back once more: *expect* the same sentence for step 1,
+   the email and the phone number both back in their boxes, and a read-back saying the
+   page holds the email and "Mobile phone number" is empty. Press **Alt+Shift+S** twice per
+   step to return to step 3. (On step 1, the same button says it could not find a Back or
+   Previous button.)
+   Also, on step 1: choose **Yes** for the referral question in the panel, write it, and
+   press **Alt+Shift+S** at once. *Expect:* the read-back lists "Referrer name" and
+   "Referrer email" among the empty questions, and they are now questions in the panel.
+   Then choose **No** on the page itself: *expect* the "Press the Next button" button to
+   disappear, so the next Alt+Shift+S reads back rather than pressing Next.
 6. On step 3 press **Alt+Shift+S** twice. *Expect after the second press:* "Focus is on the
    Submit my application button in BRIDGE. Pressing it asks you to confirm before anything
    is sent." Press **Alt+Shift+S** a few more times: the page must **never** show "Submitted".
 7. Press **Space** on "Submit my application". *Expect:* "Submit your application to
-   localhost:8765? N questions are empty. This cannot be undone.", with focus on **Cancel**.
+   localhost:8765? N questions on this step are empty: <their names>. This cannot be
+   undone.", with focus on **Cancel**. The empty questions are named, and "on this step"
+   is said because read-back cannot see the steps the page has already replaced — use
+   "Go back to the previous step" to re-check those.
    Press Space: "Nothing was submitted." Press "Submit my application" again, Tab back to
    **"Yes, submit now"**, press Space. *Expect:* "BRIDGE pressed the Submit application button
    on the page, as you confirmed.", and the page shows "Submitted (test page, nothing sent)."
@@ -341,11 +366,16 @@ caption panel.
    speak the question and never "Yes" or "No", and the CV control is never reached.
    *This is the "before" footage for the demo.*
 2. **On load.** Reload and wait two seconds without pressing anything.
-   *Expect:* "BRIDGE found 12 accessibility barriers on this form. Press Alt+Shift+B to open BRIDGE."
+   *Expect:* "BRIDGE found N accessibility barriers on this form. Press Alt+Shift+B to open BRIDGE."
    *If silent:* the page's live region is not being spoken. Tell Claude.
-3. **Open.** Press **Alt+Shift+B**.
-   *Expect:* "BRIDGE, heading level 1", then "13 questions found. 13 accessibility
-   barriers, 9 blocking."
+3. **Open.** Press **Alt+Shift+B**. The proxy is stopped for this run.
+   *Expect:* "BRIDGE, heading level 1", then "13 questions found. N accessibility
+   barriers, M blocking." Write down both barrier counts, from step 2 and from here. They
+   may differ by one: the panel can see the `127.0.0.1` frame it cannot reach, and the
+   page cannot. That explanation is unverified, so a difference is not a failure.
+   *Also expect,* once: "Label inference is unavailable, so 2 questions have no name. The BRIDGE
+   proxy at localhost:8000 is not reachable." *Fail if* you hear an exception such as "TypeError: Failed to
+   fetch" (fixed in `fc82055`, not yet heard by ear).
 4. **Find your way by heading.** **Control+Option+U** opens the rotor. Choose Headings.
    *Expect:* BRIDGE; Application pre-check; Questions; Question 1 of 13; Check what the
    page contains; Barrier report.
@@ -402,11 +432,35 @@ BRIDGE already injects into the page.
 
 5. On step 1, choose **Yes** for the referral question on the page.
    *Expect:* "2 new questions appeared: Referrer name, Referrer email."
+6. **An answer left behind.** Reload `modal.html` and reopen BRIDGE on step 1. Type into a
+   panel **text box** and **do not** press its Write button. (Only typed text and dropdown
+   choices count as left behind; a chosen radio or checkbox is not reported.) Press **Alt+Shift+S** twice.
+   *Expect:* "Step 2 of 3: … The page moved on before X was written; that answer is not
+   on the page.", with X the question's name. Going back to step 1 brings it back into
+   its box ("What you typed here before is back in the panel.").
 
 ### Run C: the full-page journey
 
 Open `http://localhost:8765/steps/1.html`, open BRIDGE, then activate **Save and Continue**
 on the page. Expect "Step 2 of 3: My Experience. Next: Review." with nothing reopened.
+
+### Run D: leaving the panel and coming back
+
+Alt+Shift+B on an open panel closes it and opens it again, and the reopened panel puts back
+what you typed (check 1). On reopen, VoiceOver starts reading the panel from the top, and
+BRIDGE announces "Back in BRIDGE…" at the same time. It is the one announcement BRIDGE
+still makes on open. That is the same kind of overlap that once made the summary heard
+three times, so listen closely here. Do it with **"Automatically speak the webpage"** on.
+
+1. Open `http://localhost:8765/apply.html` and press **Alt+Shift+B**. Choose **Full list**.
+2. Tab to question 11. Type into it and **do not** press Write.
+3. Click in the page's **Full name** field. Press **Alt+Shift+B**.
+   *Expect:* "Back in BRIDGE. Your answers are kept. You were on question 11 of 13.",
+   heard in full, and what you typed is back in its box.
+   Write down whether that sentence was spoken in full, was cut off, or broke into the
+   top-to-bottom reading. Note where in the reading it came.
+4. Repeat steps 2 and 3 in **One question at a time**, on question 3.
+   *Expect:* "…You were on question 3 of 13.", and question 3 is the question shown.
 
 ### What counts as a failure
 

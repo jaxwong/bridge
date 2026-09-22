@@ -11,22 +11,22 @@
 // Carries no field values and no applicant identity — only which rules fired, on which
 // labelled field, and what it means for the user. There is deliberately no selector.
 
-// Explicit .ts specifiers so this module can be imported by Node directly (test/e2e.mjs
-// builds the report itself now that the panel has no export button). Vite resolves them
-// unchanged.
-import type { ApplicationSession, BarrierReport, Barrier, ReportBarrier, ReportPageBarrier, ScanResult } from './types.ts';
-import { wcagFor } from './wcag.ts';
+// The .ts on './rules' is load-bearing: test/e2e.mjs imports this module directly in Node,
+// which resolves value imports by exact path. Vite resolves it unchanged. './types' needs
+// none — a type-only import is erased before resolution.
+import { STANDARD, wcagFor, type RuleId } from './rules.ts';
+import type { ApplicationSession, BarrierReport, Barrier, ReportBarrier, ReportPageBarrier, ScanResult } from './types';
 
 /**
  * The automated WCAG 2.2 A/AA fields, for one barrier. `automated` is always true here:
  * everything this file builds came from the scanner. `wcag`, `wcagLevel` and
- * `reviewRequired` appear only when lib/wcag.ts records a mapping for the rule — an
+ * `reviewRequired` appear only when lib/rules.ts records a mapping for the rule — an
  * unmapped rule omits them entirely rather than carrying a guess, and the dashboard shows
  * "No WCAG mapping recorded".
  *
  * These findings are automated. Human review is required for a WCAG conformance claim.
  */
-function wcagFields(rule: string): Partial<ReportBarrier> {
+function wcagFields(rule: RuleId): Partial<ReportBarrier> {
   const m = wcagFor(rule);
   if (!m) return { automated: true };
   return { wcag: m.wcag, wcagLevel: m.wcagLevel, automated: true, reviewRequired: m.reviewRequired };
@@ -44,6 +44,7 @@ export function toReport(scan: Pick<ScanResult, 'url' | 'scannedAt' | 'fields' |
     portal: url.host,
     pagePath: url.pathname,
     generatedAt: scan.scannedAt,
+    standard: STANDARD,
     barriers: scan.fields.flatMap((f) =>
       f.barriers.map((b: Barrier): ReportBarrier => ({
         rule: b.rule, severity: b.severity, label: f.label, impact: b.message, ...wcagFields(b.rule),
@@ -77,6 +78,7 @@ export function buildReport(session: ApplicationSession): BarrierReport {
     portal: parts[0].report.portal,
     pagePath: parts[0].report.pagePath,
     generatedAt: parts.map((p) => p.report.generatedAt).sort().at(-1)!,
+    standard: STANDARD,
     barriers: tagged.flatMap((s) => s.barriers),
     pageBarriers: tagged.flatMap((s) => s.pageBarriers),
     steps: tagged,
@@ -102,7 +104,8 @@ export function reportMarkdown(r: BarrierReport): string {
     : list(r.pageBarriers, r.barriers, 'No barriers found.');
   return `# Accessibility barrier report: ${r.portal}${r.pagePath}\n\nGenerated ${r.generatedAt} by BRIDGE. ` +
     `${total} barrier${total === 1 ? '' : 's'}. Contains no applicant data.\n\n` +
-    'These are automated WCAG 2.2 A/AA accessibility findings. They are not a conformance ' +
-    'result: human review is required for a WCAG conformance claim.\n\n' +
+    `These are automated ${r.standard.name} ${r.standard.version} A/AA accessibility findings. They are not a conformance ` +
+    'result: human review is required for a WCAG conformance claim. BRIDGE can fail only these ' +
+    `criteria: ${r.standard.checked.join(', ')}. Any other criterion was not checked.\n\n` +
     `${body}\n`;
 }
