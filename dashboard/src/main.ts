@@ -6,6 +6,7 @@ import { compareLatest, countBySeverity } from './lib/compare.ts';
 import type { ComparedBarrier, Comparison } from './lib/compare.ts';
 import { groupByForm, parseReport } from './lib/report.ts';
 import type { BarrierReport, Form, Severity } from './lib/report.ts';
+import { findingsOf, summariseWcag } from './lib/wcag.ts';
 
 const $ = <T extends HTMLElement>(id: string): T => {
   const node = document.getElementById(id);
@@ -74,11 +75,14 @@ async function readFiles(files: File[]): Promise<void> {
     }
   }
 
+  // Counted by groupByForm rather than by how many files were handed in: the same report
+  // can be picked twice and is still one report.
   const before = totalScans(groupByForm(loaded));
   loaded = [...loaded, ...accepted];
   const forms = groupByForm(loaded);
   const added = totalScans(forms) - before;
   const alreadyHeld = accepted.length - added;
+  const scans = totalScans(forms);
 
   renderErrors(failures);
   render();
@@ -88,7 +92,6 @@ async function readFiles(files: File[]): Promise<void> {
   if (added) parts.push(`${added} ${added === 1 ? 'report' : 'reports'} loaded`);
   if (alreadyHeld) parts.push(`${alreadyHeld} ${alreadyHeld === 1 ? 'report was' : 'reports were'} already loaded`);
   if (failures.length) parts.push(`${failures.length} ${failures.length === 1 ? 'file' : 'files'} could not be read`);
-  const scans = totalScans(forms);
   parts.push(`${forms.length} ${forms.length === 1 ? 'form' : 'forms'}, ${scans} ${scans === 1 ? 'scan' : 'scans'} in total`);
   announce(`${parts.join('. ')}.`);
 }
@@ -158,6 +161,23 @@ function renderList(): void {
 
 // --- form detail ---------------------------------------------------------------------
 
+/**
+ * The WCAG line for one finding. A finding whose rule carries no recorded mapping says so
+ * in words — the dashboard never infers a criterion the producer did not record.
+ */
+function wcagLine(b: ComparedBarrier): HTMLElement {
+  if (!b.wcag?.length) {
+    return el('p', { class: 'barrier__wcag barrier__wcag--none', text: 'No WCAG mapping recorded' });
+  }
+  const line = el('p', { class: 'barrier__wcag' }, [
+    el('span', { class: 'wcag-badge', text: `WCAG 2.2 Level ${b.wcagLevel ?? 'A'}` }),
+    ' ',
+    el('span', { text: b.wcag.join(', ') }),
+  ]);
+  if (b.reviewRequired) line.append(' ', el('span', { class: 'flag', text: 'Human review required' }));
+  return line;
+}
+
 function barrierItem(b: ComparedBarrier): HTMLElement {
   return el('li', { class: 'barrier' }, [
     el('p', { class: 'barrier__head' }, [
@@ -167,7 +187,57 @@ function barrierItem(b: ComparedBarrier): HTMLElement {
     ]),
     el('p', { class: 'barrier__where', text: b.scope === 'page' ? 'Affects the whole page' : `Field: ${b.label}` }),
     el('p', { class: 'barrier__impact', text: b.impact }),
+    wcagLine(b),
   ]);
+}
+
+/**
+ * Findings in the newest scan, counted by WCAG level and by success criterion. Counts only
+ * — it says nothing about whether the form conforms, which no automated tool can decide.
+ */
+function wcagSummarySection(newest: BarrierReport): HTMLElement {
+  const s = summariseWcag(findingsOf(newest));
+  const section = el('section', { class: 'wcag-summary' }, [
+    el('h3', { text: 'Automated WCAG 2.2 findings in the newest scan' }),
+  ]);
+
+  if (s.total === 0) {
+    section.append(el('p', { class: 'empty', text: 'This scan found no barriers, so there is nothing to map.' }));
+    return section;
+  }
+
+  const levels = s.byLevel.length
+    ? s.byLevel.map((l) => `Level ${l.level}: ${l.count}`).join(' · ')
+    : 'none mapped';
+  section.append(el('p', {}, [
+    el('strong', { text: `${s.mapped} of ${s.total} findings map to a success criterion` }),
+    ` (${levels}). ${s.unmapped} with no mapping recorded.`,
+    s.reviewRequired ? ` ${s.reviewRequired} flagged for human review of the detection itself.` : '',
+  ]));
+
+  if (s.byCriterion.length) {
+    section.append(el('table', { class: 'wcag-table' }, [
+      el('caption', { text: 'Findings by success criterion. One finding citing two criteria is counted under each.' }),
+      el('thead', {}, [el('tr', {}, [
+        el('th', { scope: 'col', text: 'Criterion' }),
+        el('th', { scope: 'col', text: 'Level' }),
+        el('th', { scope: 'col', text: 'Findings' }),
+        el('th', { scope: 'col', text: 'From rules' }),
+      ])]),
+      el('tbody', {}, s.byCriterion.map((c) => el('tr', {}, [
+        el('th', { scope: 'row', text: c.criterion }),
+        el('td', { text: c.level }),
+        el('td', { class: 'count', text: String(c.count) }),
+        el('td', { text: c.rules.join(', ') }),
+      ]))),
+    ]));
+  }
+
+  section.append(el('p', { class: 'disclaimer', role: 'note' }, [
+    el('strong', { text: 'Automated findings, not a conformance decision. ' }),
+    'Human review is required for a WCAG conformance claim.',
+  ]));
+  return section;
 }
 
 function barrierSection(heading: string, empty: string, barriers: ComparedBarrier[], cls = ''): HTMLElement {
@@ -201,6 +271,7 @@ function openDetail(key: string): void {
 
   const body = $('detail-body');
   body.replaceChildren(
+    wcagSummarySection(newest),
     barrierSection('New since the previous scan', comparison.hasPrevious
       ? 'Nothing new in this scan.'
       : 'A first scan has nothing to compare with, so nothing is reported as new.',
@@ -238,7 +309,7 @@ function render(): void {
 const input = $<HTMLInputElement>('reports');
 input.addEventListener('change', () => {
   const files = [...(input.files ?? [])];
-  // Cleared so the same file can be chosen again after a re-run of the monitor overwrote it.
+  // Cleared so the same file can be chosen again, e.g. after a newer export replaced it.
   input.value = '';
   void readFiles(files);
 });

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BRIDGE — application form monitoring</title>
+  <title>BRIDGE — accessibility findings for application forms</title>
   <link rel="stylesheet" href="/src/style.css">
 </head>
 <body>
@@ -11,15 +11,24 @@
 
   <header class="banner">
     <p class="wordmark">BRIDGE</p>
-    <p class="tagline">Accessibility monitoring for application forms</p>
+    <p class="tagline">Accessibility findings from real applicants</p>
   </header>
 
   <main id="main" tabindex="-1">
-    <h1>Application form monitoring</h1>
+    <h1>Accessibility findings from real applicants</h1>
     <p class="lede">
-      BRIDGE scans your customers' live application forms and tells you what changed since
-      the last scan: barriers they fixed, barriers still open, and barriers that are new.
-      The new ones are the alert.
+      When someone applies for a job using BRIDGE, the extension records the accessibility
+      barriers it found on that form and the applicant can export a report. Load those
+      reports here to see what each form is doing to the people trying to use it, and what
+      has changed between one report and the next: barriers fixed, barriers still open, and
+      barriers that are new.
+    </p>
+
+    <p class="disclaimer" role="note">
+      <strong>These are automated WCAG 2.2 A/AA accessibility findings.</strong>
+      They are not a conformance decision and not a legal opinion. BRIDGE does not certify
+      WCAG compliance and does not replace testing with real assistive technology.
+      <strong>Human review is required for a WCAG conformance claim.</strong>
     </p>
 
     <!-- Status, announced to a screen reader as it changes. One region for the whole page. -->
@@ -28,8 +37,10 @@
     <section aria-labelledby="load-h">
       <h2 id="load-h">Load barrier reports</h2>
       <p id="load-help">
-        Choose the report files written by the monitor, or exported from the BRIDGE
-        extension. You can load more than once — files add to what is already loaded.
+        Choose the JSON reports exported from the BRIDGE extension. You can load more than
+        once — each file adds to what is already loaded, so several reports for one form
+        build up a history. The reports carry findings only: no answers, no CV, no
+        credentials and nothing identifying the applicant.
       </p>
       <div class="loader" id="dropzone">
         <label class="file-label" for="reports">Barrier report files (JSON)</label>
@@ -42,7 +53,7 @@
     </section>
 
     <section id="list-view" aria-labelledby="list-h">
-      <h2 id="list-h" tabindex="-1">Monitored forms</h2>
+      <h2 id="list-h" tabindex="-1">Forms reported on</h2>
       <div id="list-body">
         <p class="empty">No reports loaded yet.</p>
       </div>
@@ -66,33 +77,35 @@
         fixes it once, it is fixed for every employer on the platform. That is who we sell to.
       </p>
 
-      <h3>Monitoring, not a one-off audit</h3>
+      <h3>Findings from the people actually blocked</h3>
       <p>
-        A form that passed an accessibility review does not stay accessible. Two things keep
-        changing underneath it. Employers add new job postings constantly, each one new
-        human-written content poured into a fixed template — new screening questions, new
-        embedded assessments, new third-party widgets. And the vendor ships platform updates
-        on its own schedule, outside any individual employer's control. A redesigned date
+        A form that passed an accessibility review does not stay accessible. Employers add
+        new job postings constantly, each one new human-written content poured into a fixed
+        template — new screening questions, new embedded assessments, new third-party
+        widgets. The vendor ships platform updates on its own schedule. A redesigned date
         picker or upload widget can break keyboard access weeks after the last audit passed.
       </p>
       <p>
-        An audit is a photograph. What a vendor needs is a smoke alarm: something watching
-        every form on the platform that says <em>this one broke on Tuesday</em>.
+        What arrives here is not a crawl. It is a report from a real applicant, on the real
+        form they were trying to complete, at the moment they were trying to complete it —
+        including the steps a crawler never reaches, because a person filled in what was
+        needed to get there. An audit is a photograph. This is what the form did to someone.
       </p>
 
       <h3>What the vendor gets</h3>
       <ul>
-        <li>Continuous scanning of their customers' live forms. The vendor runs nothing.</li>
-        <li>An alert the moment a scan finds a barrier the previous scan did not.</li>
-        <li>Current accessibility evidence for procurement, which asks for proof that
-          reflects the product as it is now, not as it was at the last review.</li>
+        <li>Findings from the forms their customers actually publish, on the journeys
+          applicants actually take.</li>
+        <li>A comparison against the last report for the same form, so a barrier that was
+          not there before stands out.</li>
+        <li>Evidence that reflects the product as it is now, in the plain language of what
+          an applicant could not do.</li>
       </ul>
 
-      <h3>Pricing</h3>
+      <h3>What it costs</h3>
       <p>
-        Priced per monitored form, per month, on the number of forms the vendor puts under
-        monitoring. No per-seat charge and no setup fee: the vendor hands over posting URLs,
-        we scan them on a schedule.
+        A subscription, per platform, for as long as reports keep arriving. No per-seat
+        charge and no setup fee. The vendor runs nothing and installs nothing.
       </p>
       <p class="caveat">
         The figure belongs on the pitch slide, where it can be defended, not in this
@@ -101,9 +114,9 @@
 
       <h3>What this demo does not do</h3>
       <p>
-        No accounts, no billing, no scheduler. The monitor is run by hand here; in production
-        it runs on a schedule. The monitor only ever reads a page — it never fills a field,
-        never clicks forward and never submits an application.
+        No accounts, no billing, no automated crawling. Reports arrive only because an
+        applicant chose to export one and a person loaded it here. BRIDGE never scans a form
+        on an employer's behalf, never signs in anywhere, and never submits an application.
       </p>
     </section>
   </main>

@@ -175,3 +175,53 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0
 /* --- pitch --------------------------------------------------------------------- */
 .pitch { max-width: 46rem; }
 .pitch li { margin-bottom: 6px; }
+
+/* --- WCAG findings ------------------------------------------------------------- */
+/* The disclaimer is text, not a tooltip and not a footnote: an automated finding read
+   as a conformance result is the failure mode this product cannot afford. */
+.disclaimer {
+  border: 1px solid var(--usability-line);
+  border-left: 4px solid var(--usability-ink);
+  background: var(--usability-bg);
+  color: var(--usability-ink);
+  padding: 12px 16px;
+  border-radius: 5px;
+  max-width: 46rem;
+}
+
+.barrier__wcag { font-size: 0.9rem; color: var(--ink-muted); }
+.barrier__wcag--none { font-style: italic; }
+
+.wcag-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #f1f4f7;
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+/* A word, never a colour on its own. */
+.flag {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 1px solid var(--usability-line);
+  border-radius: 999px;
+  background: var(--usability-bg);
+  color: var(--usability-ink);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.wcag-summary {
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  padding: 4px 16px 16px;
+  margin-bottom: 22px;
+  background: #fbfcfd;
+}
+.wcag-summary h3 { margin-top: 16px; }
+.wcag-table { margin: 12px 0 16px; }
+.wcag-table th[scope="row"] { font-variant-numeric: tabular-nums; }

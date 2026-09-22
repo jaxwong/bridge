@@ -1,189 +1,206 @@
-# Handover: linking the extension to the employer dashboard
+# Handover: the extension-to-dashboard report handoff
 
-> **Status, 2026-09-21, from the extension side, after `implement-bridge-user` was rebased
-> onto this.** Left as written below; these points are now out of date:
->
-> - **§2, the export button: built.** JSON and Markdown, announced, named like the monitor's
->   files. `toReport()` is kept as the one conversion; the panel's `buildReport()` composes
->   it per step (`bridge-user.md` §6.7, "One step or many"). A one-step export is the same
->   JSON the monitor writes; `npm run test:e2e` checks that on `/`, `/?v=2` and `/?v=3`.
-> - **§4's numbers still hold** for `http://localhost:8765/`: 5 barriers, 4 blocking. The
->   monitor's output for all three versions matches `fixtures/reports/` key for key.
-> - **§5, the scanner bug: fixed.** A `<label for>` no longer hides an unreachable file
->   input, so `?v=3` could be labelled the ordinary way. It still works as it is.
-> - **The applicant demo page moved to `apply.html`.** `index.html` is yours again, exactly
->   as you committed it. The two had collided: mine already had a CV uploader, so your v3
->   regression would not have registered as new.
-> - **`extension/lib/` is still plain DOM code**, with one optional probe: `lib/dom.ts` uses
->   `chrome.dom` to open closed shadow roots when it exists, and falls back to open roots in
->   the monitor's ordinary page.
+How the applicant side and the business side connect, and what each owes the other.
 
-For whoever owns the extension side. Written from the business side after building the
-monitor and dashboard on `feature/business-dashboard`.
-
-**The whole link is one JSON file.** The side panel's "Export barrier report" button and the
-monitor both produce the same shape; the dashboard loads it and can't tell which made it.
-The format is [`bridge-user.md`](bridge-user.md) §6.7 and that section owns it — change it
-there, not in the dashboard.
-
-Right now only the monitor produces reports, because the export button isn't built. That
-button is the missing half.
+**The whole link is one JSON file**, exported by the applicant, loaded by a business user.
+There is no server between them, no API, no automated scanning, and no network call in
+either direction. The format is [`bridge-user.md`](bridge-user.md) §6.7 and that section owns
+it — change it there, not in the dashboard.
 
 ---
 
-## 1. What changed in your files
+## 1. The flow, end to end
 
-Pull this branch before editing any of them.
-
-| File | Change | Why |
-|---|---|---|
-| `bridge-user.md` §6.7 | `label` now required on field barriers, `selector` dropped, `pageBarriers` added, `pagePath` defined as pathname only | The old example couldn't be compared across scans — see §3 below |
-| `extension/lib/report.ts` | **New.** `toReport(ScanResult)` builds the §6.7 report | Both producers need this exact conversion; it belongs with the producer, not in my folder |
-| `extension/test/fixtures/acme/index.html` | `?v=2` and `?v=3` variants added | The dashboard needs a fix and a regression to detect |
-
-`test/fixtures/acme` **v1 is untouched** — no query string gives you byte-for-byte the page
-you had. `npm run test:e2e` was 23/23 before and after; re-run it if you don't believe me.
-
-`?v=2` rebuilds the education dropdown as a labelled native `<select>`. `?v=3` adds a
-drag-and-drop CV uploader on top of that.
-
----
-
-## 2. Building the export button
-
-`toReport()` is already written and typechecked. It takes the `ScanResult` you already hold
-in `entrypoints/sidepanel/main.ts` (the `scan` variable, line ~33) and returns the report.
-
-**This sketch is untested** — I didn't wire it up, because it's your file. Treat it as a
-starting point, not something known to run.
-
-`entrypoints/sidepanel/index.html`, as a new section:
-
-```html
-<section aria-labelledby="export-h">
-  <h2 id="export-h">Barrier report</h2>
-  <p id="export-help">Accessibility failures only. No answers, nothing that identifies you.</p>
-  <button type="button" id="export" aria-describedby="export-help">Export barrier report</button>
-</section>
+```
+1. The applicant reaches a job application form themselves, and BRIDGE scans it
+   in their own browser.
+2. The applicant chooses "Export barrier report" in the side panel. Nothing leaves
+   the browser until they do.
+3. A business user opens the dashboard.
+4. They load one or more exported JSON reports through the file picker.
+5. The dashboard shows the findings, their WCAG criteria, and what changed since
+   the previous report for the same form.
 ```
 
-`entrypoints/sidepanel/main.ts`:
-
-```ts
-import { toReport } from '../../lib/report';
-
-function exportReport() {
-  if (!scan) { announce('Nothing to export yet. Scan the page first.'); return; }
-
-  const report = toReport(scan);
-  const slug = `${report.portal}${report.pagePath}`.toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-  const stamp = report.generatedAt.replace(/\.\d+Z$/, 'Z').replace(/:/g, '-');
-
-  const url = URL.createObjectURL(
-    new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${slug}-${stamp}.json`;
-  document.body.append(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-
-  const n = report.barriers.length + report.pageBarriers.length;
-  announce(`Barrier report exported. ${n} ${n === 1 ? 'barrier' : 'barriers'}.`);
-}
-
-$('export').addEventListener('click', exportReport);
-```
-
-Two things worth keeping:
-
-- **Announce it.** You already have `announce()` and a live region; an export that gives a
-  screen reader user no confirmation is the kind of thing this product exists to complain
-  about.
-- **§6.7 says Markdown *and* JSON.** I only built the JSON side, because that's what the
-  dashboard reads. The Markdown version — for a human to paste into an email to the
-  employer — is still unwritten and is a nice-to-have, not a blocker.
-
----
-
-## 3. The one rule that will silently break the link
-
-**Every field-level barrier must carry the field's `label`.**
-
-The dashboard compares two scans of the same form by `rule` + `label`. That's what lets it
-say a barrier is *still open* rather than *resolved and then reintroduced*. Page-level
-barriers (`pageBarriers`) have no field, so they key on `rule` alone.
-
-It deliberately does **not** key on a selector — generated selectors change whenever the
-site ships a release, which would report an entire form as resolved and new on the same day.
-`FieldDescriptor` has no selector to emit anyway.
-
-`toReport()` gets this right on its own. It only matters if you hand-build a report
-somewhere. If a field barrier arrives without a label, the dashboard rejects the whole file
-and names it — it won't quietly drop the barrier.
-
-Also: **`pagePath` excludes the query string.** Forms are identified across time by
-`portal` + `pagePath`, so `?v=2` and `?v=3` read as the same form scanned later. That's
-what makes the demo work.
-
----
-
-## 4. Checking that it actually links up
-
-Once the button exists:
+Exact commands:
 
 ```bash
-# 1. Serve the fixture and open it with the extension loaded
-python3 -m http.server 8765 -d extension/test/fixtures/acme
+# Applicant side — build and load the extension
+cd extension && npm install && npm run build
+# chrome://extensions -> Developer mode -> Load unpacked -> extension/.output/chrome-mv3
+# Open the application form, press Alt+Shift+B, scan, then
+#   "Export barrier report as JSON"      (a Markdown export is also available, for humans)
 
-# 2. Scan, then click Export barrier report. A .json lands in Downloads.
-
-# 3. Run the dashboard
-cd dashboard && npm run dev      # http://localhost:5173
+# Business side — open the dashboard and load what was exported
+cd dashboard && npm install && npm run dev      # http://localhost:5173
+# "Load barrier reports" -> choose the exported .json file(s)
 ```
 
-Choose your exported file in the dashboard's file picker. You should see one form,
-`localhost:8765/`, with **5 barriers, 4 blocking**, and *"First scan — nothing to compare
-with yet"*. Click into it and the barriers should read exactly what your side panel showed.
-
-If it's rejected, the error names your file and says what's wrong with it — that message is
-the fastest debugging tool here.
-
-For the full before/after, load `fixtures/reports/localhost-8765/` — three scans of one
-form showing the fix and then the regression.
+To try it without the extension, `fixtures/reports-wcag/localhost-8765/` holds three real
+reports for one form: a baseline, a fix, and a regression. Load all three and the form list
+shows `1 new, 2 still open`.
 
 ---
 
-## 5. A scanner bug I worked around instead of fixing
+## 2. The report contract
 
-`pageBarriers()` in `lib/scan.ts` returns early on any file input that has a `label[for]`:
+`toReport()` in [`extension/lib/report.ts`](extension/lib/report.ts) builds it from one
+`ScanResult`; `buildReport()` composes one per step for a multi-step application. It is the
+only conversion, and the export is the only way a report leaves the browser.
 
-```ts
-document.querySelectorAll<HTMLInputElement>('input[type=file]').forEach((inp) => {
-  if (inp.id && document.querySelector(`label[for="${CSS.escape(inp.id)}"]`)) return;
-  if (!keyboardReachable(inp)) { /* drag-drop-only */ }
+```jsonc
+{
+  "portal": "boards.greenhouse.io",   // location.host, port included
+  "pagePath": "/acme/jobs/12345",     // location.pathname — no query string
+  "generatedAt": "2026-09-24T10:00:00Z",
+
+  "barriers": [{                      // one per field-level finding
+    "rule": "options-identically-named",
+    "severity": "blocking",           // "blocking" | "usability" | "ok"
+    "label": "Will you now or in the future require sponsorship…",
+    "impact": "All 2 options … sound identical to a screen reader.",
+
+    // Optional, all four. Absent means no mapping is recorded, not that none applies.
+    "wcag": ["4.1.2", "2.5.3"],
+    "wcagLevel": "A",                 // "A" | "AA" — the most stringent among `wcag`
+    "automated": true,
+    "reviewRequired": false           // true = heuristic detection, confirm by hand
+  }],
+
+  "pageBarriers": [{                  // findings belonging to no field, so no `label`
+    "rule": "captcha", "severity": "blocking", "impact": "…"
+  }],
+
+  "steps": []                         // present only for a multi-step application
+}
 ```
 
-So a file input that is `tabindex="-1"` behind a drop zone — genuinely unreachable by
-keyboard — reports **nothing at all** if someone also gave it a `<label for>`. That looks
-wrong: being labelled doesn't make it operable.
+**Two rules the comparison depends on.**
 
-I didn't change it. It's your file and it wasn't my task. But it's why the `?v=3` fixture
-names its input with `aria-label` rather than `<label for>` — labelling it the obvious way
-silences the exact barrier that version exists to demonstrate. If you fix the rule, `?v=3`
-can be relabelled normally.
+`label` is required on every `barriers[]` entry. The dashboard compares two reports for the
+same form by `rule` + `label` for field-level findings, and by `rule` alone for
+`pageBarriers`. It deliberately does not key on a selector: generated selectors change
+whenever a site ships a release, which would report a whole form as resolved and new on the
+same day.
+
+`pagePath` excludes the query string. Forms are identified across time by
+`portal` + `pagePath`, so two reports for one posting line up as a history.
+
+**Backward compatibility is not optional.** The four WCAG fields are optional, so a report
+exported before they existed still loads, still groups and still compares. Its findings
+display as "No WCAG mapping recorded". `fixtures/reports/` is kept as that corpus and the
+dashboard's tests run against it.
+
+The dashboard validates every loaded file at the boundary and names the file when something
+is wrong with it, rather than failing later inside the comparison.
 
 ---
 
-## 6. Still not done
+## 3. What a report must never contain
 
-- **The export button** — the thing this document is about.
-- **A real job posting in `monitor/urls.txt`.** It has a commented placeholder. A live
-  Greenhouse posting needs to go in and be re-verified the morning of the demo; postings
-  expire, and the monitor exits non-zero rather than writing an empty report that would read
-  as "this form is fine".
-- **NVDA pass on the dashboard.** It has zero axe violations across every view, and the
-  tests check focus movement and keyboard operation, but nobody has listened to it.
-- **Fallback demo video.**
+Findings only: which rule fired, on which labelled field, and one sentence about what it
+means for the user.
+
+- **No answers.** No field values of any kind.
+- **No CV**, no file contents, and no file name the applicant chose.
+- **No credentials.** BRIDGE does not handle sign-in; `bridge-user.md` §10 explains why.
+- **No applicant identity** — no name, email, address, or anything derived from them.
+
+The format carries no mechanism for any of it, and `toReport()` copies only `rule`,
+`severity`, the field's `label`, and the impact message. `extension/test/e2e.mjs` asserts this
+on a real export (`export: no applicant data`).
+
+Sending a report anywhere is a manual user action. The applicant exports it; what happens to
+it next is their decision.
+
+---
+
+## 4. Automated WCAG 2.2 A/AA findings
+
+**Automated WCAG 2.2 A/AA accessibility findings. Human review is required for a WCAG
+conformance claim.**
+
+BRIDGE does not certify WCAG compliance, does not make anyone legally compliant, does not
+claim a form is accessible, and does not replace human accessibility testing. Use that
+wording everywhere — in the UI, in the Markdown export, in the pitch. The dashboard's
+accessibility test fails the build if any sentence on the page mentions compliance,
+certification or legal standing without a negation.
+
+The reason is not only caution. An automated scan reads a fraction of WCAG; most criteria
+need a person. A report that reads as a pass would be wrong about the thing that matters most
+to the applicant.
+
+[`extension/lib/wcag.ts`](extension/lib/wcag.ts) holds the mapping table. Each entry names the
+line in `scan.ts` it was read from and carries a written rationale. A rule is mapped only
+where the criterion fails every time that rule fires.
+
+| Rule | Criteria | Level | Review |
+|---|---|---|---|
+| `missing-label` | 4.1.2 | A | — |
+| `label-placeholder-only` | 3.3.2 | A | — |
+| `custom-dropdown-no-role` | 4.1.2 | A | yes |
+| `not-keyboard-operable` | 2.1.1 | A | yes |
+| `group-not-labelled` | 1.3.1 | A | — |
+| `options-identically-named` | 4.1.2, 2.5.3 | A | — |
+| `drag-drop-only` | 2.1.1 | A | — |
+| `upload-unnamed` | 4.1.2 | A | — |
+| `modal-without-dialog-role` | *unmapped* | — | — |
+| `captcha` | *unmapped* | — | — |
+
+Two rules are deliberately unmapped and should stay that way unless someone does the work:
+
+- **`modal-without-dialog-role`** is detected by class-name substring (`[class*=modal]`), a
+  naming convention rather than a semantic fact, and the criterion is contested between
+  4.1.2, 1.3.1 and focus management under 2.4.3. It is still reported as a barrier.
+- **`captcha`** is not a WCAG failure at all. The note on 1.1.1 contemplates conforming
+  CAPTCHAs given a text alternative and alternative modalities; the rule only detects that a
+  widget is present.
+
+Two near-misses that will come up:
+
+- **2.5.7 Dragging Movements (AA)** is not claimed for `drag-drop-only`. 2.5.7 is satisfied by
+  any single-pointer alternative to dragging; the rule tests only for a **keyboard** trigger.
+  A drop zone that also opens a file picker on click fails 2.1.1 and passes 2.5.7, and the
+  scanner cannot tell them apart.
+- **3.3.8 Accessible Authentication (AA)** is not claimed for `captcha`, because it applies to
+  authentication steps and a CAPTCHA on a job application is not necessarily one.
+
+**Every criterion currently mapped is Level A.** That is the honest result of not guessing.
+If AA findings are wanted, those two are where the work is.
+
+---
+
+## 5. Limitations, and what needs a person
+
+**On coverage**
+
+- Automated rules catch a fraction of WCAG. Most criteria — meaning, order, context, whether
+  an error message actually helps — cannot be judged by a script.
+- The dashboard only knows about forms someone applied to with BRIDGE and then chose to
+  export. It is not a survey of a platform, and a form's absence here means nothing.
+- A report describes one applicant's journey at one moment. Two applicants on the same form
+  can legitimately produce different findings if they took different paths through it.
+
+**On the findings themselves**
+
+- The WCAG mappings are a reading of each rule's implementation, not an audited table. No
+  accessibility specialist has reviewed them. The rationale strings exist so a reviewer can
+  disagree with a specific one.
+- `reviewRequired` findings (`custom-dropdown-no-role`, `not-keyboard-operable`) come from
+  heuristics — a class-word match, and a static `tabindex`/computed-style test. Neither can
+  observe real Tab traversal; `bridge-user.md` §6.2 records that scripted key presses do not
+  move focus.
+- `focus-trap` is not detectable by SCAN at all and is never reported.
+
+**Unverified**
+
+- **No NVDA pass on the dashboard.** axe is clean across every view and the tests cover focus
+  movement and keyboard operation, but nobody has listened to it.
+- **No real public posting has been through the whole flow** end to end, extension export to
+  dashboard. The local Acme fixture has, in all three versions.
+- **`bridge-user.md` §6.7 is stale.** It owns the report format, still describes a second
+  producer that no longer exists, and does not mention the four WCAG fields. It is the
+  extension owner's file and should be updated by whoever owns it.
+- **`bridge-business.md` is stale** in the same way: §2, §5 and §6.2 describe employer-side
+  monitoring of URLs, which this repo no longer does. A note at the top of that file records
+  the change; the spec's substance has not been rewritten.

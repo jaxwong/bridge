@@ -5,11 +5,12 @@
 // uploader added. Every transition the dashboard can show is in here, plus the first scan
 // of a second form, which must read as open rather than as a page of regressions.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compare, compareLatest, countBySeverity } from '../src/lib/compare.ts';
 import { groupByForm, parseReport } from '../src/lib/report.ts';
+import { findingsOf, summariseWcag } from '../src/lib/wcag.ts';
 import type { BarrierReport } from '../src/lib/report.ts';
 import type { ComparedBarrier } from '../src/lib/compare.ts';
 
@@ -156,6 +157,96 @@ rejects('rejects an unknown severity',
   /expected one of blocking, usability, ok/);
 check('a page barrier with no label is accepted, because page barriers have none',
   parseReport({ portal: 'x', pagePath: '/', generatedAt: '2026-01-01T00:00:00Z', barriers: [], pageBarriers: [{ rule: 'captcha', severity: 'blocking', impact: 'x' }] }, 'ok.json').pageBarriers.length === 1);
+
+// --- automated WCAG 2.2 A/AA findings ------------------------------------------------
+// The fixtures in fixtures/reports/ predate the WCAG fields and are kept exactly as they
+// were: they are the back-compatibility corpus. fixtures/reports-wcag/ is a real capture
+// exported from the extension once the WCAG fields existed.
+
+const WCAG_DIR = path.resolve(here, '../../fixtures/reports-wcag/localhost-8765');
+const enriched = readdirSync(WCAG_DIR).sort()
+  .map((f) => parseReport(JSON.parse(readFileSync(path.join(WCAG_DIR, f), 'utf8')), f));
+const [w1, w2, w3] = enriched;
+
+// Legacy: a report written before these fields existed must still load, unchanged.
+check('a legacy report with no WCAG fields still parses', v1.barriers.length === 5);
+check('and carries no WCAG fields rather than invented ones',
+  v1.barriers.every((b) => b.wcag === undefined && b.wcagLevel === undefined
+    && b.automated === undefined && b.reviewRequired === undefined));
+check('a legacy first scan still summarises, as entirely unmapped',
+  summariseWcag(findingsOf(v1)).mapped === 0 && summariseWcag(findingsOf(v1)).unmapped === 5,
+  JSON.stringify(summariseWcag(findingsOf(v1))));
+
+// Enriched: the fields survive the round trip through the producer and the parser.
+const identical = w1.barriers.find((b) => b.rule === 'options-identically-named')!;
+check('an enriched report carries its success criteria',
+  JSON.stringify(identical.wcag) === JSON.stringify(['4.1.2', '2.5.3']), JSON.stringify(identical.wcag));
+check('and its level and automated flag',
+  identical.wcagLevel === 'A' && identical.automated === true,
+  `${identical.wcagLevel} / ${identical.automated}`);
+check('a rule whose detection is heuristic is flagged for human review',
+  w1.barriers.find((b) => b.rule === 'not-keyboard-operable')!.reviewRequired === true);
+check('a rule read straight from the DOM is not',
+  w1.barriers.find((b) => b.rule === 'group-not-labelled')!.reviewRequired === false);
+
+const s1 = summariseWcag(findingsOf(w1));
+check('every finding in the baseline scan maps to a criterion',
+  s1.mapped === 5 && s1.unmapped === 0, `${s1.mapped} mapped / ${s1.unmapped} unmapped`);
+check('findings are counted once each by level',
+  JSON.stringify(s1.byLevel) === JSON.stringify([{ level: 'A', count: 5 }]), JSON.stringify(s1.byLevel));
+check('a finding citing two criteria is counted under each',
+  s1.byCriterion.find((c) => c.criterion === '2.5.3')!.count === 1 &&
+  s1.byCriterion.find((c) => c.criterion === '4.1.2')!.count === 3,
+  s1.byCriterion.map((c) => `${c.criterion}x${c.count}`).join(' '));
+check('criteria are ordered numerically, not as text',
+  s1.byCriterion.map((c) => c.criterion).join(',') === '1.3.1,2.1.1,2.5.3,4.1.2',
+  s1.byCriterion.map((c) => c.criterion).join(','));
+check('each criterion names the rules that produced it',
+  s1.byCriterion.find((c) => c.criterion === '2.1.1')!.rules.join(',') === 'not-keyboard-operable');
+
+// An unmapped rule stays a real finding; it is never dropped and never given a guess.
+const withCaptcha: BarrierReport = {
+  ...w1,
+  barriers: [],
+  pageBarriers: [{ rule: 'captcha', severity: 'blocking', impact: 'x', automated: true }],
+};
+const sc = summariseWcag(findingsOf(withCaptcha));
+check('an unmapped finding is counted as unmapped, not discarded',
+  sc.total === 1 && sc.mapped === 0 && sc.unmapped === 1, JSON.stringify(sc));
+check('and contributes no level and no criterion',
+  sc.byLevel.length === 0 && sc.byCriterion.length === 0);
+
+// The comparison is the product. Adding WCAG fields must not move a single barrier.
+const legacyFix = compare(v2, v1);
+const enrichedFix = compare(w2, w1);
+const enrichedRegress = compare(w3, w2);
+check('WCAG fields do not change what is resolved',
+  rules(enrichedFix.resolved) === rules(legacyFix.resolved), rules(enrichedFix.resolved));
+check('WCAG fields do not change what is still open',
+  rules(enrichedFix.stillOpen) === rules(legacyFix.stillOpen));
+check('WCAG fields do not change what is new',
+  rules(enrichedRegress.new) === 'drag-drop-only' && enrichedRegress.resolved.length === 0,
+  rules(enrichedRegress.new));
+check('the compare key is still rule + label, and ignores the WCAG fields',
+  compare({ ...w1, barriers: w1.barriers.map((b) => ({ ...b, wcag: ['9.9.9'], wcagLevel: 'AA' as const })) }, w1)
+    .new.length === 0);
+
+// Malformed WCAG data is rejected by name. A criterion number shown to an employer is the
+// part they would quote, so a half-parsed one is worse than a refused file.
+const withBarrier = (extra: Record<string, unknown>) => ({
+  portal: 'x', pagePath: '/', generatedAt: '2026-01-01T00:00:00Z',
+  barriers: [{ rule: 'missing-label', severity: 'usability', label: 'Name', impact: 'x', ...extra }],
+  pageBarriers: [],
+});
+rejects('rejects a wcag that is not an array', withBarrier({ wcag: '4.1.2' }), /not a non-empty array/);
+rejects('rejects an empty wcag array', withBarrier({ wcag: [] }), /not a non-empty array/);
+rejects('rejects a guideline number in place of a criterion', withBarrier({ wcag: ['4.1'] }), /expected a number like "4\.1\.2"/);
+rejects('rejects a prose criterion', withBarrier({ wcag: ['WCAG 4.1.2 Name, Role, Value'] }), /expected a number like/);
+rejects('rejects an unknown conformance level', withBarrier({ wcag: ['4.1.2'], wcagLevel: 'AAA' }), /expected "A" or "AA"/);
+rejects('rejects a non-boolean automated flag', withBarrier({ automated: 'yes' }), /"automated" that is not true or false/);
+rejects('rejects a non-boolean reviewRequired flag', withBarrier({ reviewRequired: 1 }), /"reviewRequired" that is not true or false/);
+check('a barrier with no WCAG fields at all is still accepted',
+  parseReport(withBarrier({}), 'ok.json').barriers[0].wcag === undefined);
 
 const failed = results.filter((r) => !r.ok).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);

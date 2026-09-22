@@ -19,11 +19,9 @@ export const ariaHidden = (el: Element): boolean => !!el.closest('[aria-hidden="
  * The shadow root of an element. In a content script chrome.dom opens CLOSED roots too, so
  * a field inside one is reachable like any other (spec §8, decisions).
  *
- * This file is also bundled into the employer monitor (../../monitor), which runs in an
- * ordinary page where no extension API exists. There only open roots can be seen. That is
- * a real difference in what the two producers can report, not a fallback: a barrier inside
- * a closed root appears in the extension's export and not in the monitor's. Hence no
- * import from wxt here: lib/ stays plain DOM code.
+ * Outside a content script — in an ordinary page, with no extension API — only open roots
+ * can be seen. Keeping the probe optional is why lib/ stays plain DOM code with no import
+ * from wxt, so it can run in either place.
  */
 type ChromeDom = { dom?: { openOrClosedShadowRoot?: (el: HTMLElement) => ShadowRoot | null } };
 export function shadowOf(el: Element): ShadowRoot | null {

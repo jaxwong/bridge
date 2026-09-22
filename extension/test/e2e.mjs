@@ -92,7 +92,7 @@ const arrives = (promise) => promise.then(() => true, () => false);
 try {
   await section('single page', async () => {
   // apply.html is the applicant demo page. index.html belongs to the employer demo: one form
-  // in three versions (?v=2, ?v=3), scanned by the monitor.
+  // in three versions (?v=2, ?v=3), which the dashboard fixtures were exported from.
   const { page, panel, tabId } = await open('apply.html');
   check('found the test tab', typeof tabId === 'number', `tabId=${tabId}`);
 
@@ -673,7 +673,7 @@ try {
     check('v2 (the fix): the dropdown\'s barriers are gone, nothing new', v2.keys.length === 2 && v2.keys.every((k) => v1.keys.includes(k)), v2.keys.join(' ; '));
     check('v3 (the regression): exactly one new barrier, drag-drop-only on the page',
       v3.keys.filter((k) => !v2.keys.includes(k)).join() === 'drag-drop-only', v3.keys.join(' ; '));
-    check('a one-step export is the same shape the monitor writes: no steps, no step numbers',
+    check('a one-step export carries no steps and no step numbers',
       !('steps' in v1.r) && v1.r.barriers.every((b) => !('step' in b)));
   });
 
