@@ -84,6 +84,8 @@ try {
   check('the form list shows the blocking and usability counts',
     (await row.locator('td').nth(1).textContent()) === '9' && (await row.locator('td').nth(2).textContent()) === '4',
     `${await row.locator('td').nth(1).textContent()} / ${await row.locator('td').nth(2).textContent()}`);
+  const shown = await row.locator('time').textContent();
+  check('the scan is shown by date only, with no clock time', !/\d:\d\d/.test(shown) && /\d{4}/.test(shown), shown);
   check('a form reported on once reads as a first scan, not as all-new', /First scan/.test(await row.locator('.change').textContent()));
   await axeScan('form list');
 

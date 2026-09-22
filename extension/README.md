@@ -52,7 +52,7 @@ does not hide the results after it:
   §6.3 including the pointer-only slider, the Ashby-shaped uploader, a checkbox group, a
   custom date picker, a field inside a closed shadow root, a field the page re-renders at a
   new path, a field inside a same-origin iframe, an unreachable `127.0.0.1` iframe, a field
-  that throws the write away, a full page reload, both answer modes, the on-load
+  that throws the write away (only at `?discard`, so the demo form keeps every answer), a full page reload, both answer modes, the on-load
   announcement, and zero axe violations on the panel.
 - `index.html`, `?v=2`, `?v=3`: the employer demo's one form in three versions
   (`bridge-business.md` §6.5). Checked here because `fixtures/reports/` and the dashboard

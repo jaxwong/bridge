@@ -358,8 +358,9 @@ If a function-key shortcut does nothing, add **Fn**.
 
 ### Run A: the single page, following §9
 
-Open `http://localhost:8765/apply.html`. For each step write down what was spoken, or screenshot the
-caption panel.
+Open `http://localhost:8765/apply.html?discard` (`?discard` makes Notice period throw away what
+is written to it, which the table below listens for). For each step write down what was spoken, or
+screenshot the caption panel.
 
 1. **The page on its own.** Tab through the form without BRIDGE.
    *Expect:* the education dropdown and the slider are never reached, both visa options
