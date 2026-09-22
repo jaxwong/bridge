@@ -3,11 +3,11 @@
 #
 # `make test` runs everything automated. What it cannot cover stays manual by nature
 # (focus, shortcuts from a real keyboard, VoiceOver): see manual-checks.md, which
-# `make serve` + `make proxy` set up.
+# `make serve` + `make proxy` set up. Those can stay running while `make test` runs.
 
 .PHONY: help test typecheck test-proxy test-extension build install serve proxy manual
 
-test: typecheck test-proxy test-extension  ## Every automated user-side check: types, proxy 16, extension e2e 149
+test: typecheck test-proxy test-extension  ## Every automated user-side check: types, proxy 16, extension e2e 214
 
 help:  ## List targets
 	@grep -E '^[a-z-]+:.*##' Makefile | awk -F':.*## ' '{printf "  make %-16s %s\n", $$1, $$2}'
@@ -18,19 +18,17 @@ typecheck:  ## Extension typecheck (tsc --noEmit)
 test-proxy:  ## Proxy unit tests (stubbed model, no key, no network)
 	cd proxy && uv run pytest -q
 
+# The suite used to refuse to start while `make serve` or `make proxy` was up, because it
+# wanted the same two ports. It no longer shares them: it serves the fixtures on
+# TEST_PORT and stands its proxy stub on PROXY_PORT, and the extension is built pointing
+# at the same proxy origin. Run a manual pass and the automated suite at the same time.
+TEST_PORT ?= 8801
+PROXY_PORT ?= 8802
+
 test-extension:  ## Build the extension and drive it end to end in headless Chromium
-	@if lsof -nP -iTCP:8765 -sTCP:LISTEN >/dev/null; then \
-	  echo "Port 8765 is in use (probably 'make serve' for the manual checks)."; \
-	  echo "Stop that first: the e2e suite starts its own server on 8765."; \
-	  exit 1; \
-	fi
-	@if lsof -nP -iTCP:8000 -sTCP:LISTEN >/dev/null; then \
-	  echo "Port 8000 is in use (probably 'make proxy')."; \
-	  echo "Stop that first: the e2e suite runs its own proxy stub on 8000, and its"; \
-	  echo "'proxy not running' checks need nothing answering there."; \
-	  exit 1; \
-	fi
-	cd extension && npm run test:e2e
+	cd extension && BRIDGE_TEST_PORT=$(TEST_PORT) \
+	  VITE_BRIDGE_PROXY_ORIGIN=http://localhost:$(PROXY_PORT) \
+	  npm run test:e2e
 
 build:  ## Build the extension into extension/.output/chrome-mv3
 	cd extension && npm run build

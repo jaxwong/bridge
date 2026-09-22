@@ -6,7 +6,14 @@ import { browser } from 'wxt/browser';
 import { send } from './messages';
 import type { FieldDescriptor } from './types';
 
-const PROXY = 'http://localhost:8000/infer-labels';
+/**
+ * Where the proxy lives. Overridable at build time with VITE_BRIDGE_PROXY_ORIGIN so the e2e
+ * suite can stand its stub on a free port while a real proxy is running on the default —
+ * otherwise the two collide and the suite cannot be run without stopping the proxy first.
+ * A shipping build sets nothing and gets localhost:8000.
+ */
+const PROXY_ORIGIN = import.meta.env?.VITE_BRIDGE_PROXY_ORIGIN || 'http://localhost:8000';
+const PROXY = `${PROXY_ORIGIN}/infer-labels`;
 
 type Target = FieldDescriptor & { frameId: number; localId: string };
 export type Inference = { ok: true; labels: { id: string; label: string; confidence: number }[] } | { ok: false; error: string };
@@ -50,7 +57,7 @@ export async function inferLabels(tabId: number, targets: Target[], note: (m: st
   } catch (e) {
     // The exception is for whoever debugs this; the applicant hears only the plain reason.
     note(`request to ${PROXY} failed: ${String(e)}`);
-    return { ok: false, error: 'The BRIDGE proxy at localhost:8000 is not reachable.' };
+    return { ok: false, error: `The BRIDGE proxy at ${new URL(PROXY_ORIGIN).host} is not reachable.` };
   }
   if (!res.ok) return { ok: false, error: `The BRIDGE proxy answered ${res.status}.` };
   let reply: unknown;

@@ -30,7 +30,19 @@ const server = createServer((q, s) => {
   s.writeHead(200, { 'content-type': 'text/html' });
   s.end(readFileSync(file));
 });
-await new Promise((r) => server.listen(8765, r));
+/**
+ * The suite serves the fixtures itself. The port is overridable so it can run while a
+ * fixture server for the manual checks is already up on the default: `make serve` and
+ * `make test-extension` both want the same port, and stopping one to run the other is
+ * friction with no purpose. Everything that mentions the port derives it from here, and
+ * apply.html already builds its cross-origin frame from location.port.
+ */
+const PORT = Number(process.env.BRIDGE_TEST_PORT) || 8765;
+/** The proxy stub's port, taken from the origin the extension was built with. */
+const PROXY_PORT = Number(new URL(process.env.VITE_BRIDGE_PROXY_ORIGIN || 'http://localhost:8000').port || 80);
+const HOST = `localhost:${PORT}`;
+const rx = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+await new Promise((r) => server.listen(PORT, r));
 
 // TEST STUB of the label-inference proxy (proxy/main.py). It stands in for the real one so
 // the suite never calls a model. It records what the panel sends and names every field
@@ -67,7 +79,7 @@ const extId = new URL(sw.url()).host;
 /** A fixture page plus a side panel pointed at it. The panel runs as an ordinary tab (§8). */
 async function open(pathname) {
   const page = await ctx.newPage();
-  await page.goto(`http://localhost:8765/${pathname}`);
+  await page.goto(`http://${HOST}/${pathname}`);
   // The LAST matching tab: sections never close their pages, so a second visit to the
   // same fixture URL must not bind the new panel to an earlier section's stale tab.
   const tabId = await sw.evaluate(async (u) => (await chrome.tabs.query({})).filter((t) => t.url === u).at(-1)?.id, page.url());
@@ -177,7 +189,8 @@ try {
   check('reports the checkbox group with no question', /"Language skills" is not tied to its options/.test(barriers));
   check('reports the popup that is not a dialog', /not announced as a dialog/.test(barriers));
   check('reports the one frame it cannot reach, by host',
-    (barriers.match(/cannot reach/g) || []).length === 1 && /frame from 127\.0\.0\.1:8765 that BRIDGE cannot reach/.test(barriers));
+    (barriers.match(/cannot reach/g) || []).length === 1 &&
+    new RegExp(`frame from ${rx(`127.0.0.1:${PORT}`)} that BRIDGE cannot reach`).test(barriers));
   check('a labelled checkbox group of one is not a group barrier', !/privacy notice" is not tied/.test(barriers));
   // The two rules lib/rules.ts leaves unmapped both fire on this page: they carry no
   // criterion rather than a guess, while every mapped finding beside them carries its own.
@@ -344,7 +357,8 @@ try {
 
   // --- label inference with the proxy up (§6.4). Runs AFTER answers are on the page, so
   // the privacy rule is tested for real: nothing the applicant entered may be in the request.
-  await new Promise((r) => proxyStub.listen(8000, '127.0.0.1', r));
+  // Same variable the extension was built with, so the stub and the extension always agree.
+  await new Promise((r) => proxyStub.listen(PROXY_PORT, '127.0.0.1', r));
   await panel.getByRole('button', { name: 'Scan the page again' }).click();
   check('inference: the unlabelled dropdown is renamed and marked as inferred',
     await arrives(panel.locator('#questions label', { hasText: 'Preferred office (label inferred)' }).waitFor({ timeout: 10000 })));
@@ -513,7 +527,7 @@ try {
       session?.steps.find((r) => r.index === 2)?.filledFieldIds.length === 1 && !/resume\.pdf|zw@example/.test(JSON.stringify(session)));
 
     const report = buildReport(session);
-    check('report: §6.7 shape, grouped by step', report.portal === 'localhost:8765' && report.pagePath === '/modal.html' &&
+    check('report: §6.7 shape, grouped by step', report.portal === HOST && report.pagePath === '/modal.html' &&
       report.steps?.length === 3 && Array.isArray(report.barriers), Object.keys(report).join(','));
     check('report: every field barrier has rule, severity, a non-empty label, impact, and no selector',
       report.barriers.length > 0 && report.barriers.every((b) => b.rule && b.severity && typeof b.label === 'string' && b.label && b.impact && !('selector' in b) && !('field' in b)));
@@ -538,7 +552,8 @@ try {
     check('report: a mapped rule carries its criteria and level',
       every.filter((b) => b.rule === 'options-identically-named').every((b) => b.wcag?.join(',') === '4.1.2,2.5.3' && b.wcagLevel === 'A' && b.reviewRequired === false) &&
       every.some((b) => b.rule === 'options-identically-named'));
-    check('report: Markdown twin', /^# Accessibility barrier report: localhost:8765\/modal\.html/.test(reportMarkdown(report)));
+    check('report: Markdown twin',
+      new RegExp(`^# Accessibility barrier report: ${rx(`${HOST}/modal.html`)}`).test(reportMarkdown(report)));
   });
 
   // =====================================================================================
@@ -874,7 +889,7 @@ try {
     };
     const v1 = await rules(''), v2 = await rules('?v=2'), v3 = await rules('?v=3');
     check('v1, v2 and v3 are one form: same portal and pagePath, no query string',
-      [v1, v2, v3].every((v) => v.r.portal === 'localhost:8765' && v.r.pagePath === '/'));
+      [v1, v2, v3].every((v) => v.r.portal === HOST && v.r.pagePath === '/'));
     check('v1: the dropdown\'s three barriers and the visa question\'s two', v1.keys.length === 5 &&
       v1.keys.filter((k) => /Highest education/.test(k)).length === 3 && v1.keys.filter((k) => /sponsorship/.test(k)).length === 2, v1.keys.join(' ; '));
     check('v2 (the fix): the dropdown\'s barriers are gone, nothing new', v2.keys.length === 2 && v2.keys.every((k) => v1.keys.includes(k)), v2.keys.join(' ; '));
@@ -903,7 +918,7 @@ try {
     // is where Deny was silent: the sentence went to #live while focus was still outside
     // this document, so nothing spoke it.
     const page = await ctx.newPage();
-    await page.goto('http://localhost:8765/apply.html');
+    await page.goto(`http://${HOST}/apply.html`);
     const tabId = await sw.evaluate(async (u) => (await chrome.tabs.query({})).find((t) => t.url === u)?.id, page.url());
 
     const panel = await ctx.newPage();
