@@ -61,6 +61,32 @@
     let at = 0;
     const dlg = document.getElementById('apply');
     const body = document.getElementById('body');
+    // A wizard keeps each step's answers, so Back shows what was entered there. Files are
+    // not kept: a page cannot put a file back into an input.
+    const answers = {};
+    const keyOf = (el) => el.id || `${el.name}=${el.value}`;
+    function remember() {
+      const v = {};
+      body.querySelectorAll('input:not([type=file]), textarea').forEach((el) => { v[keyOf(el)] = el.type === 'radio' || el.type === 'checkbox' ? el.checked : el.value; });
+      const dd = document.getElementById('notice');
+      if (dd?.dataset.value) v.notice = dd.dataset.value;
+      answers[at] = v;
+    }
+    function restore() {
+      const v = answers[at];
+      if (!v) return;
+      const put = () => body.querySelectorAll('input:not([type=file]), textarea').forEach((el) => {
+        const k = keyOf(el);
+        if (!(k in v)) return;
+        if (el.type === 'radio' || el.type === 'checkbox') {
+          if (v[k] && !el.checked) { el.checked = true; el.dispatchEvent(new Event('change', { bubbles: true })); }
+        } else el.value = v[k];
+      });
+      put();
+      put(); // a restored Yes has just revealed the referrer fields; this pass fills them
+      const dd = document.getElementById('notice');
+      if (dd && v.notice) { dd.querySelector('.dropdown__value').textContent = v.notice; dd.dataset.value = v.notice; }
+    }
 
     function show() {
       // The whole step is replaced in place. Focus is left wherever it was; nothing is announced.
@@ -69,13 +95,14 @@
       const actions = document.getElementById('actions');
       actions.innerHTML = (at > 0 ? '<button type="button" id="back">Back</button>' : '') +
         (at < STEPS.length - 1 ? '<button type="button" id="fwd">Next</button>' : '<button type="button" id="fwd">Submit application</button>');
-      document.getElementById('back')?.addEventListener('click', () => { at--; show(); });
+      document.getElementById('back')?.addEventListener('click', () => { remember(); at--; show(); });
       document.getElementById('fwd').addEventListener('click', () => {
-        if (at < STEPS.length - 1) { at++; show(); return; }
+        if (at < STEPS.length - 1) { remember(); at++; show(); return; }
         dlg.close();
         document.getElementById('result').textContent = 'Submitted (test page, nothing sent).';
       });
       wire();
+      restore();
     }
 
     function wire() {

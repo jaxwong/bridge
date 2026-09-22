@@ -19,7 +19,10 @@ quoted text back into the session; most failures here have a known, small fix.
 **Status, 2026-09-22.** Check 1 is done, including what VoiceOver speaks on open. A phone
 number in a spoken confirmation was heard digit by digit, by hand. Check 2 changed the
 design twice (BRIDGE now presses Next, and submits only after a confirmation in the panel),
-and its new steps have not been run by hand yet. Checks 3 to 7 have not been started.
+and a first pass by hand found three more things, all fixed and covered by the suite but
+not yet re-run by hand: the forward press is also a button; a read-back straight after a
+Yes that reveals questions was missing them, and the gate stayed open; Back gave a blank
+step. Steps 3, 5 and 8 below are the ones to repeat. Checks 3 to 7 have not been started.
 
 On a Mac, **Alt is the Option key**. So Alt+Shift+B is Option+Shift+B.
 
@@ -149,13 +152,30 @@ The command has a gate. The **first** press on a step reads everything back. Onl
 2. Press **Alt+Shift+B**. Focus is now in the panel. Do not touch the mouse from here.
 3. Press **Alt+Shift+S**. *Expect:* "Nothing has been filled yet." or "Your application
    contains: …", ending "Press Alt+Shift+S again and BRIDGE presses the Next button, which
-   moves to the next step." The page must still show step 1.
+   moves to the next step. The same press is a button after this read-back." The page must
+   still show step 1. With VoiceOver on, press it while VoiceOver is still reading the
+   panel out: *expect* the reading to stop and the read-back to be spoken at once (it is
+   now assertive; news from the page, like a step change, still waits its turn). Note
+   whether the reading resumes afterwards. Tab forward from "Read back everything from the page": *expect* a
+   button **"Press the Next button on the page"** right after the list. It is there only
+   while the read-back is current; on step 3 it is "Submit my application" instead.
 4. Press **Alt+Shift+S** again. *Expect:* the page moves to step 2, BRIDGE says "Step 2 of 3:
    Additional questions. …", and focus is on the first question in the panel.
-5. Repeat steps 3 and 4 to reach step 3. Then activate **"Go back to the previous step"**
-   in the panel. *Expect:* "BRIDGE pressed the Back button on the page.", the page shows
-   step 2, and the step is announced. Press **Alt+Shift+S** twice to return to step 3.
-   (On step 1, the same button says it could not find a Back or Previous button.)
+5. Repeat steps 3 and 4 to reach step 3, but first answer something on each step: on step 1
+   write an email address and type a phone number without writing it, on step 2 write the
+   visa answer. Then activate **"Go back to the previous step"** in the panel. *Expect:*
+   "BRIDGE pressed the Back button on the page.", then "Step 2 of 3: Additional questions. …
+   What you typed here before is back in the panel.", the visa choice ticked in the panel
+   and still selected on the page. Go back once more: *expect* the same sentence for step 1,
+   the email and the phone number both back in their boxes, and a read-back saying the
+   page holds the email and "Mobile phone number" is empty. Press **Alt+Shift+S** twice per
+   step to return to step 3. (On step 1, the same button says it could not find a Back or
+   Previous button.)
+   Also, on step 1: choose **Yes** for the referral question in the panel, write it, and
+   press **Alt+Shift+S** at once. *Expect:* the read-back lists "Referrer name" and
+   "Referrer email" among the empty questions, and they are now questions in the panel.
+   Then choose **No** on the page itself: *expect* the "Press the Next button" button to
+   disappear, so the next Alt+Shift+S reads back rather than pressing Next.
 6. On step 3 press **Alt+Shift+S** twice. *Expect after the second press:* "Focus is on the
    Submit my application button in BRIDGE. Pressing it asks you to confirm before anything
    is sent." Press **Alt+Shift+S** a few more times: the page must **never** show "Submitted".
@@ -437,8 +457,9 @@ BRIDGE already injects into the page.
 6. **An answer left behind.** Reload `modal.html` and reopen BRIDGE on step 1. Type into a
    panel **text box** and **do not** press its Write button. (Only typed text and dropdown
    choices count as left behind; a chosen radio or checkbox is not reported.) Press **Alt+Shift+S** twice.
-   *Expect:* "Step 2 of 3: … The page moved on before X was written; that answer was not
-   saved.", with X the question's name.
+   *Expect:* "Step 2 of 3: … The page moved on before X was written; that answer is not
+   on the page.", with X the question's name. Going back to step 1 brings it back into
+   its box ("What you typed here before is back in the panel.").
 
 ### Run C: the full-page journey
 

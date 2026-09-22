@@ -75,11 +75,24 @@ async function open(pathname) {
   await panel.waitForFunction(() => !document.getElementById('summary').textContent.startsWith('Scanning'), null, { timeout: 15000 });
   return { page, panel, tabId };
 }
-/** Waits until the panel's one live region says something matching `re`; returns the text. */
+/** Waits until either live region says something matching `re`; returns that region's text. */
 async function spoken(panel, re) {
-  await panel.waitForFunction((src) => new RegExp(src, 'i').test(document.getElementById('live').textContent), re.source, { timeout: 10000 });
-  return panel.textContent('#live');
+  const hit = await panel.waitForFunction((src) => {
+    const r = new RegExp(src, 'i');
+    return ['live-now', 'live'].map((id) => document.getElementById(id).textContent).find((t) => r.test(t)) || false;
+  }, re.source, { timeout: 10000 });
+  return hit.jsonValue();
 }
+/** Everything the panel currently holds in both regions, for a detail or a "nothing was said". */
+const heard = (panel) => panel.evaluate(() => ['live-now', 'live'].map((id) => document.getElementById(id).textContent).filter(Boolean).join(' | '));
+/** Which region holds a sentence: 'reply' (assertive, interrupts: the answer to the user's own
+ *  command) or 'news' (polite, waits: what the page did). Null when neither says it. */
+const regionOf = (panel, re) => panel.evaluate((src) => {
+  const r = new RegExp(src, 'i');
+  if (r.test(document.getElementById('live-now').textContent)) return 'reply';
+  if (r.test(document.getElementById('live').textContent)) return 'news';
+  return null;
+}, re.source);
 /** Alt+Shift+S cannot be pressed headlessly. This is the message the service worker sends for it. */
 const pressForward = (tabId) => sw.evaluate((id) => chrome.runtime.sendMessage({ type: 'bridge/command-forward', tabId: id }), tabId);
 const pageFocus = (page) => page.evaluate(() => document.activeElement?.textContent?.trim() || document.activeElement?.tagName);
@@ -270,7 +283,8 @@ try {
   const noticeStatus = await status('Notice period').textContent();
   check('a write the page discards is reported as a failure', /^Could not fill/.test(noticeStatus), noticeStatus);
   await panel.waitForTimeout(150);
-  check('the failure is announced', /Could not fill Notice period/.test(await panel.textContent('#live')));
+  check('the failure is announced', /Could not fill Notice period/.test(await heard(panel)));
+  check('a write confirmation answers the user\'s command: assertive', await regionOf(panel, /Could not fill Notice period/) === 'reply');
 
   // --- VERIFY -----------------------------------------------------------------------
   const order = await panel.locator('#questions .q').evaluateAll((qs) =>
@@ -286,7 +300,11 @@ try {
       .every((t) => verified.includes(t)), verified.replace(/\s+/g, ' '));
   check('VERIFY reports the discarded field as empty', /Notice period: empty/.test(verified));
   await panel.waitForTimeout(150);
-  check('VERIFY summary is announced', /Your application contains/.test(await panel.textContent('#live')));
+  check('VERIFY summary is announced', /Your application contains/.test(await heard(panel)));
+  // Two regions (§6.6): the answer to the user's own command interrupts (assertive), so a
+  // read-back is heard at once and not after the whole panel has been read out; news from
+  // the page waits its turn (polite), so it never cuts off the field just reached.
+  check('the read-back answers the user\'s command: assertive', await regionOf(panel, /Your application contains/) === 'reply');
 
   // --- label inference with the proxy up (§6.4). Runs AFTER answers are on the page, so
   // the privacy rule is tested for real: nothing the applicant entered may be in the request.
@@ -367,12 +385,14 @@ try {
     await page.getByLabel('Yes').check();
     said = await spoken(panel, /new questions appeared/);
     check('conditional fields: announced as new questions, not as a step', /^2 new questions appeared: Referrer name, Referrer email\.$/.test(said), said);
+    check('news from the page waits its turn: polite', await regionOf(panel, /new questions appeared/) === 'news');
     check('conditional fields: what was typed in the panel survives the rescan', await panel.getByLabel('Email address').inputValue() === 'zw@example.com');
 
     await page.getByRole('button', { name: 'Next' }).click();
     said = await spoken(panel, /Step 2 of 3/);
     check('modal: Next is announced, the page itself says nothing', /Step 2 of 3: Additional questions\./.test(said), said);
-    check('modal: an answer typed but never written is reported lost', /before Email address was written/.test(said), said);
+    check('a step change is news from the page: polite', await regionOf(panel, /Step 2 of 3/) === 'news');
+    check('modal: an answer typed but never written is reported lost', /before Email address was written; that answer is not on the page\./.test(said), said);
     check('modal: the questions are the new step\'s', /sponsorship/.test(await panel.locator('#questions').textContent()) &&
       !(await panel.locator('#questions').textContent()).includes('Email address'));
     await panel.getByLabel('Full list').check();
@@ -535,7 +555,7 @@ try {
     // Give a would-be scan announcement (60 ms debounce) time to land before asserting silence.
     await new Promise((r) => setTimeout(r, 300));
     check('opening the panel announces nothing: the panel itself is read once, top to bottom',
-      (await panel.textContent('#live')) === '', await panel.textContent('#live'));
+      (await heard(panel)) === '', await heard(panel));
     const [dl] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as JSON' }).click()]);
     const report = JSON.parse(readFileSync(await dl.path(), 'utf8'));
     const listed = [...report.pageBarriers, ...report.barriers].map((b) => b.impact);
@@ -560,17 +580,102 @@ try {
   await section('going back a step', async () => {
     const { page, panel } = await open('modal.html');
     await page.getByRole('button', { name: 'Easy Apply' }).click();
-    check('back: the dialog step is announced', await arrives(spoken(panel, /Step 1 of 3/)), await panel.textContent('#live'));
+    check('back: the dialog step is announced', await arrives(spoken(panel, /Step 1 of 3/)), await heard(panel));
     await panel.getByRole('button', { name: 'Go back to the previous step' }).click();
     check('back: a step with no Back button is said honestly',
-      await arrives(spoken(panel, /could not find a Back or Previous button/)), await panel.textContent('#live'));
+      await arrives(spoken(panel, /could not find a Back or Previous button/)), await heard(panel));
     await page.getByRole('button', { name: 'Next' }).click();
-    check('back: step 2 reached', await arrives(spoken(panel, /Step 2 of 3/)), await panel.textContent('#live'));
+    check('back: step 2 reached', await arrives(spoken(panel, /Step 2 of 3/)), await heard(panel));
+    // Answers written on step 2 and one typed but not written, before going back.
+    await panel.getByLabel('Full list').check();
+    const visa = panel.locator('fieldset', { hasText: 'sponsorship' });
+    await visa.getByRole('radio', { name: 'No', exact: true }).check();
+    await panel.getByRole('button', { name: /Write Will you now/ }).click();
+    await spoken(panel, /Confirmed on the page/);
+    await panel.locator('#questions input[type=file]').setInputFiles({ name: 'cv.pdf', mimeType: 'application/pdf', buffer: Buffer.alloc(1000, 65) });
     await panel.getByRole('button', { name: 'Go back to the previous step' }).click();
-    check('back: the press is announced', await arrives(spoken(panel, /BRIDGE pressed the Back button on the page/)), await panel.textContent('#live'));
+    check('back: the press is announced', await arrives(spoken(panel, /BRIDGE pressed the Back button on the page/)), await heard(panel));
     check('back: the page returns to the previous step and the change is announced',
-      await arrives(spoken(panel, /Step 1 of 3/)), await panel.textContent('#live'));
+      await arrives(spoken(panel, /Step 1 of 3/)), await heard(panel));
     check('back: nothing was submitted by going back', (await page.textContent('#result')) === '');
+
+    // The user's report: Back "restarts the form". Two owners: the page keeps its own
+    // answers (as a real wizard does; the fixture now does too), and the panel keeps what
+    // was typed on the step, so a revisit shows both rather than a blank slate.
+    await panel.getByLabel('Email address').fill('zw@example.com');
+    await panel.getByRole('button', { name: 'Write Email address to page' }).click();
+    await spoken(panel, /Email address: zw@example\.com\. Confirmed/);
+    await panel.getByLabel('Mobile phone number').fill('96759836'); // typed, never written
+    await panel.getByRole('button', { name: 'Read back everything from the page' }).click();
+    let said = await spoken(panel, /Press Alt\+Shift\+S again and BRIDGE presses the Next button/);
+    check('forward button: offered after the read-back, named after the page\'s own button',
+      /The same press is a button after this read-back\.$/.test(said) &&
+      await panel.getByRole('button', { name: 'Press the Next button on the page' }).isVisible(), said);
+    check('forward button: not offered on a step whose forward button submits (that one is Submit my application)',
+      await panel.locator('#submit-app').isHidden());
+    await panel.getByRole('button', { name: 'Press the Next button on the page' }).click();
+    said = await spoken(panel, /Step 2 of 3/);
+    check('forward button: pressing it presses Next on the page, and the new step is announced', /Step 2 of 3: Additional questions/.test(said), said);
+    check('forward button: withdrawn once the page moved on', await panel.locator('#press-forward').isHidden());
+    check('forward button: the unwritten answer is reported, and kept', /before Mobile phone number was written; that answer is not on the page/.test(said), said);
+    check('revisit: step 2 shows what was chosen there before',
+      /What you typed here before is back in the panel\.$/.test(said) && await visa.getByRole('radio', { name: 'No', exact: true }).isChecked(), said);
+    check('revisit: the page kept its own answer on step 2', await page.isChecked('#visa-no'));
+    check('revisit: files are not drafted', await panel.locator('#questions input[type=file]').evaluate((i) => i.files.length) === 0);
+
+    await panel.getByRole('button', { name: 'Go back to the previous step' }).click();
+    said = await spoken(panel, /Step 1 of 3/);
+    check('revisit: back on step 1, the typed and the written answer are both back in the panel',
+      /What you typed here before is back in the panel\./.test(said) &&
+      await panel.getByLabel('Email address').inputValue() === 'zw@example.com' &&
+      await panel.getByLabel('Mobile phone number').inputValue() === '96759836', said);
+    check('revisit: the page kept the written email', await page.inputValue('#email') === 'zw@example.com');
+    check('revisit: the panel starts the step at question 1, in one-question mode too',
+      await panel.evaluate(() => document.activeElement?.closest('.q')?.querySelector('h3')?.textContent) === 'Question 1 of 3');
+    await panel.getByRole('button', { name: 'Read back everything from the page' }).click();
+    await panel.waitForFunction(() => /zw@example/.test(document.getElementById('verify-results').textContent));
+    check('revisit: read-back shows the page still holds the email, and the never-written phone as empty',
+      /Email address: zw@example\.com/.test(await panel.textContent('#verify-results')) && /Mobile phone number: empty/.test(await panel.textContent('#verify-results')));
+  });
+
+  // =====================================================================================
+  // Questions that appear within a step, and the gate over the forward press (§6.5).
+  // =====================================================================================
+  await section('conditional questions and the gate', async () => {
+    const { page, panel, tabId } = await open('modal.html?conditional');
+    await page.getByRole('button', { name: 'Easy Apply' }).click();
+    await spoken(panel, /Step 1 of 3/);
+    await panel.getByLabel('Full list').check();
+    // The user's report: Yes written from the panel, then read back at once. The two
+    // questions it revealed are on the page, but the page's watcher has not fired yet.
+    await panel.getByRole('radio', { name: 'Yes', exact: true }).check();
+    await panel.getByRole('button', { name: /^Write Were you referred/ }).click();
+    await spoken(panel, /Confirmed on the page/);
+    await panel.getByRole('button', { name: 'Read back everything from the page' }).click();
+    let said = await spoken(panel, /Your application contains/);
+    const listed = await panel.locator('#verify-results li').allTextContents();
+    check('read-back straight after a revealing write lists the revealed questions',
+      listed.some((t) => /^Referrer name: empty/.test(t)) && listed.some((t) => /^Referrer email: empty/.test(t)), listed.join(' | '));
+    check('…and names them among the empty ones', /empty: .*Referrer name, Referrer email/.test(said), said);
+    check('…and the panel now offers them as questions', await panel.getByLabel('Referrer name').count() === 1);
+    // The watcher's own rescan lands next and finds the same questions: the gate stays open.
+    await panel.waitForFunction(() => document.querySelectorAll('#diag dt').length >= 3);
+    await panel.waitForTimeout(1500);
+    check('the same questions seen again do not close the gate', await panel.locator('#press-forward').isVisible());
+
+    // Questions going away is a change of the page too: the read-back no longer describes it.
+    await page.getByLabel('No').check();
+    await panel.waitForFunction(() => document.querySelectorAll('#questions .q').length === 3, null, { timeout: 8000 });
+    check('questions leaving the step close the gate', await panel.locator('#press-forward').isHidden());
+    await pressForward(tabId);
+    said = await spoken(panel, /Nothing has been filled yet|Your application contains/);
+    check('the next shortcut press reads back instead of pressing Next', /Step 1 of 3/.test(await panel.textContent('#journey')), said);
+    await page.getByLabel('Yes').check();
+    // (The polite region still holds "2 new questions appeared" from the read-back's own
+    // rescan, so wait for the questions themselves, not the sentence.)
+    await panel.waitForFunction(() => document.querySelectorAll('#questions .q').length === 5, null, { timeout: 8000 });
+    check('questions appearing close the gate', await panel.locator('#press-forward').isHidden(), await heard(panel));
+    check('modal: BRIDGE did not move on or submit', /Step 1 of 3/.test(await panel.textContent('#journey')) && (await page.textContent('#result')) === '');
   });
 
   // =====================================================================================
@@ -836,7 +941,7 @@ try {
     check('a confirmed submit the page accepts: the page\'s confirmation is what the user hears', /Application received/.test(said), said);
     check('a confirmed submit the page accepts: the page was submitted', page.url().endsWith('/received.html'), page.url());
     await panel.waitForTimeout(3500);
-    check('a confirmed submit the page accepts: BRIDGE does not then claim the page stayed', !/has not moved on/.test(await panel.textContent('#live')), await panel.textContent('#live'));
+    check('a confirmed submit the page accepts: BRIDGE does not then claim the page stayed', !/has not moved on/.test(await heard(panel)), await heard(panel));
   });
 
   await section('a forward button that does not advance', async () => {
@@ -847,9 +952,12 @@ try {
     await spoken(panel, /BRIDGE presses the Next button/);
     await pressForward(tabId);
     await spoken(panel, /BRIDGE pressed the Next button/);
+    check('"BRIDGE pressed Next" answered the command: assertive', await regionOf(panel, /BRIDGE pressed the Next button/) === 'reply');
     await pressForward(tabId);   // an impatient second press must not press Next again
     const said = await spoken(panel, /has not moved on/);
     check('the page refuses the step: BRIDGE says the page has not moved on', /has not moved on since BRIDGE pressed Next/.test(said), said);
+    check('"has not moved on" comes three seconds later, unbidden: polite, and the read-back reply beside it is untouched',
+      await regionOf(panel, /has not moved on/) === 'news' && await regionOf(panel, /Nothing has been filled yet|Your application contains/) === 'reply');
     check('a press straight after pressing Next reads back instead of pressing twice', await page.textContent('#clicks') === '1', await page.textContent('#clicks'));
   });
 } finally {

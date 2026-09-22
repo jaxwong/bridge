@@ -9,10 +9,15 @@
   <body>
     <header>
       <h1 id="title" tabindex="-1">BRIDGE</h1>
-      <!-- The one live region (spec §6.6). Everything spoken goes through it. Visually
-           hidden: announcements often repeat what the UI already shows (the scan summary),
-           so rendering them printed the same sentence twice. -->
+      <!-- The two live regions (spec §6.6). Everything spoken goes through one of them.
+           "live" is polite, for news from the page (a step changed, questions appeared):
+           it waits for a pause. "live-now" is assertive, for the answer to the user's own
+           command (Alt+Shift+S, Write, Read back): it interrupts, so a read-back is heard
+           at once and not after the whole panel has been read out. Both visually hidden:
+           announcements often repeat what the UI already shows (the scan summary), so
+           rendering them printed the same sentence twice. -->
       <p id="live" class="vh" role="status" aria-live="polite"></p>
+      <p id="live-now" class="vh" role="alert" aria-live="assertive"></p>
     </header>
 
     <main>
@@ -51,6 +56,10 @@
         <p>BRIDGE reads every answer back from the page itself, not from its own notes.</p>
         <button type="button" id="verify">Read back everything from the page</button>
         <ul id="verify-results"></ul>
+        <!-- The forward press as a button, for people who cannot rely on Alt+Shift+S (Chrome
+             often leaves a later-added shortcut unbound). Named after the page's own button
+             by setVerified(); exists only while the read-back above is current. -->
+        <button type="button" id="press-forward" hidden></button>
         <button type="button" id="submit-app" hidden>Submit my application</button>
         <!-- No role=group named by the question: the name was spoken entering the group
              and the paragraph read again right after. The announcement carries the

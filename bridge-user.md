@@ -515,16 +515,20 @@ The session goes dormant, not destroyed, when the tab leaves the origin: that is
 SSO detour, not an abandoned application. The side panel does not reload on page
 navigation, so its UI state stays continuous on its own.
 
-Beside the session, `drafts:{tabId}:{origin}` holds what the user has chosen in the panel
-but not yet written — control values by field key, plus which question they were on —
-saved as they type (2026-09-22). The position is wherever keyboard focus last was inside
-a question, so it is right in both modes; the pager alone missed the full list, where
-the user moves by Tab. It exists because Alt+Shift+B reloads the panel (the only
-way to move focus back from the page, above), and that reload must cost nothing: on the
-next scan the drafts are restored if the page is still on the recorded step, and BRIDGE
-says "Back in BRIDGE. Your answers are kept. You were on question N of M." A draft whose
-step the page has left is not restored — the same "the page moved on" rule unwritten
-answers always had. Files are not drafted; the CV store above already covers them.
+Beside the session, `drafts:{tabId}:{origin}` holds what the user has chosen in the panel,
+one record per step index — control values by field key, plus which question they were
+on — saved as they type and flushed as the panel turns to a new step (2026-09-22). The
+position is wherever keyboard focus last was inside a question, so it is right in both
+modes; the pager alone missed the full list, where the user moves by Tab. Two things
+read it back. Alt+Shift+B reloads the panel (the only way to move focus back from the
+page, above), and that reload must cost nothing: the next scan restores the step's drafts
+and its position, and BRIDGE says "Back in BRIDGE. Your answers are kept. You were on
+question N of M." And a step returned to by Back gets what was typed there, written or
+not, with "What you typed here before is back in the panel." — found in check 2: the
+panel offering a blank step 1 read as the form having restarted. A draft only ever
+returns to its own step index, so on a page with no stepper, where a revisit is a new
+index, nothing comes back — the "the page moved on" rule unwritten answers always had.
+Files are not drafted; the CV store above already covers them.
 
 #### Announce every step change
 
@@ -555,7 +559,18 @@ user's toolbars. Four chords per step is not a usable flow, so:
 - A forward button whose name does not say submit, apply or send is **pressed by BRIDGE** on
   the second Alt+Shift+S. The user stays in the panel, the new step is announced, and focus
   goes to its first question. The page side owns this rule and refuses to click a submitting
-  name whatever the panel asks.
+  name whatever the panel asks. The same press is also a button in the panel, **"Press the
+  Next button on the page"** (named after the page's own button), shown only while the
+  read-back is current: buttons are the primary interface, discoverable and immune to
+  Chrome leaving a later-added shortcut unbound; the shortcut is the accelerator over the
+  same gate.
+- The gate is "read back since the page last changed", and questions appearing or going
+  within a step is such a change: a Yes that reveals two more questions closes it, so the
+  next press reads back instead of pressing Next over questions the read-back never saw.
+  The read-back itself checks the same thing: the page side answers `changed` when the
+  form differs from its last scan (a write that revealed questions, read back before the
+  watcher's debounced rescan lands), and the panel then rescans once and reads again.
+  Both found in check 2, 2026-09-22.
 - A button that submits is **never pressed by the shortcut**. While the step's read-back is
   current, the panel shows **"Submit my application"**; the second Alt+Shift+S only moves
   focus to it. Activating it asks "Submit your application to <site>? N questions on this
@@ -569,8 +584,10 @@ user's toolbars. Four chords per step is not a usable flow, so:
   forward press and the way to re-check an earlier step: `bridge/back-action` presses the
   first visible button whose name says back or previous and never one matching the forward
   names, so it cannot submit or advance. No back button on the step is said honestly. The
-  returned step is a new-step scan like any other, and its drafts are gone — the standing
-  rule for unwritten answers.
+  returned step is a new-step scan like any other; what was typed there comes back into the
+  panel by step index (drafts, above), and the page's own answers are whatever the page
+  kept — read-back is how to hear them. The `modal.html` fixture keeps each step's answers
+  across Back, as a wizard does; whether LinkedIn does is not recorded in §11.
 - Two locks, one on each side. The panel has a single path to `bridge/submit`, the confirm
   button's handler. The page side presses only a button whose name says it submits, so that
   message cannot press Next, and `bridge/forward-action` cannot press Submit.
@@ -603,9 +620,15 @@ BRIDGE is useless if BRIDGE itself is inaccessible.
   pre-check, region … heading level 2, Application pre-check"). Groups are named only where
   the name carries meaning — a question's options — never for chrome like the mode picker
   (2026-09-22).
-- One `aria-live="polite"` region for status ("Slider set to 2 years", "Could not fill Start date").
-  It is visually hidden: announcements often repeat what the UI already shows, so rendering
-  them printed the same sentence twice. And it stays silent on open: a freshly loaded panel
+- Two live regions, split by who caused the sentence (2026-09-22, check 2 by ear). The answer
+  to the user's own command — Alt+Shift+S, Write, Read back, Go back, the submit question,
+  export — goes to an `aria-live="assertive"` region (`role="alert"`) and interrupts: with
+  one polite region, a read-back pressed during VoiceOver's read-through of the panel was
+  not heard until the read-through ended. News from the page — a step changed, questions
+  appeared, "has not moved on", label inference — goes to the `aria-live="polite"` region
+  and waits for a pause, so it never cuts off the field the user has just reached. Both are
+  visually hidden: announcements often repeat what the UI already shows, so rendering
+  them printed the same sentence twice. And both stay silent on open: a freshly loaded panel
   is read by the screen reader once, top to bottom — heading, journey, summary, questions —
   and announcing over that pass made VoiceOver interrupt it and repeat the summary (heard
   three times, 2026-09-22). The known cost: if a scan outlives VoiceOver's read of the
@@ -615,9 +638,9 @@ BRIDGE is useless if BRIDGE itself is inaccessible.
   id — never a quantity) is spaced out so the reader speaks each digit instead of
   "ninety-six million…". Visible text and everything written to the page keep the real value.
 - Visible and programmatic focus management: focus moves into the panel on open. It never
-  moves on a write: a screen reader speaks whatever receives focus before a polite
-  announcement, so auto-advancing introduced the next question before confirming the one
-  just answered (2026-09-22). The confirmation says how to move on instead — Tab in the
+  moves on a write: a screen reader speaks whatever receives focus first, so auto-advancing
+  introduced the next question before confirming the one just answered (2026-09-22); now
+  that the confirmation is assertive it would instead cut that introduction off. The confirmation says how to move on instead — Tab in the
   full list, the Next question button in one-at-a-time.
 - Zero axe violations on the panel.
 - Tested end to end with NVDA on Windows before demo.
@@ -785,8 +808,9 @@ refactor rather than a patch:
 - **A session never ends.** It is keyed by tab and origin, so a second application on the
   same site in the same tab is recorded into the first one's steps, and the exported report
   mixes them. Needs a rule for "a new application started" that Back-to-step-1 does not trip.
-- **One live region, last writer wins.** A write confirmation that lands after VERIFY
-  replaces the read-back summary before it may have been heard.
+- **Within a live region, last writer wins.** A write confirmation that lands after VERIFY
+  replaces the read-back summary before it may have been heard (both are answers to the
+  user's command, so both go to the assertive region).
 - **A content-script handler that throws** is turned into "BRIDGE cannot read this page"
   by `send()`. Verified twice by temporarily restoring a bug; no handler throws on any
   fixture any more, so no permanent test pins it.

@@ -3,7 +3,7 @@
 
 import { fill, harvestOptions, readValue } from '../lib/act';
 import { accName, clean, deepQueryAll, formScope, visible } from '../lib/dom';
-import type { CropRect, FormChanged, ForwardAction, HandlerThrew, Request } from '../lib/messages';
+import type { CropRect, FormChanged, ForwardAction, HandlerThrew, ReadBack, Request } from '../lib/messages';
 import { refind, scanPage, type FieldHandle } from '../lib/scan';
 import type { ReadBackResult, ScanResult } from '../lib/types';
 
@@ -128,13 +128,16 @@ export default defineContentScript({
         }
 
         case 'bridge/read-back': {
-          // VERIFY reads from the page, never from BRIDGE's own state (§4.4).
-          if (!last) return [];
-          return last.fields.map((f): ReadBackResult => {
+          // VERIFY reads from the page, never from BRIDGE's own state (§4.4). Fields the
+          // page has grown or lost since the last scan are reported as `changed`, not
+          // silently left out: the panel rescans and asks again.
+          if (!last) return { changed: false, fields: [] } satisfies ReadBack;
+          const fields = last.fields.map((f): ReadBackResult => {
             const h = handles.get(f.id)!;
             const found = !!refind(h);
             return { fieldId: f.id, label: f.label, value: found ? readValue(h) : '', found };
           });
+          return { changed: fingerprintOf(scanPage().result) !== fingerprintOf(last), fields } satisfies ReadBack;
         }
 
         case 'bridge/forward-action':
