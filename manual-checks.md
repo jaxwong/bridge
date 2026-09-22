@@ -477,13 +477,19 @@ arrow key rather than moving the value, and there is no screen reader in that pr
 3. Press **Down arrow**. Does the answer change, and is the new one spoken?
 4. Press **Up arrow**. Does it go back?
 
-**Write down** exactly what was spoken, and whether the arrows moved the answer without
-you opening anything. If they did not — if the list opened instead, or nothing moved — the
-note is **wrong on this platform and must be changed or removed**. A wrong instruction is
-worse than none, especially one aimed at somebody who cannot see what happened.
+**Answered, VoiceOver on macOS, 2026-09-22.** The arrow keys move through the answers and
+each one is spoken. Control-Option-Space, which is the only method VoiceOver's own hint
+names, **works only some of the time** — it is the unreliable path, and it is the one a
+first-time user is told about. That is the reason the note exists: not that the chord is
+confusing, but that the reliable method is the one nobody mentions.
 
-Worth repeating on NVDA: arrow keys move a `<select>` directly on Windows, so the note is
-expected to be straightforwardly true there.
+Still open on **NVDA**: arrow keys move a `<select>` directly on Windows, so the note should
+be straightforwardly true there, but nobody has listened to it yet.
+
+If a future run finds the arrows do not move the answer — the list opens instead, or nothing
+moves — the note is **wrong on that platform and must be changed or removed**. A wrong
+instruction is worse than none, especially one aimed at somebody who cannot see what
+happened.
 
 ---
 
