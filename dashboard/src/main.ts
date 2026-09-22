@@ -70,7 +70,7 @@ const announce = (message: string): void => { $('live').textContent = message; }
 // --- form list -----------------------------------------------------------------------
 
 function changeSummary(c: Comparison): string {
-  if (!c.hasPrevious) return 'First scan — nothing to compare with yet';
+  if (!c.hasPrevious) return 'No earlier report';
   if (!c.new.length && !c.resolved.length) return `No change — ${c.stillOpen.length} still open`;
   const parts: string[] = [];
   if (c.new.length) parts.push(`${c.new.length} new`);
@@ -86,10 +86,10 @@ function renderList(): void {
 
   const head = el('tr', {}, [
     el('th', { scope: 'col', text: 'Job posting' }),
-    el('th', { scope: 'col', text: 'Last scanned' }),
+    el('th', { scope: 'col', text: 'Last checked' }),
     el('th', { scope: 'col', text: 'Blocking' }),
     el('th', { scope: 'col', text: 'Usability' }),
-    el('th', { scope: 'col', text: 'Since previous scan' }),
+    el('th', { scope: 'col', text: 'Since last report' }),
   ]);
 
   const rows = forms.map((form) => {
@@ -108,9 +108,27 @@ function renderList(): void {
     ]);
   });
 
+  // Counted from the reports on the page, never estimated: postings tracked, findings
+  // open across their newest reports, how many of those block someone outright, and how
+  // many distinct success criteria they touch.
+  const newest = forms.map((f) => f.scans[f.scans.length - 1]);
+  const allFindings = newest.flatMap((r) => findingsOf(r));
+  const criteria = new Set(allFindings.flatMap((b) => b.wcag ?? []));
+  const stat = (value: string, label: string, mod = '') =>
+    el('div', { class: `stat ${mod}`.trim() }, [
+      el('p', { class: 'stat__value', text: value }),
+      el('p', { class: 'stat__label', text: label }),
+    ]);
+  body.append(el('div', { class: 'stats' }, [
+    stat(String(forms.length), forms.length === 1 ? 'Posting tracked' : 'Postings tracked'),
+    stat(String(allFindings.length), 'Open findings'),
+    stat(String(allFindings.filter((b) => b.severity === 'blocking').length), 'Blocking', 'stat--blocking'),
+    stat(String(criteria.size), 'WCAG criteria affected'),
+  ]));
+
   const scans = totalScans(forms);
   body.append(el('table', {}, [
-    el('caption', { text: `${forms.length} ${forms.length === 1 ? 'form' : 'forms'}, from ${scans} ${scans === 1 ? 'scan' : 'scans'}.` }),
+    el('caption', { text: `${forms.length} ${forms.length === 1 ? 'posting' : 'postings'}, from ${scans} ${scans === 1 ? 'report' : 'reports'}.` }),
     el('thead', {}, [head]),
     el('tbody', {}, rows),
   ]));
@@ -135,19 +153,22 @@ function wcagLine(b: ComparedBarrier): HTMLElement {
   return line;
 }
 
+/**
+ * One finding, ordered the way the person who has to fix it reads it: what is affected,
+ * what it does to someone, what to do about it — and only then the rule id and criteria,
+ * which are for whoever files the ticket rather than for whoever decides it matters.
+ */
 function barrierItem(b: ComparedBarrier): HTMLElement {
   return el('li', { class: 'barrier' }, [
     el('p', { class: 'barrier__head' }, [
       el('span', { class: `sev sev--${b.severity}`, text: SEVERITY_WORD[b.severity] }),
-      ' ',
-      el('code', { text: b.rule }),
+      el('span', { class: 'barrier__where', text: b.scope === 'page' ? 'Affects the whole page' : `Field: ${b.label}` }),
     ]),
-    el('p', { class: 'barrier__where', text: b.scope === 'page' ? 'Affects the whole page' : `Field: ${b.label}` }),
     el('p', { class: 'barrier__impact', text: b.impact }),
     // Decided by the scanner's rule catalogue and carried in the report; the dashboard only
     // shows it. Reports from before `fix` existed have none, and show no line.
     ...(b.fix ? [el('p', { class: 'barrier__fix' }, [el('strong', { text: 'Suggested fix: ' }), b.fix])] : []),
-    wcagLine(b),
+    el('div', { class: 'barrier__meta' }, [el('code', { text: b.rule }), wcagLine(b)]),
   ]);
 }
 
@@ -158,7 +179,7 @@ function barrierItem(b: ComparedBarrier): HTMLElement {
 function wcagSummarySection(newest: BarrierReport): HTMLElement {
   const s = summariseWcag(findingsOf(newest));
   const section = el('section', { class: 'wcag-summary' }, [
-    el('h3', { text: 'Automated WCAG 2.2 findings in the newest scan' }),
+    el('h3', { text: 'Automated WCAG 2.2 findings in this report' }),
   ]);
 
   // The producer says which criteria it can fail. Naming them is what stops "no finding"
@@ -173,7 +194,7 @@ function wcagSummarySection(newest: BarrierReport): HTMLElement {
   }
 
   if (s.total === 0) {
-    section.append(el('p', { class: 'empty', text: 'This scan found no barriers, so there is nothing to map.' }));
+    section.append(el('p', { class: 'empty', text: 'This report found no barriers, so there is nothing to map.' }));
     return section;
   }
 
@@ -232,27 +253,29 @@ function openDetail(key: string): void {
 
   $('detail-h').textContent = formTitle(form);
 
+  // The address as a link, so the reader can open the form they are being told about.
+  // Reports without a pageUrl — older ones, or a scheme we would not link — show the
+  // address as plain text instead of a dead link.
   const meta = $('detail-meta');
-  meta.replaceChildren(
-    el('span', { class: 'detail-url', text: formUrl(form) }),
-    ' · ',
-    `${form.scans.length} ${form.scans.length === 1 ? 'scan' : 'scans'} loaded. Newest `,
-    when(newest.generatedAt),
-    previous ? ', compared with ' : ', with no earlier scan to compare against.',
-  );
-  if (previous) meta.append(when(previous.generatedAt), '.');
+  const address = newest.pageUrl
+    ? el('a', { class: 'detail-url', href: newest.pageUrl, rel: 'noreferrer' }, [formUrl(form)])
+    : el('span', { class: 'detail-url', text: formUrl(form) });
+  meta.replaceChildren(address, ' · Last checked ', when(newest.generatedAt));
+  if (previous) meta.append(', compared with ', when(previous.generatedAt));
 
   const body = $('detail-body');
+  // With nothing to compare against there is no "new" and no "resolved" — only findings.
+  // Rendering both as empty sections put two zeroes at the top of a first report and said
+  // nothing. They appear as soon as there is an earlier report to compare with.
   body.replaceChildren(
     wcagSummarySection(newest),
-    barrierSection('New since the previous scan', comparison.hasPrevious
-      ? 'Nothing new in this scan.'
-      : 'A first scan has nothing to compare with, so nothing is reported as new.',
-      comparison.new, 'bucket--new'),
-    barrierSection(comparison.hasPrevious ? 'Still open' : 'Open', 'No barriers.', comparison.stillOpen),
-    barrierSection('Resolved', comparison.hasPrevious
-      ? 'Nothing was resolved since the previous scan.'
-      : 'Nothing to compare with yet.', comparison.resolved, 'bucket--resolved'),
+    ...(comparison.hasPrevious
+      ? [
+        barrierSection('New since the previous report', 'Nothing new in this report.', comparison.new, 'bucket--new'),
+        barrierSection('Still open', 'No barriers.', comparison.stillOpen),
+        barrierSection('Resolved', 'Nothing was resolved since the previous report.', comparison.resolved, 'bucket--resolved'),
+      ]
+      : [barrierSection('Open', 'No barriers.', comparison.stillOpen)]),
   );
 
   $('list-view').hidden = true;

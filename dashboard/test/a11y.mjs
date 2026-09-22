@@ -66,10 +66,8 @@ try {
     .filter((s) => !/\b(not|never|no|nothing)\b/i.test(s));
   check('no sentence on the list view claims compliance, certification or legal standing',
     (await unqualifiedClaims()).length === 0, (await unqualifiedClaims()).join(' | ').slice(0, 200) || 'none');
-  check('the page says the report shown was captured ahead of time, not sent',
-    /one real BRIDGE scan of the Acme Careers test form,\s+captured ahead of time/.test(
-      (await page.textContent('.provenance')).replace(/\s+/g, ' ')),
-    await page.textContent('.provenance'));
+  // The page no longer states that its one report was captured ahead of time rather than
+  // sent. That line was removed on request; nothing on screen discloses it now.
   check('there is no way to upload a report', (await page.locator('input[type=file], #dropzone, #reports').count()) === 0);
   // The page-level banner is gone; the disclaimer now sits with the findings, which is
   // where a reader is actually looking at a criterion number. It is checked there, below.
@@ -78,8 +76,8 @@ try {
 
   // --- the form list, from the seed --------------------------------------------------
   await page.waitForSelector('table');
-  check('opens on the seeded report: one form, one scan',
-    (await page.locator('#list-body caption').textContent()) === '1 form, from 1 scan.',
+  check('opens on the seeded report: one posting, one report',
+    (await page.locator('#list-body caption').textContent()) === '1 posting, from 1 report.',
     await page.locator('#list-body caption').textContent());
   const row = page.locator('tbody tr', { hasText: 'localhost:8765/apply.html' });
   check('the posting is listed by the name the page gives it, not by its address',
@@ -90,9 +88,18 @@ try {
   check('the form list shows the blocking and usability counts',
     (await row.locator('td').nth(1).textContent()) === '9' && (await row.locator('td').nth(2).textContent()) === '4',
     `${await row.locator('td').nth(1).textContent()} / ${await row.locator('td').nth(2).textContent()}`);
+  // Every figure on the list is counted from the reports the page holds.
+  const stats = await page.locator('.stat').evaluateAll((els) =>
+    els.map((e) => `${e.querySelector('.stat__value').textContent}:${e.querySelector('.stat__label').textContent}`));
+  check('the list opens on counts taken from the report, not estimates',
+    stats.join(' | ') === '1:Posting tracked | 13:Open findings | 9:Blocking | 4:WCAG criteria affected',
+    stats.join(' | '));
+
   const shown = await row.locator('time').textContent();
   check('the scan is shown by date only, with no clock time', !/\d:\d\d/.test(shown) && /\d{4}/.test(shown), shown);
-  check('a form reported on once reads as a first scan, not as all-new', /First scan/.test(await row.locator('.change').textContent()));
+  check('a form reported on once is not described as a comparison',
+    (await row.locator('.change').textContent()) === 'No earlier report',
+    await row.locator('.change').textContent());
   await axeScan('form list');
 
   // --- detail, opened from the keyboard ----------------------------------------------
@@ -104,16 +111,21 @@ try {
     await page.evaluate(() => document.activeElement?.id));
   check('the report is headed by the posting, not by a URL',
     (await page.textContent('#detail-h')) === 'Junior Analyst — Apply', await page.textContent('#detail-h'));
-  check('and still says which address it scanned',
-    (await page.locator('#detail-meta .detail-url').textContent()) === 'localhost:8765/apply.html');
+  check('and links to the form it is about, so it can be opened',
+    (await page.locator('#detail-meta a.detail-url').getAttribute('href')) === 'http://localhost:8765/apply.html',
+    await page.locator('#detail-meta a.detail-url').getAttribute('href'));
+  check('the link is the address, shown as the address',
+    (await page.locator('#detail-meta a.detail-url').textContent()) === 'localhost:8765/apply.html');
   check('the form list is hidden while the detail is open', await page.locator('#list-view').isHidden());
 
   const bucket = (heading) => page.locator('.bucket', { hasText: heading });
   const open = await bucket('Open').textContent();
-  check('a first scan lists every finding as open', /Open \(13\)/.test(open));
-  check('and nothing as new or resolved',
-    /New since the previous scan \(0\)/.test(await bucket('New since').textContent()) &&
-    /Resolved \(0\)/.test(await bucket('Resolved').textContent()));
+  check('a first report lists every finding as open', /Open \(13\)/.test(open));
+  // With nothing to compare against there is no "new" and no "resolved". Two empty
+  // sections headed with a zero said nothing; they appear once an earlier report exists.
+  check('and shows no empty comparison sections',
+    (await page.locator('.bucket--new, .bucket--resolved').count()) === 0,
+    String(await page.locator('.bucket--new, .bucket--resolved').count()));
   check('every barrier carries its plain-language impact', /can only be used by dragging a file onto it/.test(open));
   check('every barrier carries its suggested fix', (await page.locator('.barrier__fix').count()) === 13);
   const dragFix = await page.locator('.barrier', { hasText: 'drag-drop-only' }).locator('.barrier__fix').textContent();

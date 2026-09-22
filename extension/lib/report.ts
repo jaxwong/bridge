@@ -46,6 +46,9 @@ export function toReport(scan: Pick<ScanResult, 'url' | 'scannedAt' | 'fields' |
     // The page's own heading, which is what the posting calls itself. Omitted rather than
     // guessed when the page has none.
     ...(scan.heading ? { postingTitle: scan.heading } : {}),
+    // Scheme + host + path, so the dashboard can link to the form. The query string is
+    // dropped here for the same reason it is dropped from pagePath.
+    pageUrl: `${url.protocol}//${url.host}${url.pathname}`,
     generatedAt: scan.scannedAt,
     standard: STANDARD,
     barriers: scan.fields.flatMap((f) =>

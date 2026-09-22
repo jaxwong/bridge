@@ -30,8 +30,17 @@
          behind it, so it is not a control: a dropdown that opens onto nothing would be
          worse than none. -->
     <div class="account">
-      <p class="account__org">Acme Pte Ltd</p>
-      <p class="account__user">Priya Raman · Talent Operations</p>
+      <div class="account__text">
+        <p class="account__org">Acme Pte Ltd</p>
+        <p class="account__user">Priya Raman · Talent Operations</p>
+      </div>
+      <span class="account__avatar" aria-hidden="true">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="10" cy="6.8" r="3.1"/>
+          <path d="M3.9 17a6.1 6.1 0 0 1 12.2 0"/>
+        </svg>
+      </span>
     </div>
     <button type="button" id="theme-toggle" class="btn-icon" aria-live="off">
       <span class="vh" id="theme-toggle-label">Switch to dark theme</span>
@@ -49,6 +58,8 @@
 
   <main id="main" tabindex="-1">
     <h1>Tracked application forms</h1>
+    <p class="subtitle">The job postings you have under monitoring. Each is checked against
+      WCAG 2.2 Level A and AA whenever a candidate reports a barrier.</p>
 
     <!-- Spoken when a report opens, so a screen reader user is told what they landed on.
          Visually hidden: on screen the report itself already says it, and printing it too
@@ -58,16 +69,12 @@
     <section id="list-view" aria-labelledby="list-h">
       <h2 id="list-h" class="vh" tabindex="-1">All tracked forms</h2>
       <div id="list-body"></div>
-      <!-- Where the one report on this page came from. Kept because a demo that looks live
-           and is not is the thing an audience should never be left to assume. -->
-      <p class="provenance">Demo data: one real BRIDGE scan of the Acme Careers test form,
-        captured ahead of time. Nothing is sent to this page yet.</p>
     </section>
 
     <section id="detail-view" aria-labelledby="detail-h" hidden>
+      <p class="detail-back"><button type="button" id="back">Back to all forms</button></p>
       <h2 id="detail-h" tabindex="-1"></h2>
       <p id="detail-meta" class="meta"></p>
-      <p><button type="button" id="back">Back to all forms</button></p>
       <div id="detail-body"></div>
     </section>
 

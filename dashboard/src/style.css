@@ -257,7 +257,21 @@ body {
   text-align: right;
   min-width: 0;
 }
+.account { flex-direction: row; align-items: center; gap: var(--s2); }
+.account__text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .account p { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A plain profile mark. No photo, and not a control: there is no menu behind it. */
+.account__avatar {
+  flex: none;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  color: var(--text-2);
+}
+.account__avatar svg { width: 16px; height: 16px; display: block; }
 .account__org { font-size: 0.82rem; font-weight: 640; color: var(--text); letter-spacing: -0.005em; }
 .account__user { font-size: 0.72rem; color: var(--text-3); }
 
@@ -367,6 +381,14 @@ p { margin: 0 0 var(--s3); }
   margin-bottom: var(--s4);
 }
 
+.subtitle {
+  color: var(--text-2);
+  font-size: 0.94rem;
+  line-height: 1.55;
+  max-width: 74ch;
+  margin: 0 0 var(--s5);
+}
+
 .meta { color: var(--text-3); font-size: 0.86rem; }
 .empty { color: var(--text-3); font-style: italic; font-size: 0.9rem; }
 .caveat {
@@ -418,6 +440,42 @@ code {
   color: var(--text);
 }
 .live:empty { padding: 0; border: 0; height: 0; margin: 0; overflow: hidden; }
+
+/* ============================================================================
+   STATS — small, because a figure that fills the screen is not information
+   ========================================================================= */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--s2);
+  margin-bottom: var(--s4);
+}
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: var(--s3) var(--s4);
+  box-shadow: var(--shadow);
+}
+.stat p { margin: 0; }
+.stat__value {
+  font-size: 1.35rem;
+  font-weight: 660;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.stat__label {
+  margin-top: 3px !important;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+.stat--blocking .stat__value { color: var(--danger); }
 
 /* ============================================================================
    TABLE
@@ -561,7 +619,20 @@ ul.barriers { list-style: none; margin: 0; padding: 0; display: grid; gap: var(-
   gap: var(--s2);
   margin-bottom: 7px;
 }
-.barrier__where { font-weight: 620; font-size: 0.92rem; max-width: 80ch; }
+.barrier__where { font-weight: 640; font-size: 0.95rem; letter-spacing: -0.005em; }
+
+/* Rule id and criteria: the ticket-filing detail, last and quiet. */
+.barrier__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+.barrier__meta > p { margin: 0 !important; }
+.barrier__meta code { font-size: 0.74rem; }
 /* Capped measure: a finding is prose, and prose is unreadable at the full width of a
    dashboard. The card keeps its width; the sentence does not. */
 .barrier__impact { color: var(--text-2); font-size: 0.89rem; max-width: 80ch; }
@@ -685,14 +756,17 @@ ul.barriers { list-style: none; margin: 0; padding: 0; display: grid; gap: var(-
   word-break: break-word;
 }
 #detail-meta { margin-bottom: var(--s3); font-size: 0.86rem; }
+.detail-back { margin: 0 0 var(--s3); }
+a.detail-url { color: var(--accent); text-underline-offset: 3px; }
+a.detail-url:hover { text-decoration-thickness: 2px; }
 .detail-url { font-family: var(--mono); font-size: 0.8rem; color: var(--text-2); }
 /* The report is a document, not a data grid: it gets a document's width. */
 #detail-view { max-width: 900px; }
 /* The rule under the header block is what separates provenance from findings. */
-#detail-view > p:nth-of-type(2) {
-  margin: 0 0 var(--s5);
+#detail-meta {
   padding-bottom: var(--s4);
   border-bottom: 1px solid var(--border);
+  margin-bottom: var(--s5);
 }
 /* Back is a way out, not the point of the page. */
 #back { border-color: var(--border-2); color: var(--text-2); }
