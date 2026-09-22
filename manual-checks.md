@@ -26,7 +26,9 @@ On a Mac, **Alt is the Option key**. So Alt+Shift+B is Option+Shift+B.
 
 ## 0. Setup, once
 
-Three terminals, all from the repo root.
+Three terminals, all from the repo root. The repo Makefile wraps these same commands:
+`make build`, `make serve`, `make proxy` — and `make test` runs every automated user-side
+check before a manual pass.
 
 **Terminal A, build the extension:**
 
@@ -99,23 +101,30 @@ What was found, by hand:
 | Can the page take focus from the panel? | **No.** See check 2, which changed the design because of it |
 | Chrome's own pane key | F6 does nothing on macOS. Cmd+Option+Down arrow, or Up, reaches the other pane in four presses. Nothing in BRIDGE depends on it |
 
-The cost of the reopen: the panel reloads and rescans. An answer typed in the panel but not
-yet written to the page is lost. Everything written is on the page and is read back from there.
+The reopen reloads and rescans the panel, but it costs no answers (since 2026-09-22):
+everything typed in the panel is kept as a draft in session storage and put back if the
+page is still on the same step, and BRIDGE says "Back in BRIDGE. Your answers are kept.
+You were on question N of M." Everything written is on the page and is read back from
+there. Only a draft from a step the page has since left is dropped, which was always
+the rule for unwritten answers.
 
 **To repeat the check after any change to the shortcuts**
 
 1. Open `http://localhost:8765/apply.html`. Close the side panel with its X.
 2. Click in the page's **Full name** field. Press **Alt+Shift+B**, wait for the scan, then
-   press **Tab**. *Expect:* the focus ring is on the first button in the panel's barrier list.
+   press **Tab**. *Expect:* the focus ring is on the panel's "Scan the page again" button.
    If `abc` typed now lands in the page's Phone field, focus stayed in the page: tell Claude.
-3. Leave the panel open. Click in **Full name** again. Press **Alt+Shift+B**, then **Tab**.
-   *Expect:* the panel closes, reopens and rescans, and the focus ring is inside it.
+3. Leave the panel open. Type into a panel question box without writing it. Click in the
+   page's **Full name** again. Press **Alt+Shift+B**, then **Tab**.
+   *Expect:* the panel closes, reopens and rescans; the focus ring is inside it; what you
+   typed is back in its box; VoiceOver users hear "Back in BRIDGE. Your answers are kept…".
 
 **Still to do**
 
 4. Close the panel. Turn VoiceOver on (**Cmd+F5**). Click in **Full name**, press
-   **Alt+Shift+B**, and listen. *Expect:* "BRIDGE, heading level 1", then the summary. With
-   VoiceOver's default settings it then reads the whole panel; **Control** stops it (check 6,
+   **Alt+Shift+B**, and listen. *Expect:* "BRIDGE, heading level 1"; with VoiceOver's
+   default settings it then reads the whole panel once, in order — the summary is heard
+   there, once, and nothing is announced over the reading. **Control** stops it (check 6,
    "Before you start", explains the setting).
 
 **Write down**
@@ -237,7 +246,7 @@ sites, so it never appears on the localhost pages.
 1. Open `https://httpbin.org/forms/post`.
 2. Press **Alt+Shift+B**. BRIDGE scans using the one-time grant of the shortcut.
 3. Expect the pre-check to list the form's questions.
-4. Under the barrier list, next to "Scan the page again", find
+4. Next to "Scan the page again", find
    **"Always enable BRIDGE on this site"**.
 5. Activate it. Chrome shows a prompt: BRIDGE wants to read and change your data on
    httpbin.org.
@@ -333,7 +342,7 @@ This is the pass that decides whether the product works. Method and key referenc
    you can screenshot. Keep it on for the whole pass.
 4. **Decide about automatic reading.** By default VoiceOver reads a newly loaded web page
    from the top until something interrupts it, and the side panel is a web page. So opening
-   BRIDGE speaks the heading, the summary, and then every barrier and question. **Control**
+   BRIDGE speaks the heading, the summary, and then every question. **Control**
    stops it. To turn it off: VoiceOver Utility (**Control+Option+Fn+F8**), Web, General,
    untick **"Automatically speak the webpage"**. Write down which setting the pass used.
    Do part of one run with it on, because that is what a new user hears.
@@ -361,25 +370,27 @@ caption panel.
 4. **Find your way by heading.** **Control+Option+U** opens the rotor. Choose Headings.
    *Expect:* BRIDGE; Application pre-check; Questions; Question 1 of 13; Check what the
    page contains; Barrier report.
-5. **The barrier list.** Tab through it.
-   *Expect:* each field barrier is a button that speaks its severity and sentence.
-   Activating one moves you to that question.
+5. **No barrier list.** Tab from the summary onward.
+   *Expect:* "Scan the page again" comes right after the summary. No barrier sentence is
+   ever spoken in the panel; the barriers exist only in the exported report (2026-09-22).
 6. **"How to answer".**
-   *Expect:* a group named "How to answer" with two radio buttons, "One question at a
-   time" selected.
+   *Expect:* the text "How to answer", then two radio buttons, "One question at a time"
+   selected. No "group" wrapper is announced, and nothing is spoken twice.
 7. **One question at a time.** Tab from the mode group onward.
    *Expect:* only **one** question is reachable. The other twelve must not be spoken at all.
 8. **Full name.** Type a name. Tab to **"Write Full name to page"**. Press Space.
-   *Expect:* "Full name: … Confirmed on the page. Next: Phone." and focus on the Phone box.
+   *Expect:* "Full name: … Confirmed on the page. Press Next question for Phone." — heard
+   in full, in that order, with focus staying on the Write button. Nothing about Phone is
+   spoken before the confirmation.
 9. Use **"Next question"** to reach each of these. Write down the announced name and role.
 
    | Question | Panel control | Listen for |
    |---|---|---|
    | Highest education completed | pop-up button | "(label inferred)" is spoken. Five options |
-   | Years of experience | number field | whether 0 to 10 is announced |
+   | Years of experience | number field | its description "From 0 to 10", and the value spoken as the number itself — "4", never "40%" |
    | The visa question | radio group | the question is spoken as the group's name, the options as **"Yes"** and **"No"** |
    | Language skills | checkbox group | the group's name is "Language skills" |
-   | Earliest start date | date field | Chrome's date field has three parts. Note whether you could set all three |
+   | Earliest start date | text field | *Expect:* its description says "Year-month-day, like 2026-10-31" — no stepper, no percentages. A wrong format is refused with that sentence |
    | CV, "Drag and drop your CV here" | file button | Space opens the macOS file picker. Note whether you could choose a file with the curtain on |
    | Notice period | text field | after Write: **"Could not fill Notice period."** plus the reason |
    | I agree to the privacy notice | checkbox | |
@@ -470,10 +481,9 @@ announce silent step changes, and turn the visa question into an answerable grou
 7. Click **Next** on the page. Expect "Step 2 of N: …". Note each step's announcement.
 8. Keep going until the step with
    *"Will you now or in the future require sponsorship for employment visa status?"*
-9. In the panel, check:
-   - The barrier list shows **"All 2 options for … sound identical to a screen reader. The
-     words "Yes" and "No" are never spoken."**
-   - The question is a group whose name is the question, with options **Yes** and **No**.
+9. In the panel, check: the question is a group whose name is the question, with options
+   **Yes** and **No**. (The panel shows no barrier sentences; the identically-named-options
+   barrier is checked in the exported report at step 15.)
 10. Choose an answer in the panel and activate its **Write** button.
 11. Expect "… Confirmed on the page", and the matching radio selected in LinkedIn's dialog.
 12. With VoiceOver on, Tab to the same two radios in LinkedIn's own dialog and listen. That
@@ -481,7 +491,8 @@ announce silent step changes, and turn the visa question into an answerable grou
 13. Activate "Read back everything from the page".
 14. **Stop here.** Close the dialog with its X and choose **Discard**.
 15. In the panel, export the barrier report as JSON. Open the file and confirm it contains
-    no answers, no name and no email.
+    no answers, no name and no email, and that it carries the `options-identically-named`
+    barrier for the visa question.
 
 **Write down**
 

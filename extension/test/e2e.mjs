@@ -119,10 +119,10 @@ try {
   await panel.getByRole('button', { name: 'Previous question' }).click();
   await panel.getByLabel('Full name').fill('Z. Wei');
   await panel.getByRole('button', { name: 'Write Full name to page' }).click();
-  await spoken(panel, /Full name: Z\. Wei\. Confirmed on the page\. Next: Phone/);
-  check('one-question mode: a confirmed answer advances to the next question',
-    (await panel.locator('#questions .q:visible h3').textContent()) === 'Question 2 of 13' &&
-    await panel.evaluate(() => document.activeElement?.tagName) === 'INPUT');
+  await spoken(panel, /Full name: Z\. Wei\. Confirmed on the page\. Press Next question for Phone/);
+  check('one-question mode: a confirmed answer stays put, so the confirmation is heard before anything new',
+    (await panel.locator('#questions .q:visible h3').textContent()) === 'Question 1 of 13' &&
+    await panel.evaluate(() => document.activeElement?.textContent) === 'Write Full name to page');
 
   // Most of this run answers questions out of order, so it uses the full list. The
   // default, one question at a time, has its own section below.
@@ -131,7 +131,13 @@ try {
   // --- SCAN -------------------------------------------------------------------------
   const summary = await panel.textContent('#summary');
   check('SCAN finds 13 questions: 12 in the page, 1 in the same-origin iframe', /^13 questions found/.test(summary), summary);
-  const barriers = await panel.textContent('#barriers');
+  // Barriers are detected exactly as before but never rendered in the panel: the applicant
+  // hears only the count in the summary; the sentences below exist only in the exported
+  // report, which is where the detection checks now read them.
+  check('the panel renders no barrier text', !/Blocking:|Usability:/.test(await panel.textContent('main')), await panel.textContent('main'));
+  const [scanDl] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as JSON' }).click()]);
+  const scanReport = JSON.parse(readFileSync(await scanDl.path(), 'utf8'));
+  const barriers = [...scanReport.pageBarriers, ...scanReport.barriers].map((b) => b.impact).join('\n');
   check('reports the identically-named Yes/No options', /sound identical/.test(barriers));
   check('reports the custom dropdown', /custom dropdown/.test(barriers));
   check('reports the dropdown is not keyboard operable', /"Highest education completed" cannot be reached with the keyboard/.test(barriers));
@@ -170,12 +176,11 @@ try {
   await status('Full name').filter({ hasText: /On the page: Zheng Wei|Could not/ }).waitFor();
   check('text: written to the page', await page.inputValue('#name') === 'Zheng Wei');
   check('text: panel reports the DOM read-back', /On the page: Zheng Wei/.test(await status('Full name').textContent()));
-  // Page order: the question after "Full name" is Phone.
-  const focusedLabel = await panel.evaluate(() => {
-    const a = document.activeElement;
-    return a?.id ? document.querySelector(`label[for="${a.id}"]`)?.textContent || '' : '';
-  });
-  check('focus moves to the NEXT question on the page after an answer', /Phone/.test(focusedLabel), focusedLabel);
+  // Focus never moves on a write: the confirmation must be heard before anything new is
+  // spoken, and a screen reader speaks whatever receives focus first.
+  check('focus stays on the Write button after an answer',
+    await panel.evaluate(() => document.activeElement?.textContent) === 'Write Full name to page',
+    await panel.evaluate(() => document.activeElement?.textContent));
 
   await panel.getByLabel(/Highest education/).selectOption("Bachelor's");
   await panel.getByRole('button', { name: /Write Highest education/ }).click();
@@ -189,12 +194,18 @@ try {
 
   // Filling "Full name" made the page replace the phone field with a new node at a new
   // path. BRIDGE has to find it again by kind and name (§8.1).
-  await panel.getByLabel('Phone').fill('+65 8000 0000');
+  await panel.getByLabel('Phone').fill('96759836');
   await panel.getByRole('button', { name: 'Write Phone to page' }).click();
   await status('Phone').filter({ hasText: /On the page|Could not/ }).waitFor();
-  check('re-rendered field: found again by name and written', await page.inputValue('.rerendered input[name=phone]') === '+65 8000 0000',
+  check('re-rendered field: found again by name and written', await page.inputValue('.rerendered input[name=phone]') === '96759836',
     await status('Phone').textContent());
+  check('phone: spoken digit by digit, never as a quantity; the page and the visible status keep the real value',
+    /Phone: 9 6 7 5 9 8 3 6\. Confirmed on the page/.test(await spoken(panel, /Phone: 9 6 7 5 9 8 3 6/)) &&
+    /On the page: 96759836/.test(await status('Phone').textContent()));
 
+  check('slider: the range is a description, never min/max (VoiceOver speaks those as a percentage)',
+    await panel.locator('#questions input[type=number][max]').count() === 0 &&
+    (await panel.locator('#questions .q', { hasText: 'Years of experience' }).locator('.note').textContent()) === 'From 0 to 10.');
   await panel.getByLabel(/Years of experience/).fill('2');
   await panel.getByRole('button', { name: /Write Years of experience/ }).click();
   await status('Years of experience').filter({ hasText: /On the page|Could not/ }).waitFor();
@@ -212,6 +223,12 @@ try {
   await panel.getByRole('button', { name: /Write Language skills/ }).click();
   await page.waitForFunction(() => !document.querySelector('input[name=lang][value=zh]').checked, null, { timeout: 5000 }).catch(() => {});
   check('checkbox group: a second write unticks what was removed', await langState() === 'true,false,false');
+
+  await panel.getByLabel('Earliest start date').fill('31/10/2026');
+  await panel.getByRole('button', { name: 'Write Earliest start date to page' }).click();
+  check('date: a wrong format is refused at the panel, named, and nothing reaches the page',
+    /Type Earliest start date as year-month-day/.test(await spoken(panel, /year-month-day/)) &&
+    await page.inputValue('#start-date') === '');
 
   await panel.getByLabel('Earliest start date').fill('2026-10-01');
   await panel.getByRole('button', { name: 'Write Earliest start date to page' }).click();
@@ -254,7 +271,7 @@ try {
   await panel.waitForFunction(() => /Zheng Wei/.test(document.getElementById('verify-results').textContent));
   const verified = await panel.locator('#verify-results').textContent();
   check('VERIFY reads every answer back from the page',
-    ['Zheng Wei', '+65 8000 0000', "Bachelor's", 'Years of experience: 2', ': No', 'Language skills: English', '01/10/2026', 'resume.pdf', 'privacy notice: checked', 'Referral code: ACME-42']
+    ['Zheng Wei', '96759836', "Bachelor's", 'Years of experience: 2', ': No', 'Language skills: English', '01/10/2026', 'resume.pdf', 'privacy notice: checked', 'Referral code: ACME-42']
       .every((t) => verified.includes(t)), verified.replace(/\s+/g, ' '));
   check('VERIFY reports the discarded field as empty', /Notice period: empty/.test(verified));
   await panel.waitForTimeout(150);
@@ -277,7 +294,7 @@ try {
     (await panel.locator('#diag').textContent()).includes('not sent (nothing to infer from)') &&
     await panel.locator('#questions label', { hasText: 'Unlabelled text (label inferred)' }).count() === 1);
   check('inference: the request carries structure only, none of the answers on the page',
-    !/Zheng|8000 0000|Bachelor|resume\.pdf|ACME-42|01\/10\/2026/.test(JSON.stringify(proxyRequests)));
+    !/Zheng|96759836|Bachelor|resume\.pdf|ACME-42|01\/10\/2026/.test(JSON.stringify(proxyRequests)));
   // The privacy rule itself (§6.4): a control may be photographed only while it is empty.
   const rect = (fieldId) => sw.evaluate(({ id, fieldId }) => chrome.tabs.sendMessage(id, { type: 'bridge/rect', fieldId }, { frameId: 0 }), { id: tabId, fieldId });
   const before = await rect('f3');
@@ -347,9 +364,6 @@ try {
     check('modal: an answer typed but never written is reported lost', /before Email address was written/.test(said), said);
     check('modal: the questions are the new step\'s', /sponsorship/.test(await panel.locator('#questions').textContent()) &&
       !(await panel.locator('#questions').textContent()).includes('Email address'));
-    check('modal: the unnamed resume upload is a usability barrier, not a blocking one',
-      /Usability: The upload button has no label/.test(await panel.textContent('#barriers')));
-
     await panel.getByLabel('Full list').check();
     await panel.locator('#questions input[type=file]').setInputFiles({ name: 'resume.pdf', mimeType: 'application/pdf', buffer: Buffer.alloc(50_000, 65) });
     await panel.locator('.q:has(input[type=file])').getByRole('button', { name: /^Write/ }).click();
@@ -441,6 +455,9 @@ try {
       Array.isArray(report.pageBarriers) && report.pageBarriers.some((b) => b.rule === 'upload-unnamed') &&
       report.pageBarriers.every((b) => b.rule && b.severity && b.impact && !('label' in b)) &&
       report.steps.every((st) => Array.isArray(st.pageBarriers)));
+    check('export: the unnamed resume upload is a usability barrier, not a blocking one',
+      report.pageBarriers.some((b) => b.rule === 'upload-unnamed' && b.severity === 'usability' && /has no label/.test(b.impact)),
+      JSON.stringify(report.pageBarriers));
     check('export: the visa question\'s barrier is on step 2',
       report.steps[1].barriers.some((b) => b.rule === 'options-identically-named' && /sponsorship/.test(b.label)));
     check('export: no applicant data', !/resume\.pdf|zw@example|Zheng/.test(JSON.stringify(report)));
@@ -453,13 +470,22 @@ try {
   // =====================================================================================
   await section('full-navigation journey', async () => {
     const { page, panel, tabId } = await open('steps/1.html');
-    let said = await spoken(panel, /Step 1 of 3/);
-    check('full-nav: the journey is read from the page\'s stepper', /Step 1 of 3: My Information\. Next: My Experience\./.test(said), said);
+    // Opening announces nothing (the freshly loaded panel is read once, in order), so the
+    // journey is checked where a reader finds it: rendered above the summary.
+    const journey = await panel.textContent('#journey');
+    check('full-nav: the journey is read from the page\'s stepper', /Step 1 of 3: My Information\. Next: My Experience\./.test(journey), journey);
+    let said;
     await panel.getByLabel('First name').fill('Zheng Wei');
     await page.getByRole('button', { name: 'Save and Continue' }).click();
     said = await spoken(panel, /Step 2 of 3/);
     check('full-nav: the new page is announced without reopening the panel', /Step 2 of 3: My Experience\. Next: Review\./.test(said), said);
     check('full-nav: the unwritten answer from the destroyed step is reported lost', /before First name was written/.test(said), said);
+    // Alt+Shift+B reloads the panel; a draft from a step the page has left must not come back.
+    await panel.reload();
+    await panel.waitForFunction(() => !document.getElementById('summary').textContent.startsWith('Scanning'), null, { timeout: 15000 });
+    check('drafts: an answer typed on step 1 does not haunt step 2 after a panel reload',
+      await panel.evaluate(() => [...document.querySelectorAll('#questions input, #questions textarea')]
+        .filter((i) => i.type === 'text' || i.tagName === 'TEXTAREA').every((i) => i.value === '')));
     await panel.getByLabel('Full list').check();
     await panel.getByLabel('Job title').fill('Analyst');
     await panel.getByRole('button', { name: 'Write Job title to page' }).click();
@@ -483,7 +509,13 @@ try {
   await section('uploaders', async () => {
     // The query string is how the employer demo versions one form (Acme ?v=2, ?v=3).
     const { page, panel } = await open('uploaders.html?v=3');
-    const listed = await panel.locator('#barriers li').allTextContents();
+    // Give a would-be scan announcement (60 ms debounce) time to land before asserting silence.
+    await new Promise((r) => setTimeout(r, 300));
+    check('opening the panel announces nothing: the panel itself is read once, top to bottom',
+      (await panel.textContent('#live')) === '', await panel.textContent('#live'));
+    const [dl] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as JSON' }).click()]);
+    const report = JSON.parse(readFileSync(await dl.path(), 'utf8'));
+    const listed = [...report.pageBarriers, ...report.barriers].map((b) => b.impact);
     check('uploader: labelled but out of the tab order is still drag-drop-only',
       listed.filter((t) => /can only be used by dragging/.test(t)).length === 1, JSON.stringify(listed));
     check('uploader: the accessible patterns (tab stop, or a focusable label) report nothing',
@@ -493,12 +525,43 @@ try {
     const stops = [];
     for (let i = 0; i < 3; i++) { await page.keyboard.press('Tab'); stops.push(await page.evaluate(() => document.activeElement?.id || document.activeElement?.getAttribute('for') || 'none')); }
     check('uploader: real Tab presses agree with the rule', stops.join() === 'cv-b,cv-c,none', stops.join());
-    const [dl] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as JSON' }).click()]);
-    const report = JSON.parse(readFileSync(await dl.path(), 'utf8'));
     check('export: pagePath is the pathname only, so ?v=2 and ?v=3 compare as one form', report.pagePath === '/uploaders.html', report.pagePath);
     check('export: a one-step form has pageBarriers, no steps, and no step numbers',
       report.pageBarriers.length === 1 && report.pageBarriers[0].rule === 'drag-drop-only' && !('steps' in report) && !('step' in report.pageBarriers[0]),
       JSON.stringify(report).slice(0, 300));
+  });
+
+  // =====================================================================================
+  // Drafts: Alt+Shift+B reopens (and so reloads) the panel; typed answers must survive.
+  // =====================================================================================
+  await section('drafts survive a panel reload', async () => {
+    const { panel } = await open('apply.html');
+    await panel.getByLabel('One question at a time').check();
+    await panel.getByRole('button', { name: 'Next question' }).click();
+    await panel.getByLabel('Phone').fill('96759836');
+    await new Promise((r) => setTimeout(r, 500)); // the debounced draft save (300 ms)
+    await panel.reload();
+    await panel.waitForFunction(() => !document.getElementById('summary').textContent.startsWith('Scanning'), null, { timeout: 15000 });
+    const said = await spoken(panel, /Back in BRIDGE/);
+    check('reopen: says the answers are kept and where the user was',
+      /^Back in BRIDGE\. Your answers are kept\. You were on question 2 of 13\.$/.test(said), said);
+    check('reopen: the typed, unwritten answer is back in its box', await panel.getByLabel('Phone').inputValue() === '96759836');
+    check('reopen: one-question mode shows the question the user was on',
+      (await panel.locator('#questions .q:visible h3').textContent()) === 'Question 2 of 13');
+
+    // The reported bug: in the full list the user moves by Tab, not the pager, and the
+    // reopened panel claimed "question 1" no matter where they were.
+    await panel.getByLabel('Full list').check();
+    await panel.getByLabel('Notice period').fill('2 months');
+    await new Promise((r) => setTimeout(r, 500));
+    await panel.reload();
+    await panel.waitForFunction(() => !document.getElementById('summary').textContent.startsWith('Scanning'), null, { timeout: 15000 });
+    const again = await spoken(panel, /Back in BRIDGE/);
+    check('reopen: in the full list, the position is the question the user was really on',
+      /You were on question 11 of 13\./.test(again), again);
+    check('reopen: earlier drafts and the later one are all back',
+      await panel.getByLabel('Phone').inputValue() === '96759836' &&
+      await panel.getByLabel('Notice period').inputValue() === '2 months');
   });
 
   // =====================================================================================

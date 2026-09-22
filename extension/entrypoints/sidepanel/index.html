@@ -9,27 +9,32 @@
   <body>
     <header>
       <h1 id="title" tabindex="-1">BRIDGE</h1>
-      <!-- The one live region (spec §6.6). Everything spoken goes through it. -->
-      <p id="live" role="status" aria-live="polite"></p>
+      <!-- The one live region (spec §6.6). Everything spoken goes through it. Visually
+           hidden: announcements often repeat what the UI already shows (the scan summary),
+           so rendering them printed the same sentence twice. -->
+      <p id="live" class="vh" role="status" aria-live="polite"></p>
     </header>
 
     <main>
-      <section aria-labelledby="precheck-h">
+      <section>
         <h2 id="precheck-h">Application pre-check</h2>
         <p id="journey"></p>
         <p id="summary">Scanning the page…</p>
-        <ul id="barriers"></ul>
         <button type="button" id="rescan">Scan the page again</button>
         <button type="button" id="always-enable" hidden>Always enable BRIDGE on this site</button>
       </section>
 
-      <section aria-labelledby="questions-h">
+      <section>
         <h2 id="questions-h">Questions</h2>
-        <fieldset id="mode">
-          <legend>How to answer</legend>
+        <!-- Not a fieldset: a legend is spoken entering the group and again with each
+             radio, and these two names need no context. Question groups keep theirs —
+             there the group name IS the question. Same reason the sections above carry
+             no aria-labelledby: a named region's name is read, then its heading repeats it. -->
+        <div id="mode">
+          <p class="group-name">How to answer</p>
           <label class="choice"><input type="radio" name="mode" value="one" checked> One question at a time</label>
           <label class="choice"><input type="radio" name="mode" value="list"> Full list</label>
-        </fieldset>
+        </div>
         <div id="questions"></div>
         <div id="pager">
           <button type="button" id="prev">Previous question</button>
@@ -37,7 +42,7 @@
         </div>
       </section>
 
-      <section aria-labelledby="verify-h">
+      <section>
         <h2 id="verify-h">Check what the page contains</h2>
         <p>BRIDGE reads every answer back from the page itself, not from its own notes.</p>
         <button type="button" id="verify">Read back everything from the page</button>
@@ -50,7 +55,7 @@
         </div>
       </section>
 
-      <section aria-labelledby="report-h">
+      <section>
         <h2 id="report-h">Barrier report</h2>
         <p>For the employer: the accessibility barriers BRIDGE found, on every step you reached. It contains none of your answers and nothing about you.</p>
         <button type="button" id="export-json">Export barrier report as JSON</button>

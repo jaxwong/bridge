@@ -5,7 +5,6 @@
   --border: #8a8a8a;
   --focus: #0b57d0;
   --blocking: #b3261e;
-  --usability: #8a5a00;
   --ok: #146c2e;
   --surface: #f3f3f3;
   color-scheme: light;
@@ -18,7 +17,6 @@
     --border: #8f8f8f;
     --focus: #8ab4f8;
     --blocking: #f2b8b5;
-    --usability: #f5c26b;
     --ok: #7fd89a;
     --surface: #262626;
     color-scheme: dark;
@@ -36,18 +34,13 @@ h1 { font-size: 1.5rem; margin: 0 0 4px; }
 h2 { font-size: 1.15rem; margin: 24px 0 8px; }
 h3 { font-size: 1rem; margin: 0 0 6px; color: var(--muted); }
 #mode { border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; margin: 0 0 12px; }
-#mode legend { font-weight: 600; padding: 0 4px; }
+#mode .group-name { font-weight: 600; margin: 0 0 4px; }
 #mode .choice { display: block; margin: 4px 0; }
 #pager button, section > button { margin-right: 8px; }
 [hidden] { display: none !important; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
-#live { min-height: 1.5em; margin: 0 0 8px; color: var(--muted); }
 ul { padding-left: 0; list-style: none; margin: 8px 0; }
 li { margin: 6px 0; }
-.sev { font-weight: 700; }
-.sev-blocking { color: var(--blocking); }
-.sev-usability { color: var(--usability); }
-.sev-ok { color: var(--ok); }
 .q {
   border: 1px solid var(--border);
   border-radius: 6px;

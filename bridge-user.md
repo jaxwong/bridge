@@ -48,7 +48,8 @@ Screen readers can read accessible pages. They cannot make a badly built control
 Land on application page
   → BRIDGE detects known ATS domain, announces barrier count via live region
   → User presses Alt+Shift+B → side panel opens, focus moves to it
-SCAN      side panel lists fields and barriers, grouped by severity
+SCAN      side panel lists the questions and speaks the barrier count; the barriers
+          themselves go only into the §6.7 report, never into the panel
 TRANSLATE user answers each field in the side panel with native controls
 ACT       BRIDGE writes each answer into the real page control
 VERIFY    BRIDGE re-reads every value from the page DOM and reads it back
@@ -84,15 +85,15 @@ Output shown in the side panel:
 
 ```
 Application pre-check
-23 fields detected
-4 accessibility barriers
-  Blocking   Experience slider is not keyboard operable
-  Blocking   CV uploader requires drag and drop
-  Usability  Education dropdown has no accessible label
-  OK         Submit button is accessible
+23 questions found. 4 accessibility barriers, 2 blocking.
 ```
 
-Each item is a focusable list entry. Activating it jumps to that field's TRANSLATE control.
+The count is all the applicant sees and hears. The individual barriers are still detected
+and recorded — they are what the §6.7 report carries to the employer — but they are never
+rendered in the panel. That data is for the business side; an applicant opening BRIDGE
+wants to finish the form, and a screen reader reading a list of barrier sentences on
+every step is noise. Decided 2026-09-22; before that the panel listed each barrier as a
+focusable entry.
 
 ### 4.2 TRANSLATE
 
@@ -100,10 +101,10 @@ Each page control gets a native, correctly labelled equivalent in the side panel
 
 | Page control | Side panel control |
 |---|---|
-| Custom / visual slider | `<input type="number">` with min, max, step from the widget |
+| Custom / visual slider | `<input type="number">`; the widget's range stated in its description, never as min/max attributes (VoiceOver speaks a number input with min and max as a percentage of the range — 4 in 0..10 is "40%"). The page's control clamps what ACT writes and the read-back reports what it holds |
 | Div-based dropdown | Native `<select>` with the extracted options |
 | Drag-and-drop uploader | Native `<input type="file">` |
-| Custom date picker | Native `<input type="date">` |
+| Custom date picker | Plain text input, "Year-month-day, like 2026-10-31" as its description, checked in the panel before anything is sent (VoiceOver speaks Chrome's `type=date` segments as steppers with percentages — an empty Day is "-3.3%"). ACT still receives ISO |
 | Unlabelled text input | `<input>` with the inferred label, marked "label inferred" |
 
 Two modes: **one question at a time** (default, conversational) and **full list** (for users who want to review everything).
@@ -498,6 +499,17 @@ The session goes dormant, not destroyed, when the tab leaves the origin: that is
 SSO detour, not an abandoned application. The side panel does not reload on page
 navigation, so its UI state stays continuous on its own.
 
+Beside the session, `drafts:{tabId}:{origin}` holds what the user has chosen in the panel
+but not yet written — control values by field key, plus which question they were on —
+saved as they type (2026-09-22). The position is wherever keyboard focus last was inside
+a question, so it is right in both modes; the pager alone missed the full list, where
+the user moves by Tab. It exists because Alt+Shift+B reloads the panel (the only
+way to move focus back from the page, above), and that reload must cost nothing: on the
+next scan the drafts are restored if the page is still on the recorded step, and BRIDGE
+says "Back in BRIDGE. Your answers are kept. You were on question N of M." A draft whose
+step the page has left is not restored — the same "the page moved on" rule unwritten
+answers always had. Files are not drafted; the CV store above already covers them.
+
 #### Announce every step change
 
 On a `new-step` event the panel announces the new position through its live region:
@@ -561,8 +573,26 @@ useful, and POSTing to advance the wizard is submitting on the user's behalf —
 BRIDGE is useless if BRIDGE itself is inaccessible.
 
 - Native HTML elements only. Proper `<h1>`–`<h3>` structure so users can navigate by heading.
+  Headings, not named regions: a section named by its own heading is spoken twice ("Application
+  pre-check, region … heading level 2, Application pre-check"). Groups are named only where
+  the name carries meaning — a question's options — never for chrome like the mode picker
+  (2026-09-22).
 - One `aria-live="polite"` region for status ("Slider set to 2 years", "Could not fill Start date").
-- Visible and programmatic focus management: focus moves into the panel on open, to the next question after each answer.
+  It is visually hidden: announcements often repeat what the UI already shows, so rendering
+  them printed the same sentence twice. And it stays silent on open: a freshly loaded panel
+  is read by the screen reader once, top to bottom — heading, journey, summary, questions —
+  and announcing over that pass made VoiceOver interrupt it and repeat the summary (heard
+  three times, 2026-09-22). The known cost: if a scan outlives VoiceOver's read of the
+  summary line, the user hears "Scanning the page…" and must re-read or rescan; on the
+  fixtures the scan wins by a wide margin.
+- Spoken values are shaped for the ear: a run of seven or more digits (a phone number, an
+  id — never a quantity) is spaced out so the reader speaks each digit instead of
+  "ninety-six million…". Visible text and everything written to the page keep the real value.
+- Visible and programmatic focus management: focus moves into the panel on open. It never
+  moves on a write: a screen reader speaks whatever receives focus before a polite
+  announcement, so auto-advancing introduced the next question before confirming the one
+  just answered (2026-09-22). The confirmation says how to move on instead — Tab in the
+  full list, the Next question button in one-at-a-time.
 - Zero axe violations on the panel.
 - Tested end to end with NVDA on Windows before demo.
 
@@ -792,7 +822,7 @@ Build, in `extension/test/fixtures/acme/index.html` and `lib/`:
   selector, then by accessible name plus ordinal among controls of the same kind, then
   "Could not fill".
 
-Verify, all in `test/e2e.mjs`: each new barrier is listed; slider set to 2 moves the
+Verify, all in `test/e2e.mjs`: each new barrier lands in the exported report; slider set to 2 moves the
 page's thumb and reads back 2; CV written and rendered; date read back; two languages
 checked, one unchecked; the shadow-root checkbox offered and written; the popup reported
 as `modal-without-dialog-role`; a field the fixture re-renders after 500 ms is still
@@ -870,8 +900,8 @@ enable BRIDGE on this site", shown only when the origin is not in the built-in l
 calling `permissions.request` synchronously inside the click and then asking the service
 worker to `registerContentScripts`; the on-load announcement per the decision above.
 
-Verify: both modes render the same questions; a write in one-question mode moves focus
-to the next question's control; a second file question on `modal.html` step 3 shows the
+Verify: both modes render the same questions; a write leaves focus on the Write button
+and the confirmation says how to move on; a second file question on `modal.html` step 3 shows the
 reuse button and writes the stored CV; the exported JSON parses, has no field values
 and no identity, and its keys match `bridge-business.md` §6.1; the fixture page's
 injected status region reads "BRIDGE found N barriers on this form" about a second after
@@ -963,9 +993,11 @@ slider itself, kept because it demos well (§7).
 2. BRIDGE's status region says "BRIDGE found 12 accessibility barriers on this form. Press
    Alt+Shift+B to open BRIDGE." The panel then says 13: the extra one is the cross-origin
    frame, which only the panel can know is unreachable.
-   Press it. The panel opens, announces "13 questions found. 13 accessibility barriers, 9
-   blocking", and asks the first question.
-3. Answer "Full name". BRIDGE confirms from the page and moves to the next question.
+   Press it. The panel opens and VoiceOver reads it once, in order: "BRIDGE", "Application
+   pre-check", "13 questions found. 13 accessibility barriers, 9 blocking", then the first
+   question. Nothing is announced over that pass and nothing is spoken twice.
+3. Answer "Full name". BRIDGE confirms from the page — heard in full, since focus stays
+   put — and says how to reach the next question.
 4. "Highest education completed, label inferred": choose Bachelor's. Split screen: the
    page's dropdown shows Bachelor's.
 5. The visa question, now a real group: choose No. The page's radio is checked.
@@ -1020,7 +1052,8 @@ user's password manager. Say this out loud in the pitch; it reads as judgement, 
   by hand** on Chrome 154, macOS, 2026-09-21. After Alt+Shift+B opens the panel, Tab moves
   inside it. A panel that is already open cannot take focus from the page: `window.focus()` in
   the panel was tried and did nothing. So Alt+Shift+B closes an open panel and shows it again.
-  The panel reloads, and answers typed but not written are lost. Checked by hand the same
+  The panel reloads; typed answers survive it as session-storage drafts (§6.5), restored
+  while the page is still on the same step. Checked by hand the same
   day: the panel reopens and Tab moves inside it. F6 does nothing on macOS;
   Cmd+Option+Down arrow reaches the panel in four presses.
 - ~~Can a content script's `focus()` take keyboard focus *out of* the side panel?~~ **No, measured

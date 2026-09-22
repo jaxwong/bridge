@@ -7,7 +7,7 @@ import { inferLabels } from '../../lib/infer';
 import { send, type Frame, type FormChanged, type WorkerEvent, type WorkerRequest } from '../../lib/messages';
 import { buildReport, reportFileStem, reportMarkdown } from '../../lib/report';
 import type {
-  ApplicationSession, Barrier, FieldDescriptor, FillResult, ScanResult, Severity, StepHint,
+  ApplicationSession, Barrier, FieldDescriptor, FillResult, ScanResult, StepHint,
 } from '../../lib/types';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -70,6 +70,9 @@ interface StepState {
 }
 
 let fields: PanelField[] = [];
+/** Collected for the §6.7 report and the summary count only. Individual barriers are never
+ *  rendered in the panel: they are the employer's data, and a screen reader reading the
+ *  list on every step was noise to an applicant who just wants to finish the form. */
 let pageBarriers: Barrier[] = [];
 let step: StepState | null = null;
 let session: ApplicationSession | null = null;
@@ -97,8 +100,11 @@ let current = 0;
 const inferred = new Map<string, string>();
 const nameOf = (f: PanelField) => inferred.get(f.key) ?? f.label;
 
-const SEVERITY_WORD: Record<Severity, string> = { blocking: 'Blocking', usability: 'Usability', ok: 'OK' };
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+/** For spoken sentences only: a run of seven or more digits is a phone number or an id,
+ *  never a quantity, but a screen reader says "96759836" as ninety-six million odd.
+ *  Spacing the digits makes it read them one by one. Visible text keeps the real value. */
+const speakDigits = (text: string) => text.replace(/\d{7,}/g, (run) => run.split('').join(' '));
 
 const fieldByKey = (key: string) => fields.find((f) => f.key === key);
 const questionEl = (key: string) => [...$('questions').children].find((q) => (q as HTMLElement).dataset.key === key) as HTMLElement | undefined;
@@ -123,34 +129,6 @@ function journeyText(s: StepState) {
     return `Step ${s.index} of ${s.total}: ${s.heading}.${next ? ` Next: ${next}.` : ''}`;
   }
   return '';
-}
-
-function renderBarriers() {
-  const ul = $('barriers');
-  ul.replaceChildren();
-  const items: { sev: Severity; message: string; key?: string }[] = [
-    ...pageBarriers.map((b) => ({ sev: b.severity, message: b.message })),
-    ...fields.flatMap((f) => f.barriers.map((b) => ({ sev: b.severity, message: b.message, key: f.key }))),
-  ].sort((a, b) => (a.sev === b.sev ? 0 : a.sev === 'blocking' ? -1 : 1));
-
-  for (const item of items) {
-    const li = document.createElement('li');
-    const sev = document.createElement('span');
-    sev.className = `sev sev-${item.sev}`;
-    sev.textContent = `${SEVERITY_WORD[item.sev]}: `;
-    if (item.key) {
-      // Each barrier tied to a field jumps to that question (§4.1).
-      const key = item.key;
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.append(sev, document.createTextNode(item.message));
-      btn.addEventListener('click', () => goTo(key));
-      li.append(btn);
-    } else {
-      li.append(sev, document.createTextNode(item.message));
-    }
-    ul.append(li);
-  }
 }
 
 /** What a question's controls were built from. A kept question whose options or range the
@@ -212,17 +190,37 @@ function buildQuestion(f: PanelField): HTMLElement {
       ctl.rows = 4;
     } else {
       const inp = document.createElement('input');
-      inp.type = ({ checkbox: 'checkbox', file: 'file', slider: 'number', date: 'date' } as Record<string, string>)[f.kind] || 'text';
-      if (f.kind === 'slider' && f.range) {
-        inp.min = String(f.range.min);
-        inp.max = String(f.range.max);
-        inp.step = String(f.range.step);
-      }
+      // Dates are a text input, not type=date: VoiceOver speaks Chrome's date segments
+      // as steppers with percentages (an empty Day is "-3.3%"). The format is described
+      // below and checked in write(), and the page still receives the same ISO string.
+      inp.type = ({ checkbox: 'checkbox', file: 'file', slider: 'number' } as Record<string, string>)[f.kind] || 'text';
       ctl = inp;
     }
     ctl.id = ctlId;
     if (f.required) ctl.setAttribute('aria-required', 'true');
     if (f.kind === 'checkbox') wrap.append(ctl, lab); else wrap.append(lab, ctl);
+
+    if (f.kind === 'date') {
+      const note = document.createElement('p');
+      note.className = 'note';
+      note.id = `note-${ctlId}`;
+      note.textContent = 'Year-month-day, like 2026-10-31.';
+      ctl.setAttribute('aria-describedby', note.id);
+      wrap.append(note);
+    }
+
+    if (f.kind === 'slider' && f.range) {
+      // The range is a description, never min/max attributes: VoiceOver reads a number
+      // input with min and max as a percentage of the range ("4" in 0..10 is spoken
+      // "40%"). The page's own control clamps what ACT writes, and the read-back reports
+      // what it actually holds, so the panel loses nothing by not validating here.
+      const note = document.createElement('p');
+      note.className = 'note';
+      note.id = `note-${ctlId}`;
+      note.textContent = `From ${f.range.min} to ${f.range.max}${f.range.step !== 1 ? `, in steps of ${f.range.step}` : ''}.`;
+      ctl.setAttribute('aria-describedby', note.id);
+      wrap.append(note);
+    }
 
     if (f.kind === 'combobox' && !hasOptions) {
       const note = document.createElement('p');
@@ -302,6 +300,7 @@ function goTo(key: string) {
   if (i < 0) return;
   current = i;
   applyMode();
+  saveDraftsSoon();
   firstControl(key)?.focus();
 }
 
@@ -310,6 +309,76 @@ function goTo(key: string) {
 interface StoredCv { name: string; type: string; data: string }
 let storedCv: StoredCv | null = null;
 const cvKey = () => `cv:${tabId}`;
+
+// --- drafts -----------------------------------------------------------------------------
+// What the user has chosen in the panel but not yet written, plus where they were. Kept in
+// storage.session so Alt+Shift+B — which reloads the panel because an open panel cannot
+// take focus back from the page — costs nothing. Scoped to tab, origin and step: a draft
+// never survives onto a different step (the page moved on; saying so is existing behavior).
+
+interface DraftStore { stepIndex: number; current: number; values: Record<string, string> }
+const draftsKey = (origin: string) => `drafts:${tabId}:${origin}`;
+let draftSaveTimer: number | undefined;
+
+/** Control values straight from the DOM, same shapes readAnswer() sends. Files are left
+ *  out: the CV already has its own store and reuse button. */
+function collectDrafts(): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const f of fields) {
+    if (f.kind === 'file') continue;
+    const q = questionEl(f.key);
+    if (!q) continue;
+    if (f.kind === 'radio-group') {
+      const c = q.querySelector<HTMLInputElement>('input[type=radio]:checked');
+      if (c) values[f.key] = c.value;
+    } else if (f.kind === 'checkbox-group') {
+      const on = [...q.querySelectorAll<HTMLInputElement>('input[type=checkbox]:checked')].map((c) => c.value);
+      if (on.length) values[f.key] = JSON.stringify(on);
+    } else if (f.kind === 'checkbox') {
+      if (q.querySelector<HTMLInputElement>('input')!.checked) values[f.key] = 'checked';
+    } else {
+      const ctl = q.querySelector<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input, select, textarea');
+      if (ctl?.value.trim()) values[f.key] = ctl.value;
+    }
+  }
+  return values;
+}
+
+function saveDraftsSoon() {
+  clearTimeout(draftSaveTimer);
+  draftSaveTimer = window.setTimeout(() => {
+    if (!session || !step) return;
+    const store: DraftStore = { stepIndex: session.currentStepIndex, current, values: collectDrafts() };
+    browser.storage.session.set({ [draftsKey(step.origin)]: store })
+      .catch((e) => diag('Drafts', `not saved: ${String(e)}`));
+  }, 300);
+}
+
+/** Puts stored values back into freshly built controls; returns how many. A single
+ *  unreadable entry is skipped and logged, never allowed to break the scan. */
+function applyDrafts(values: Record<string, string>): number {
+  let restored = 0;
+  for (const f of fields) {
+    const v = values[f.key];
+    if (v == null || f.kind === 'file') continue;
+    const q = questionEl(f.key);
+    if (!q) continue;
+    try {
+      if (f.kind === 'radio-group' || f.kind === 'checkbox-group') {
+        const wanted = f.kind === 'radio-group' ? [v] : (JSON.parse(v) as string[]);
+        q.querySelectorAll<HTMLInputElement>('input[type=radio], input[type=checkbox]').forEach((c) => { c.checked = wanted.includes(c.value); });
+      } else if (f.kind === 'checkbox') {
+        q.querySelector<HTMLInputElement>('input')!.checked = v === 'checked';
+      } else {
+        q.querySelector<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input, select, textarea')!.value = v;
+      }
+      restored++;
+    } catch (e) {
+      diag('Drafts', `unreadable draft for ${f.key}: ${String(e)}`);
+    }
+  }
+  return restored;
+}
 
 async function readAnswer(f: PanelField): Promise<string | null> {
   const q = questionEl(f.key)!;
@@ -345,6 +414,13 @@ async function write(key: string, given: string | null) {
     firstControl(key)?.focus();
     return;
   }
+  // The boundary check for the plain-text date control above: the page-side fill expects
+  // exactly this shape, so a wrong format fails here, named, instead of on the page.
+  if (f.kind === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(answer)) {
+    announce(`Type ${nameOf(f)} as year-month-day, like 2026-10-31.`);
+    firstControl(key)?.focus();
+    return;
+  }
 
   let res: FillResult;
   try {
@@ -360,7 +436,7 @@ async function write(key: string, given: string | null) {
     status.className = 'status fail';
     const detail = res.error || `The page shows "${res.readBack || 'nothing'}".`;
     status.textContent = `Could not fill: may need sighted help. ${detail}`;
-    announce(`Could not fill ${nameOf(f)}. ${detail}`);
+    announce(`Could not fill ${nameOf(f)}. ${speakDigits(detail)}`);
     return;
   }
 
@@ -372,9 +448,14 @@ async function write(key: string, given: string | null) {
 
   const i = fields.findIndex((x) => x.key === key);
   const next = fields[i + 1];
-  announce(`${nameOf(f)}: ${res.readBack}. Confirmed on the page.${remembered}${next ? ` Next: ${nameOf(next)}.` : ' That was the last question.'}`);
-  // Focus moves to the next question after each answer (§6.6).
-  if (next) goTo(next.key); else $('verify').focus();
+  // Focus stays on the Write button (§6.6): a screen reader speaks whatever gets focus
+  // before a polite announcement, so moving to the next question here made VoiceOver
+  // introduce question 8 first and only then confirm question 7. The user moves on
+  // themselves; the announcement says how.
+  const onward = next
+    ? (mode === 'one' ? ` Press Next question for ${nameOf(next)}.` : ` Next: ${nameOf(next)}.`)
+    : ' That was the last question.';
+  announce(`${nameOf(f)}: ${speakDigits(res.readBack)}. Confirmed on the page.${remembered}${onward}`);
 }
 
 async function rememberCv(cv: StoredCv): Promise<string> {
@@ -410,7 +491,7 @@ async function verifyAll(): Promise<boolean> {
     const value = r?.found ? (r.value || 'empty') : 'no longer on the page';
     li.textContent = `${nameOf(f)}: ${value}`;
     ul.append(li);
-    if (r?.found && r.value && r.value !== 'not checked') filled.push(`${nameOf(f)}, ${r.value}`);
+    if (r?.found && r.value && r.value !== 'not checked') filled.push(`${nameOf(f)}, ${speakDigits(r.value)}`);
     else empty.push(nameOf(f));
   }
   let forward = null;
@@ -597,7 +678,6 @@ async function scanOnce(reason: Reason) {
     $('summary').textContent = msg;
     announce(msg);
     fields = []; pageBarriers = []; step = null;
-    renderBarriers();
     renderQuestions(true);
     return;
   }
@@ -667,11 +747,20 @@ async function scanOnce(reason: Reason) {
   if (verdict !== 'fields-changed') { setVerified(false); current = 0; inferred.clear(); }
 
   await recordStep(now, topScan.scannedAt, verdict === 'new-step');
+
+  // A reopened panel (or a tab switched back to) picks up the drafts for this same step.
+  // Anything else — a new step, another origin — fails the stepIndex match and starts
+  // clean, which is the existing "the page moved on" rule for unwritten answers.
+  const dkey = draftsKey(now.origin);
+  const storedDrafts = (await browser.storage.session.get(dkey))[dkey] as DraftStore | undefined;
+  const draftsApply = verdict === 'first' && storedDrafts?.stepIndex === session!.currentStepIndex;
+  if (draftsApply) current = storedDrafts!.current;
+
   const journey = journeyText(now);
   $('journey').textContent = journey;
   $('summary').textContent = summaryText();
-  renderBarriers();
   renderQuestions(verdict !== 'fields-changed');
+  const restored = draftsApply ? applyDrafts(storedDrafts!.values) : 0;
   // Same step, new document: the page reloaded. What the user typed here is kept, but
   // every "On the page" confirmation describes a document that no longer exists.
   const reloaded = verdict === 'fields-changed' && prev!.pageId !== now.pageId;
@@ -683,8 +772,17 @@ async function scanOnce(reason: Reason) {
   void offerAlwaysEnable(now.origin);
 
   if (verdict === 'first') {
-    announce(`${journey ? `${journey} ` : ''}${summaryText()}`);
-    if (mode === 'one' && fields.length && reason !== 'open') firstControl(fields[0].key)?.focus();
+    // On open, announce nothing: the panel is a freshly loaded document, so a screen
+    // reader reads it once, top to bottom — heading, journey, this same summary, the
+    // questions. Announcing on top of that made VoiceOver interrupt the pass and speak
+    // the summary again (heard three times with the live region's own text). The one
+    // exception is restored work, which the reading order cannot tell the user about.
+    if (reason === 'open') {
+      if (restored) announce(`Back in BRIDGE. Your answers are kept. You were on question ${current + 1} of ${fields.length}.`);
+    } else {
+      announce(`${journey ? `${journey} ` : ''}${summaryText()}`);
+      if (mode === 'one' && fields.length) firstControl(fields[current].key)?.focus();
+    }
   } else if (verdict === 'new-step') {
     const where = journey || (now.total === 1 ? `New page: ${now.heading}.` : `New step: ${now.heading}. Total number of steps unknown.`);
     const lost = unwritten.length ? ` The page moved on before ${unwritten.join(', ')} was written; that answer was not saved.` : '';
@@ -772,6 +870,21 @@ function focusHeading() {
 }
 
 // --- boot -----------------------------------------------------------------------------
+
+// Every keystroke and choice becomes a draft (debounced), so a panel reload loses nothing.
+$('questions').addEventListener('input', saveDraftsSoon);
+$('questions').addEventListener('change', saveDraftsSoon);
+// "Which question the user is on" is owned by keyboard focus, not by the pager: in the
+// full list the user moves by Tab and the pager never runs, so tracking only goTo()
+// told a reopened panel "question 1" regardless of where they really were.
+$('questions').addEventListener('focusin', (e) => {
+  const key = (e.target as HTMLElement).closest<HTMLElement>('.q')?.dataset.key;
+  const i = key ? fields.findIndex((f) => f.key === key) : -1;
+  if (i >= 0 && i !== current) {
+    current = i;
+    saveDraftsSoon();
+  }
+});
 
 $('rescan').addEventListener('click', () => void runScan('manual'));
 $('verify').addEventListener('click', () => void verifyAll());
