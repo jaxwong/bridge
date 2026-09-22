@@ -1,77 +1,262 @@
+/* BRIDGE side panel.
+ *
+ * Native elements only (spec §6.6). The panel is the thing a blind applicant actually
+ * operates, so contrast and focus are requirements, not polish: every text token is checked
+ * against the surface it sits on in both themes at 4.5:1 or better, control borders at 3:1
+ * or better. The panel is narrow — assume about 340px and never rely on width.
+ *
+ * Colours match the employer dashboard so the two halves read as one product.
+ */
+
 :root {
-  --bg: #ffffff;
-  --fg: #1a1a1a;
-  --muted: #555555;
-  --border: #8a8a8a;
-  --focus: #0b57d0;
-  --blocking: #b3261e;
-  --ok: #146c2e;
-  --surface: #f3f3f3;
   color-scheme: light;
+
+  --bg: #f7f9fc;
+  --surface: #ffffff;
+  --surface-sunken: #eef2f7;
+
+  --fg: #0c1119;           /* 17.8:1 on --surface */
+  --muted: #47535f;        /*  8.3:1 on --surface */
+
+  --border: #d6dee8;       /* dividers */
+  --border-strong: #6b7784;/*  4.1:1 on --surface — control borders */
+
+  --brand: #3730a3;        /*  9.2:1 on --surface */
+  --brand-ink: #ffffff;
+  --brand-soft: #eef0fd;
+  --focus: #1b4dd8;
+
+  --blocking: #9b1c31;
+  --blocking-bg: #fff1f3;
+  --blocking-line: #e8a2ae;
+
+  --ok: #0f5132;
+  --ok-bg: #eefaf2;
+  --ok-line: #9ed3b5;
+
+  --radius: 10px;
+  --radius-sm: 7px;
 }
+
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1b1b1b;
-    --fg: #f1f1f1;
-    --muted: #b8b8b8;
-    --border: #8f8f8f;
-    --focus: #8ab4f8;
-    --blocking: #f2b8b5;
-    --ok: #7fd89a;
-    --surface: #262626;
     color-scheme: dark;
+
+    --bg: #0a0e14;
+    --surface: #121822;
+    --surface-sunken: #0e141c;
+
+    --fg: #e8eef6;           /* 14.9:1 on --surface */
+    --muted: #a8b6c6;        /*  7.9:1 on --surface */
+
+    --border: #26313f;
+    --border-strong: #7d8b9b;
+
+    --brand: #a9b4ff;        /*  8.7:1 on --surface */
+    --brand-ink: #0a0e14;
+    --brand-soft: #1b2136;
+    --focus: #7aa2ff;
+
+    --blocking: #ffb3bd;
+    --blocking-bg: #2c1218;
+    --blocking-line: #7d3742;
+
+    --ok: #8fe0b0;
+    --ok-bg: #0e2419;
+    --ok-line: #2f6b4c;
   }
 }
+
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
-  padding: 16px;
+  padding: 18px 16px 40px;
   background: var(--bg);
   color: var(--fg);
-  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
-h1 { font-size: 1.5rem; margin: 0 0 4px; }
-h2 { font-size: 1.15rem; margin: 24px 0 8px; }
-h3 { font-size: 1rem; margin: 0 0 6px; color: var(--muted); }
-#mode { border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; margin: 0 0 12px; }
-#mode .group-name { font-weight: 600; margin: 0 0 4px; }
-#mode .choice { display: block; margin: 4px 0; }
-#pager button, section > button { margin-right: 8px; }
-[hidden] { display: none !important; }
-:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
-ul { padding-left: 0; list-style: none; margin: 8px 0; }
-li { margin: 6px 0; }
-.q {
+
+/* --- headings ------------------------------------------------------------------- */
+h1 {
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: var(--brand);
+  margin: 0 0 14px;
+}
+h1:focus-visible { outline-offset: 4px; }
+
+h2 {
+  font-size: 1.12rem;
+  letter-spacing: -0.01em;
+  margin: 26px 0 10px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+section:first-of-type h2 { margin-top: 4px; padding-top: 0; border-top: 0; }
+
+/* The "Question 2 of 5" eyebrow above each question. */
+h3 {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+#journey, #summary { margin: 6px 0; }
+#summary { font-weight: 600; }
+
+/* --- focus, one treatment everywhere ---------------------------------------------- */
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* --- how-to-answer switch --------------------------------------------------------- */
+#mode {
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 12px;
-  margin: 0 0 12px;
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin: 0 0 16px;
   background: var(--surface);
 }
-.q fieldset { border: 0; margin: 0; padding: 0; }
-.q legend, .q > label { display: block; font-weight: 600; margin-bottom: 6px; }
-.q input[type=text], .q textarea, .q select { width: 100%; font: inherit; padding: 6px; }
-.q .choice { display: block; margin: 4px 0; }
-.q .note { color: var(--muted); font-size: 0.9rem; margin: 6px 0 0; }
-.q .status { margin: 8px 0 0; }
-.q .status.ok { color: var(--ok); }
-.q .status.fail { color: var(--blocking); }
+#mode .group-name { font-weight: 700; margin: 0 0 6px; }
+#mode .choice { display: block; margin: 6px 0; }
+
+/* --- lists ------------------------------------------------------------------------ */
+ul { padding-left: 0; list-style: none; margin: 10px 0; }
+li { margin: 8px 0; }
+#verify-results li {
+  border-left: 3px solid var(--border-strong);
+  padding-left: 12px;
+}
+
+/* --- a question ------------------------------------------------------------------- */
+.q {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin: 0 0 14px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(12 17 25 / 5%);
+}
+.q fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.q legend, .q > label {
+  display: block;
+  font-weight: 700;
+  font-size: 1.02rem;
+  line-height: 1.4;
+  margin-bottom: 10px;
+}
+.q input[type=text], .q input[type=date], .q input[type=number], .q textarea, .q select {
+  width: 100%;
+  font: inherit;
+  padding: 10px 12px;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+.q textarea { min-height: 5.5rem; resize: vertical; }
+.q input[type=file] { width: 100%; font: inherit; color: var(--fg); }
+.q .choice {
+  display: block;
+  margin: 8px 0;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+.q .note { color: var(--muted); font-size: 0.9rem; margin: 8px 0 0; }
+.q .reuse { color: var(--muted); font-size: 0.9rem; margin: 8px 0 0; }
+
+/* Result of writing an answer into the page. The word carries it; colour reinforces. */
+.q .status {
+  margin: 12px 0 0;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.q .status:empty { display: none; }
+.q .status.ok { color: var(--ok); background: var(--ok-bg); border: 1px solid var(--ok-line); }
+.q .status.fail { color: var(--blocking); background: var(--blocking-bg); border: 1px solid var(--blocking-line); }
+
+/* --- buttons ----------------------------------------------------------------------- */
 button {
   font: inherit;
-  padding: 6px 12px;
-  margin-top: 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg);
+  font-weight: 600;
+  padding: 10px 16px;
+  margin-top: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
   color: var(--fg);
   cursor: pointer;
 }
+button:hover { background: var(--surface-sunken); }
+section > button { margin-right: 8px; }
+
+/* Previous and Next belong side by side: stacked, they push the question off a short panel. */
+#pager { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+#pager button { flex: 1 1 8rem; margin-top: 0; margin-right: 0; }
+
+/* Writing the answer into the real page is the primary action on a question. */
+.q .write {
+  background: var(--brand);
+  color: var(--brand-ink);
+  border-color: var(--brand);
+  width: 100%;
+  margin-top: 14px;
+}
+.q .write:hover { filter: brightness(1.08); }
+
+/* Submitting is the one irreversible action, so it does not look like the rest. */
+#submit-app, #submit-yes {
+  background: var(--blocking-bg);
+  border-color: var(--blocking-line);
+  color: var(--blocking);
+  font-weight: 700;
+}
+#submit-confirm {
+  border: 1px solid var(--blocking-line);
+  border-left: 4px solid var(--blocking);
+  background: var(--blocking-bg);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin-top: 12px;
+}
+#submit-confirm #submit-question { margin: 0 0 6px; font-weight: 700; color: var(--blocking); }
+
+/* --- diagnostics -------------------------------------------------------------------- */
+details#diagnostics {
+  margin-top: 28px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+details#diagnostics summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--muted);
+}
+dl { font-size: 0.9rem; margin: 10px 0 0; }
+dt { font-weight: 700; }
+dd { margin: 0 0 8px; color: var(--muted); }
+
+/* --- visually hidden, still spoken ---------------------------------------------------- */
 .vh {
   position: absolute !important;
   width: 1px; height: 1px;
   overflow: hidden; clip: rect(0 0 0 0);
   white-space: nowrap;
 }
-dl { font-size: 0.9rem; }
-dt { font-weight: 600; }
-dd { margin: 0 0 6px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
