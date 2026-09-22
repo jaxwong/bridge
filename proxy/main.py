@@ -22,6 +22,11 @@ log = logging.getLogger("bridge.proxy")
 MODEL = "deepseek-flash"
 # DeepSeek JSON mode requires an explicit max_tokens so the JSON is not truncated midway.
 MAX_TOKENS = 16000
+# Greedy decoding. DeepSeek's default is 1.0, and at that setting the same control came back
+# as "LinkedIn", "LinkedIn profile" or "LinkedIn Profile" across runs. The dashboard compares
+# barriers by rule + label, so a name that is worded differently on each pass reads as a
+# different question. Nothing here wants variety; it wants the same answer twice.
+TEMPERATURE = 0
 
 api_key = os.environ.get("DEEPSEEK_API_KEY")
 if not api_key:
@@ -124,6 +129,7 @@ def infer_labels(request: InferRequest) -> InferResponse:
     response = client.chat.completions.create(
         model=MODEL,
         max_tokens=MAX_TOKENS,
+        temperature=TEMPERATURE,
         response_format={"type": "json_object"},
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},

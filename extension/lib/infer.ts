@@ -29,9 +29,17 @@ async function cropPng(tabId: number, f: Target, note: (m: string) => void): Pro
   await new Promise((r) => setTimeout(r, 300)); // let the scroll settle before the picture
   const shot = await browser.tabs.captureVisibleTab(tab.windowId, { format: 'png' });
   const img = await createImageBitmap(await (await fetch(shot)).blob());
+  // The rectangle is in CSS pixels; the photograph is in image pixels. The ratio between
+  // them is measured from the photograph, not taken from the page's devicePixelRatio: the
+  // two disagree whenever the window's backing scale is not the ratio the page reports
+  // (a 2x display driven at 1x is the common one), and then every crop is cut from the
+  // wrong place. That failure is silent and expensive — the model is handed blank pixels
+  // and confidently names the control after something that is not there.
+  const scale = img.width / rect.viewportWidth;
+  if (!Number.isFinite(scale) || scale <= 0) { note(`${f.id}: no crop (could not measure the screenshot scale)`); return undefined; }
   const pad = 12;
-  const canvas = new OffscreenCanvas(Math.round((rect.width + pad * 2) * rect.dpr), Math.round((rect.height + pad * 2) * rect.dpr));
-  canvas.getContext('2d')!.drawImage(img, (rect.x - pad) * rect.dpr, (rect.y - pad) * rect.dpr, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
+  const canvas = new OffscreenCanvas(Math.round((rect.width + pad * 2) * scale), Math.round((rect.height + pad * 2) * scale));
+  canvas.getContext('2d')!.drawImage(img, (rect.x - pad) * scale, (rect.y - pad) * scale, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
   const bytes = new Uint8Array(await (await canvas.convertToBlob({ type: 'image/png' })).arrayBuffer());
   let bin = '';
   for (const b of bytes) bin += String.fromCharCode(b);

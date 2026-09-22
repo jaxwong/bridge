@@ -397,7 +397,7 @@ try {
   // The privacy rule itself (§6.4): a control may be photographed only while it is empty.
   const rect = (fieldId) => sw.evaluate(({ id, fieldId }) => chrome.tabs.sendMessage(id, { type: 'bridge/rect', fieldId }, { frameId: 0 }), { id: tabId, fieldId });
   const before = await rect('f3');
-  check('privacy: an empty control yields a crop rectangle', !!before && before.width > 0 && before.dpr > 0, JSON.stringify(before));
+  check('privacy: an empty control yields a crop rectangle', !!before && before.width > 0 && before.viewportWidth > 0, JSON.stringify(before));
   await panel.getByLabel(/Preferred office/).selectOption('Hanoi');
   await panel.getByRole('button', { name: 'Write Preferred office to page' }).click();
   await status('Preferred office').filter({ hasText: /On the page|Could not/ }).waitFor();
