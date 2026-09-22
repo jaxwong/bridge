@@ -501,7 +501,9 @@ navigation, so its UI state stays continuous on its own.
 
 Beside the session, `drafts:{tabId}:{origin}` holds what the user has chosen in the panel
 but not yet written — control values by field key, plus which question they were on —
-saved as they type (2026-09-22). It exists because Alt+Shift+B reloads the panel (the only
+saved as they type (2026-09-22). The position is wherever keyboard focus last was inside
+a question, so it is right in both modes; the pager alone missed the full list, where
+the user moves by Tab. It exists because Alt+Shift+B reloads the panel (the only
 way to move focus back from the page, above), and that reload must cost nothing: on the
 next scan the drafts are restored if the page is still on the recorded step, and BRIDGE
 says "Back in BRIDGE. Your answers are kept. You were on question N of M." A draft whose

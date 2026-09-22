@@ -548,6 +548,20 @@ try {
     check('reopen: the typed, unwritten answer is back in its box', await panel.getByLabel('Phone').inputValue() === '96759836');
     check('reopen: one-question mode shows the question the user was on',
       (await panel.locator('#questions .q:visible h3').textContent()) === 'Question 2 of 13');
+
+    // The reported bug: in the full list the user moves by Tab, not the pager, and the
+    // reopened panel claimed "question 1" no matter where they were.
+    await panel.getByLabel('Full list').check();
+    await panel.getByLabel('Notice period').fill('2 months');
+    await new Promise((r) => setTimeout(r, 500));
+    await panel.reload();
+    await panel.waitForFunction(() => !document.getElementById('summary').textContent.startsWith('Scanning'), null, { timeout: 15000 });
+    const again = await spoken(panel, /Back in BRIDGE/);
+    check('reopen: in the full list, the position is the question the user was really on',
+      /You were on question 11 of 13\./.test(again), again);
+    check('reopen: earlier drafts and the later one are all back',
+      await panel.getByLabel('Phone').inputValue() === '96759836' &&
+      await panel.getByLabel('Notice period').inputValue() === '2 months');
   });
 
   // =====================================================================================
