@@ -40,8 +40,11 @@ const SEVERITY_WORD: Record<Severity, string> = {
 
 const formTitle = (f: Form): string => `${f.portal}${f.pagePath}`;
 
+// The date only, no clock time. The demo seed is captured ahead of time, so a clock time on
+// stage would read as earlier than the submit the audience just watched. The full time stays
+// in the datetime attribute.
 const when = (iso: string): HTMLElement =>
-  el('time', { datetime: iso, text: new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) });
+  el('time', { datetime: iso, text: new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' }) });
 
 // --- state ---------------------------------------------------------------------------
 // Every report the page holds. Forms are derived from it, never stored alongside it: two

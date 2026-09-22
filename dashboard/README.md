@@ -47,7 +47,8 @@ make demo-seed       # from the repo root: rewrites src/demo-seed.json from a re
 Every other run of the e2e suite compares the seed with a fresh scan, ignoring only
 `generatedAt`, and fails if they differ. A change to the form therefore cannot leave the
 dashboard showing findings the form no longer has. Re-run `make demo-seed` on the morning of
-a demo so the date on the page is recent.
+a demo so the date on the page is recent. The page shows scan dates without a clock time,
+because the seed's capture time would read as earlier than the submit the audience just saw.
 
 The page passes the seed through `parseReport()` like any report. A seed that fails that
 check stops the page at load, and `npm test` fails on it too.

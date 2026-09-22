@@ -136,7 +136,10 @@ try {
   await section('single page', async () => {
   // apply.html is the applicant demo page. index.html belongs to the employer demo: one form
   // in three versions (?v=2, ?v=3), which the dashboard fixtures were exported from.
-  const { page, panel, tabId } = await open('apply.html');
+  // ?discard turns on the Notice period field that throws away what is written to it; the
+  // demo URL, plain apply.html, keeps every answer. pagePath drops the query, so the report
+  // (and the demo seed check below) is the same either way.
+  const { page, panel, tabId } = await open('apply.html?discard');
   check('found the test tab', typeof tabId === 'number', `tabId=${tabId}`);
 
   // --- label inference, proxy not running (§6.4 failure path) --------------------------

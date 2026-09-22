@@ -1067,10 +1067,11 @@ slider itself, kept because it demos well (§7).
 5. The visa question, now a real group: choose No. The page's radio is checked.
 6. Years of experience: type 2. The page's slider thumb moves.
 7. CV: choose a file in the panel's native picker. The drop zone shows resume.pdf.
-8. "Notice period": BRIDGE says "Could not fill: may need sighted help" because the page
-   discards it. Say the line: BRIDGE never claims a success it did not read back.
+8. "Notice period": answer it; BRIDGE confirms it from the page. Leave "Referral code"
+   empty. (`apply.html?discard` makes the page throw Notice period away instead, to show
+   BRIDGE never claiming a success it did not read back. The demo no longer uses it.)
 9. VERIFY: "Your application contains: Full name, Zheng Wei. …  1 question is empty:
-   Notice period." Press Alt+Shift+S again; focus lands on "Submit my application" in the
+   Referral code." Press Alt+Shift+S again; focus lands on "Submit my application" in the
    panel. Press it: BRIDGE asks "Submit your application to localhost:8765? 1 question is
    empty. This cannot be undone." and puts focus on Cancel. Choose "Yes, submit now". BRIDGE
    says it pressed Submit application as you confirmed, then "Application received". Say the

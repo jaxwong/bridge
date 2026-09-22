@@ -213,8 +213,12 @@
     document.getElementById('dropzone').addEventListener('click', () => cv.click());
     cv.addEventListener('change', () => { document.getElementById('cv-name').textContent = cv.files[0] ? cv.files[0].name : ''; });
 
+    // --- a write the page throws away: only with ?discard, so the demo form keeps every answer.
+    // The e2e suite and manual check Run A open apply.html?discard to test that BRIDGE reports it.
     const notice = document.getElementById('notice');
-    notice.addEventListener('change', () => setTimeout(() => { notice.value = ''; }, 50));
+    if (new URLSearchParams(location.search).has('discard')) {
+      notice.addEventListener('change', () => setTimeout(() => { notice.value = ''; }, 50));
+    }
 
     // --- re-render: a change to "Full name" replaces the phone field with a new node at a new path ---
     document.getElementById('name').addEventListener('change', () => {
