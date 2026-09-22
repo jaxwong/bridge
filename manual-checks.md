@@ -26,7 +26,9 @@ On a Mac, **Alt is the Option key**. So Alt+Shift+B is Option+Shift+B.
 
 ## 0. Setup, once
 
-Three terminals, all from the repo root.
+Three terminals, all from the repo root. The repo Makefile wraps these same commands:
+`make build`, `make serve`, `make proxy` — and `make test` runs every automated user-side
+check before a manual pass.
 
 **Terminal A, build the extension:**
 
