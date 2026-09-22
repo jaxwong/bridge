@@ -252,7 +252,7 @@ check('a barrier with no WCAG fields at all is still accepted',
 check('a legacy report carries no standard', v1.standard === undefined);
 check('an enriched report names WCAG 2.2 AA and the criteria the scanner checks',
   enriched.every((w) => w.standard?.name === 'WCAG' && w.standard.version === '2.2' && w.standard.level === 'AA') &&
-  w1.standard!.checked.join(',') === '1.3.1,2.1.1,2.5.3,3.3.2,4.1.2', JSON.stringify(w1.standard));
+  w1.standard!.checked.join(',') === '1.3.1,1.4.3,2.1.1,2.5.3,2.5.8,3.3.2,4.1.2', JSON.stringify(w1.standard));
 check('every criterion a finding cites is one the standard says was checked',
   enriched.every((w) => findingsOf(w).every((b) => (b.wcag ?? []).every((c) => w.standard!.checked.includes(c)))));
 const withStandard = (standard: unknown) => ({ ...withBarrier({}), standard });

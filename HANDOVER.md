@@ -58,7 +58,7 @@ only conversion, and the export is the only way a report leaves the browser.
   // A criterion not in `checked` was never tested; its absence is not a pass.
   // Optional: reports exported before it existed carry none.
   "standard": { "name": "WCAG", "version": "2.2", "level": "AA",
-                "checked": ["1.3.1", "2.1.1", "2.5.3", "3.3.2", "4.1.2"] },
+                "checked": ["1.3.1", "1.4.3", "2.1.1", "2.5.3", "2.5.8", "3.3.2", "4.1.2"] },
 
   "barriers": [{                      // one per field-level finding
     "rule": "options-identically-named",
@@ -152,9 +152,19 @@ report always says which criteria the scanner could have failed.
 | `options-identically-named` | 4.1.2, 2.5.3 | A | — |
 | `drag-drop-only` | 2.1.1 | A | — |
 | `upload-unnamed` | 4.1.2 | A | — |
+| `target-too-small` | 2.5.8 | AA | — |
+| `low-contrast` | 1.4.3 | AA | yes |
 | `modal-without-dialog-role` | *unmapped* | — | — |
 | `captcha` | *unmapped* | — | — |
 | `cross-origin-frame-unreachable` | *unmapped* | — | — |
+
+`target-too-small` and `low-contrast` are measured from layout and colour
+(`extension/lib/visual.ts`), not from the accessibility tree. Target size implements the
+criterion's own exceptions (spacing, user-agent-sized native checkboxes and radios,
+inactive controls), so a finding is geometry and needs no review. Contrast composites the
+cascade's solid background colours and reports nothing where it cannot (an image, a
+gradient, a translucent ancestor); it is flagged for review because it cannot see an
+element painted over the text.
 
 `cross-origin-frame-unreachable` (side panel only) reports a part of the form BRIDGE could
 not scan. It is a limit of the scan, not a defect of the page, so no criterion is claimed.
@@ -177,8 +187,9 @@ Two near-misses that will come up:
 - **3.3.8 Accessible Authentication (AA)** is not claimed for `captcha`, because it applies to
   authentication steps and a CAPTCHA on a job application is not necessarily one.
 
-**Every criterion currently mapped is Level A.** That is the honest result of not guessing.
-If AA findings are wanted, those two are where the work is.
+**Two mapped criteria are Level AA** (2.5.8, 1.4.3); the rest are Level A. Level AA
+conformance requires every A and AA criterion, so a Level A failure already fails AA — the
+per-finding level says which tier the criterion sits in, not how serious the finding is.
 
 ---
 

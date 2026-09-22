@@ -479,7 +479,7 @@ try {
     const every = [...report.barriers, ...report.pageBarriers];
     check('export: names the standard and the criteria BRIDGE checks',
       report.standard?.name === 'WCAG' && report.standard.version === '2.2' && report.standard.level === 'AA' &&
-      report.standard.checked.join(',') === '1.3.1,2.1.1,2.5.3,3.3.2,4.1.2', JSON.stringify(report.standard));
+      report.standard.checked.join(',') === '1.3.1,1.4.3,2.1.1,2.5.3,2.5.8,3.3.2,4.1.2', JSON.stringify(report.standard));
     check('export: every finding is marked automated', every.length > 0 && every.every((b) => b.automated === true));
     check('export: a mapped rule carries its criteria and level',
       every.filter((b) => b.rule === 'options-identically-named').every((b) => b.wcag?.join(',') === '4.1.2,2.5.3' && b.wcagLevel === 'A' && b.reviewRequired === false) &&
@@ -666,6 +666,36 @@ try {
     await q('Full name').locator('.status').filter({ hasText: /Could not|On the page/ }).waitFor();
     const lost = await q('Full name').locator('.status').textContent();
     check('the tab is gone: the write fails loudly', /^Could not fill.*Lost contact with the page/.test(lost), lost);
+  });
+
+  await section('target size and contrast', async () => {
+    // targets.html: each 2.5.8 and 1.4.3 case beside its nearest passing case, so a
+    // finding proves the measurement and its absence proves the exception (§6.2).
+    const { panel } = await open('targets.html');
+    const [dl] = await Promise.all([panel.waitForEvent('download'), panel.getByRole('button', { name: 'Export barrier report as JSON' }).click()]);
+    const r = JSON.parse(readFileSync(await dl.path(), 'utf8'));
+    const byRule = (rule) => r.barriers.filter((b) => b.rule === rule);
+    const small = byRule('target-too-small');
+    check('2.5.8: three 16px radios two pixels apart are one target-size barrier on the group',
+      small.some((b) => /Preferred contact/.test(b.label) && /only 16 by 16 pixels/.test(b.impact)), JSON.stringify(small));
+    check('2.5.8: two 18px inputs stacked with no gap fail, each on its own',
+      small.filter((b) => ['Nickname', 'Pronouns'].includes(b.label)).length === 2 && small.every((b) => /only (\d+ by 18|16 by 16) pixels/.test(b.impact)),
+      small.map((b) => b.impact).join(' | '));
+    check('2.5.8: an 18px input with nothing within reach passes by the spacing exception',
+      !small.some((b) => b.label === 'Referral code'));
+    check('2.5.8: a native checkbox at its browser default is sized by the browser, not the author',
+      !small.some((b) => /job alerts/.test(b.label)) && small.length === 3, small.map((b) => b.label).join(','));
+    const faint = byRule('low-contrast');
+    check('1.4.3: a #999 label on white is 2.8 to 1 and reported on its field',
+      faint.some((b) => b.label === 'Email address' && /The label of "Email address" is hard to read: its contrast is 2.8 to 1, below the 4.5 to 1 minimum\./.test(b.impact)), JSON.stringify(faint));
+    check('1.4.3: a #bbb placeholder is measured as the field\'s text',
+      faint.some((b) => b.label === 'Website' && /Text in "Website".*1\.9 to 1/.test(b.impact)));
+    check('1.4.3: #777 at 24px is large text and passes at 3 to 1', !faint.some((b) => b.label === 'Phone number'));
+    check('1.4.3: text over a gradient is not measured rather than guessed', !faint.some((b) => b.label === 'Notes') && faint.length === 2,
+      faint.map((b) => b.label).join(','));
+    check('both new rules export as Level AA findings, contrast flagged for review and size not',
+      [...small, ...faint].every((b) => b.wcagLevel === 'AA') && small.every((b) => b.wcag.join() === '2.5.8' && b.reviewRequired === false) &&
+      faint.every((b) => b.wcag.join() === '1.4.3' && b.reviewRequired === true));
   });
 
   await section('label inference failures and page identity', async () => {
