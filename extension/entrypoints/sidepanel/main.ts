@@ -213,6 +213,22 @@ function buildQuestion(f: PanelField): HTMLElement {
     if (f.required) ctl.setAttribute('aria-required', 'true');
     if (f.kind === 'checkbox') wrap.append(ctl, lab); else wrap.append(lab, ctl);
 
+    if (hasOptions) {
+      // VoiceOver's own hint for a pop-up button is "Control-Option-Space", which is how
+      // you OPEN the menu and sounds like the only way in. The arrow keys move through the
+      // answers without opening anything, which is what most people reach for and what a
+      // page's own dropdown behaves like. Saying so costs one short sentence and removes
+      // the impression that a dropdown needs a special chord. Same reason the date and
+      // slider notes exist: where a screen reader describes a control in a way that
+      // misleads, the panel says the plain thing.
+      const note = document.createElement('p');
+      note.className = 'note';
+      note.id = `note-${ctlId}`;
+      note.textContent = 'Up and down arrow keys move through the answers.';
+      ctl.setAttribute('aria-describedby', note.id);
+      wrap.append(note);
+    }
+
     if (f.kind === 'date') {
       const note = document.createElement('p');
       note.className = 'note';

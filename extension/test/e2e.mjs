@@ -208,6 +208,27 @@ try {
   check('inferred label is marked as inferred', (await panel.locator('label', { hasText: 'Highest education' }).textContent()).includes('(label inferred)'));
   check('the page dropdown was closed again after harvesting', await page.locator('.dropdown__menu').count() === 0);
 
+  // A dropdown says how to work it, because VoiceOver's own hint for a pop-up button names
+  // Control-Option-Space and nothing else, which sounds like a dropdown needs a chord.
+  const edu = panel.getByLabel(/Highest education/);
+  const eduNote = panel.locator('#questions .q', { hasText: 'Highest education' }).locator('.note');
+  check('a dropdown says the arrow keys work',
+    (await eduNote.textContent()) === 'Up and down arrow keys move through the answers.',
+    await eduNote.textContent());
+  check('and the hint is tied to the control, so it is spoken with it',
+    (await edu.getAttribute('aria-describedby')) === (await eduNote.getAttribute('id')),
+    `${await edu.getAttribute('aria-describedby')} vs ${await eduNote.getAttribute('id')}`);
+  // Whether the arrow key is what a screen reader user actually hears cannot be settled
+  // here: headless Chromium on macOS opens the native popup instead of moving the value,
+  // and there is no screen reader in this process. manual-checks.md §6 confirms it by ear.
+  check('the hint is the control\'s description, so it is spoken after the name and role',
+    (await edu.evaluate((e) => {
+      const id = e.getAttribute('aria-describedby');
+      return id ? document.getElementById(id)?.textContent : null;
+    })) === 'Up and down arrow keys move through the answers.');
+  check('a dropdown carries exactly one note, not a stack of them',
+    (await panel.locator('#questions .q', { hasText: 'Highest education' }).locator('.note').count()) === 1);
+
   // --- ACT + read-back --------------------------------------------------------------
   await panel.getByLabel('Full name').fill('Zheng Wei');
   await panel.getByRole('button', { name: 'Write Full name to page' }).click();
