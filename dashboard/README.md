@@ -22,14 +22,16 @@ npm run typecheck
 ```
 applicant reaches a job application form
   -> BRIDGE extension scans it, in their browser
-  -> applicant chooses "Export barrier report"
-  -> the JSON lands in their downloads
-  -> a business user loads it here
+  -> the report is sent to the employer when the applicant submits
+  -> a business user loads that JSON here
 ```
 
-Nothing is automatic. A report exists only because an applicant asked for one, and it
-reaches this dashboard only because someone loaded the file. The dashboard never contacts a
-job site, never scans anything, and has no network calls at all.
+The dashboard never contacts a job site, never scans anything, and has no network calls at
+all. It reads the files it is given.
+
+**The send is not built yet.** The panel's manual export button has been removed in favour
+of it, so today nothing produces a fresh report and the dashboard can only be fed from
+`../fixtures/`. The report format is unchanged, so anything the send produces will load.
 
 ## Loading reports
 

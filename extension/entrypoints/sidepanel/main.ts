@@ -5,7 +5,6 @@
 
 import { inferLabels } from '../../lib/infer';
 import { send, type Frame, type FormChanged, type WorkerEvent, type WorkerRequest } from '../../lib/messages';
-import { buildReport, reportFileStem, reportMarkdown } from '../../lib/report';
 import { barrier } from '../../lib/rules';
 import type {
   ApplicationSession, Barrier, FieldDescriptor, FillResult, ScanResult, StepHint,
@@ -932,25 +931,6 @@ $('always-enable').addEventListener('click', () => {
   });
 });
 
-// --- barrier report (§6.7) --------------------------------------------------------------------
-
-function download(name: string, type: string, text: string) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([text], { type }));
-  a.download = name;
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
-
-function exportReport(format: 'json' | 'md') {
-  if (!session?.steps.length) { reply('There is nothing to export yet. Scan an application page first.'); return; }
-  const report = buildReport(session);
-  const name = `${reportFileStem(report)}.${format}`;
-  if (format === 'json') download(name, 'application/json', JSON.stringify(report, null, 2));
-  else download(name, 'text/markdown', reportMarkdown(report));
-  reply(`Barrier report saved as ${name}. ${plural(report.barriers.length + report.pageBarriers.length, 'barrier')}. It contains none of your answers and nothing about you.`);
-}
-
 // --- keyboard focus ------------------------------------------------------------------
 // A panel that is being shown receives keyboard focus from Chrome; this puts it on the
 // heading. An open panel cannot take focus back from the page, which is why Alt+Shift+B
@@ -983,8 +963,6 @@ $('press-forward').addEventListener('click', () => void pressForwardButton());
 $('submit-app').addEventListener('click', askBeforeSubmitting);
 $('submit-cancel').addEventListener('click', cancelSubmitting);
 $('submit-yes').addEventListener('click', () => void submitConfirmed());
-$('export-json').addEventListener('click', () => exportReport('json'));
-$('export-md').addEventListener('click', () => exportReport('md'));
 $('prev').addEventListener('click', () => { if (current > 0) goTo(fields[current - 1].key); });
 $('next').addEventListener('click', () => { if (current < fields.length - 1) goTo(fields[current + 1].key); });
 $('step-back').addEventListener('click', () => void (async () => {

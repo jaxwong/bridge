@@ -15,8 +15,9 @@
 >   the extension's own tests and for the dashboard's fixtures.
 >
 > The offer in §2 rests on continuous coverage the monitor provided. Whether the business
-> case survives on applicant-exported reports alone is a product question this note does not
-> answer — see [`HANDOVER.md`](HANDOVER.md) §5 for what the new flow can and cannot see.
+> case survives on reports that arrive only from applicants is a product question this note
+> does not answer. What the dashboard can and cannot see is in
+> [`dashboard/README.md`](dashboard/README.md).
 
 The employer side of BRIDGE: who pays, for what, and what we build to demo it.
 

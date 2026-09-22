@@ -14,16 +14,15 @@ the report-level `standard` block naming WCAG 2.2 AA and the criteria the scanne
 
 ## Regenerating
 
-These come from the extension's own export, which is the only producer now:
+**Not possible right now.** These were captured from the panel's manual export, which has
+been removed in favour of sending the report to the employer automatically on submit. That
+send is not built yet, so nothing currently produces a report file.
 
-1. `python3 -m http.server 8765 -d extension/test/fixtures/acme`
-2. Load the built extension, open `http://localhost:8765/` (and `?v=2`, `?v=3`)
-3. Scan, then **Export barrier report as JSON** from the side panel
-4. Drop the files into `localhost-8765/`
+What they contain is still correct: `extension/test/e2e.mjs` builds the report for these
+exact fixture pages with the same `buildReport()` and asserts the same barriers, so a
+mismatch would fail the suite rather than sit here unnoticed.
 
-Timestamps are whenever the scan ran, so regenerating changes the file names. The dashboard
-does not read file names — it groups by `portal` + `pagePath` from inside each file — so
-that only matters to the person looking at the directory.
+Restore a regeneration recipe here once the automated send exists.
 
 ## What these are not
 

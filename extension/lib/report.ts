@@ -11,7 +11,10 @@
 // Carries no field values and no applicant identity — only which rules fired, on which
 // labelled field, and what it means for the user. There is deliberately no selector.
 
-import { STANDARD, wcagFor, type RuleId } from './rules';
+// The .ts on './rules' is load-bearing: test/e2e.mjs imports this module directly in Node,
+// which resolves value imports by exact path. Vite resolves it unchanged. './types' needs
+// none — a type-only import is erased before resolution.
+import { STANDARD, wcagFor, type RuleId } from './rules.ts';
 import type { ApplicationSession, BarrierReport, Barrier, ReportBarrier, ReportPageBarrier, ScanResult } from './types';
 
 /**
