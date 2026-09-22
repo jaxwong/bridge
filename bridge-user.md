@@ -264,6 +264,8 @@ shift when a conditional field appears.
 | `group-not-labelled` | blocking | 1.3.1 | Radios in one group, or two or more checkboxes sharing a `name`, with no `fieldset`+`legend` and no `role="group"`/`radiogroup"` carrying a name. The question itself is unreachable |
 | `label-placeholder-only` | usability | 3.3.2 | The only name comes from `placeholder`. It vanishes on input and several screen readers skip it |
 | `options-identically-named` | blocking | 4.1.2, 2.5.3 | Two or more options in one group compute to the **same** accessible name. `aria-label` overrides element contents, so a question stamped onto every option erases "Yes" and "No" |
+| `target-too-small` | usability | 2.5.8 (AA) | A control's rendered box is under 24 by 24 CSS pixels and no exception in the criterion applies: **spacing** (a 24px circle centred on it meets another pointer target, or the circle of another undersized one), **user agent** (a native checkbox or radio at its default appearance is skipped), inactive controls. Groups report once, on the first crowded option. `extension/lib/visual.ts` |
+| `low-contrast` | usability | 1.4.3 (AA), review | The label text, typed text or placeholder of a control is under 4.5:1 (3:1 for large text) against the colour composited from its ancestors' solid backgrounds. **Not measured** over a background image or gradient, a translucent ancestor, or a non-sRGB colour. Review: it reads the cascade, not the pixels, so an overlay or text shadow is invisible to it. `extension/lib/visual.ts` |
 
 **The Severity and WCAG columns are owned by `extension/lib/rules.ts`**, the rule catalogue;
 this table is a reading copy. `barrier(rule, message)` there is the only way a `Barrier` is
@@ -271,11 +273,13 @@ made, so severity is decided once per rule, never at the call site, and `Barrier
 the typed `RuleId`: a renamed rule fails the typecheck instead of silently losing its
 mapping. Each mapping in the catalogue names the `scan.ts` line it was read from and carries
 a rationale; a rule is mapped only where the criterion fails *every* time it fires, and
-"review" marks a heuristic detection (`reviewRequired`) a person should confirm. Every
-mapped criterion is Level A. 2.5.7 Dragging Movements (AA) is not claimed for
-`drag-drop-only` because the rule tests only for a keyboard trigger, and a drop zone that
-also opens a picker on click satisfies 2.5.7. Whether to claim any AA criterion is a product
-decision that needs a person to confirm the detection, not more code.
+"review" marks a heuristic detection (`reviewRequired`) a person should confirm. Two
+criteria are Level AA, 2.5.8 and 1.4.3, both measured from layout and colour in
+`extension/lib/visual.ts`; the rest are Level A. 2.5.7 Dragging Movements (AA) is not
+claimed for `drag-drop-only` because the rule tests only for a keyboard trigger, and a
+drop zone that also opens a picker on click satisfies 2.5.7. Note what "AA" means: Level AA
+conformance requires every A and AA criterion, so a Level A failure already fails AA; the
+per-finding level says which tier the failed criterion sits in, not how serious it is.
 
 Heuristics run first. The LLM is only used to **infer labels and options** for fields where heuristics produce nothing useful.
 
@@ -640,7 +644,7 @@ only when an applicant exports one.
   "pagePath": "/acme/jobs/12345",
   "generatedAt": "2026-09-24T10:00:00Z",
   "standard": { "name": "WCAG", "version": "2.2", "level": "AA",
-                "checked": ["1.3.1", "2.1.1", "2.5.3", "3.3.2", "4.1.2"] },
+                "checked": ["1.3.1", "1.4.3", "2.1.1", "2.5.3", "2.5.8", "3.3.2", "4.1.2"] },
   "barriers": [
     { "rule": "drag-drop-only", "severity": "blocking",
       "label": "CV upload",

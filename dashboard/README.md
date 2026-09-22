@@ -76,7 +76,7 @@ that could not be mapped confidently carries no criterion and displays as **"No 
 recorded"** — the dashboard never fills that gap with a guess.
 
 A report that carries a `standard` block also says which criteria its producer can fail, and
-the summary repeats that list: "Measured against WCAG 2.2, Level AA. The scanner can fail 5
+the summary repeats that list: "Measured against WCAG 2.2, Level AA. The scanner can fail 7
 criteria: … Any other criterion was not checked." That sentence is what keeps a finding-free
 report from reading as a pass.
 

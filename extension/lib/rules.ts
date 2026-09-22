@@ -22,7 +22,8 @@ import type { Barrier, Severity } from './types';
 export type RuleId =
   | 'missing-label' | 'label-placeholder-only' | 'custom-dropdown-no-role' | 'not-keyboard-operable'
   | 'group-not-labelled' | 'options-identically-named' | 'drag-drop-only' | 'upload-unnamed'
-  | 'modal-without-dialog-role' | 'captcha' | 'cross-origin-frame-unreachable';
+  | 'modal-without-dialog-role' | 'captcha' | 'cross-origin-frame-unreachable'
+  | 'target-too-small' | 'low-contrast';
 
 export type WcagLevel = 'A' | 'AA';
 
@@ -48,8 +49,10 @@ interface Rule {
 /** Every criterion a rule here can cite, in WCAG order, with its conformance level. */
 const LEVEL_OF: Record<string, WcagLevel> = {
   '1.3.1': 'A',   // Info and Relationships
+  '1.4.3': 'AA',  // Contrast (Minimum)
   '2.1.1': 'A',   // Keyboard
   '2.5.3': 'A',   // Label in Name
+  '2.5.8': 'AA',  // Target Size (Minimum)
   '3.3.2': 'A',   // Labels or Instructions
   '4.1.2': 'A',   // Name, Role, Value
 };
@@ -177,6 +180,43 @@ export const RULES: Record<RuleId, Rule> = {
         '4.1.2 requires a programmatically determinable name. The input is reachable but accName() ' +
         'returns nothing, so a screen reader announces only a generic file button with no indication of ' +
         'what it is for.',
+    },
+  },
+
+  // scan.ts, via lib/visual.ts targetTooSmall(): the control's box is under 24 by 24 CSS
+  // pixels, it is not a native checkbox or radio at its browser default, it is not
+  // disabled, and a 24px circle centred on it meets another target or another undersized
+  // target's circle.
+  'target-too-small': {
+    severity: 'usability',
+    mapping: {
+      wcag: ['2.5.8'],
+      reviewRequired: false,
+      rationale:
+        '2.5.8 requires pointer targets of at least 24 by 24 CSS pixels unless an exception applies. The ' +
+        'check measures the rendered box and implements the exceptions the criterion lists: spacing (the ' +
+        '24px circle test, against every visible pointer target on the page), user agent (a native ' +
+        'checkbox or radio with its default appearance is sized by the browser, not the author) and ' +
+        'inactive controls. "Inline" and "essential" cannot apply to a form control. A finding therefore ' +
+        'follows from geometry the criterion itself defines, so no review is required.',
+    },
+  },
+
+  // scan.ts, via lib/visual.ts lowContrast(): the label text, the typed text or the
+  // placeholder of a control measures under 4.5:1 (3:1 for large text) against the
+  // composited colour of its ancestors' solid backgrounds.
+  'low-contrast': {
+    severity: 'usability',
+    mapping: {
+      wcag: ['1.4.3'],
+      reviewRequired: true,
+      rationale:
+        '1.4.3 requires text contrast of at least 4.5:1, or 3:1 for large text. The check computes the ' +
+        'WCAG relative-luminance ratio from the text colour and the colour composited from the element\'s ' +
+        'ancestors\' background colours, and reports nothing where that colour cannot be read: a ' +
+        'background image or gradient, a translucent ancestor, or a colour outside sRGB. Review required ' +
+        'because it reads the cascade, not the pixels: an element painted over the text by position or ' +
+        'z-index, or a text shadow, changes what a person sees and this cannot observe it.',
     },
   },
 

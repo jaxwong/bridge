@@ -7,6 +7,7 @@ import {
 } from './dom';
 import { barrier } from './rules';
 import type { Barrier, ControlKind, FieldDescriptor, ScanResult, StepHint } from './types';
+import { labelElement, lowContrast, pointerTargets, targetTooSmall } from './visual';
 
 /** What the content script keeps so ACT can find the element again. Never leaves the page. */
 export interface FieldHandle {
@@ -93,6 +94,42 @@ function optionText(el: Element): string {
   return accName(el).name;
 }
 
+/**
+ * §6.2 target-too-small and low-contrast for one control and the element that names it.
+ * `what` is how the applicant hears the control; groups pass their question and options.
+ */
+function visualBarriers(what: string, controls: Element[], labels: (Element | null)[], targets: DOMRect[]): Barrier[] {
+  const out: Barrier[] = [];
+  for (const el of controls) {
+    const size = targetTooSmall(el, targets);
+    if (size) {
+      out.push(barrier('target-too-small',
+        `${what} is only ${size.width} by ${size.height} pixels, too small to tap or click reliably, and other controls are crowded around it.`));
+      break;
+    }
+  }
+  for (const [i, el] of controls.entries()) {
+    const label = labels[i];
+    const onLabel = label ? lowContrast(label) : null;
+    const onText = lowContrast(el) || (el instanceof HTMLInputElement && !el.value ? lowContrast(el, '::placeholder') : null);
+    const hit = onLabel || onText;
+    if (!hit) continue;
+    out.push(barrier('low-contrast',
+      `${onLabel ? `The label of ${what}` : `Text in ${what}`} is hard to read: its contrast is ${hit.ratio} to 1, below the ${hit.required} to 1 minimum.`));
+    break;
+  }
+  return out;
+}
+
+/** The element optionText() read: the option's label[for], its own text, or a wrapping label. */
+function optionLabelElement(el: Element): Element | null {
+  const native = el instanceof HTMLInputElement ? el : el.querySelector('input');
+  const named = native ? labelElement(native) : null;
+  if (named) return named;
+  if (clean(el.textContent)) return el;
+  return el.closest('label');
+}
+
 function groupName(container: Element | null): string {
   if (!container) return '';
   const legend = container.querySelector('legend');
@@ -156,6 +193,7 @@ export function scanPage(): { result: ScanResult; handles: Map<string, FieldHand
   const entries: { anchor: Element; field: Omit<FieldDescriptor, 'id'>; handle: Omit<FieldHandle, 'ordinal'> }[] = [];
   const groups = new Map<Element | string, { kind: 'radio-group' | 'checkbox-group'; opts: Element[] }>();
   const all = candidates(scope);
+  const targets = pointerTargets();
 
   // Checkboxes sharing a name are one question (Lever's 33-box "Language Skill(s)", §11).
   const checkboxNames = new Map<string, number>();
@@ -203,6 +241,7 @@ export function scanPage(): { result: ScanResult; handles: Map<string, FieldHand
     if (kind !== 'file' && !keyboardReachable(html)) {
       barriers.push(barrier('not-keyboard-operable', `"${label}" cannot be reached with the keyboard.`));
     }
+    if (kind !== 'file') barriers.push(...visualBarriers(`"${label}"`, [el], [labelElement(el)], targets));
 
     const field: Omit<FieldDescriptor, 'id'> = {
       kind, label, labelSource: named.labelSource,
@@ -239,6 +278,9 @@ export function scanPage(): { result: ScanResult; handles: Map<string, FieldHand
       barriers.push(barrier('options-identically-named',
         `All ${opts.length} options for "${question}" sound identical to a screen reader. The words ${opts.map(optionText).map((t) => `"${t}"`).join(' and ')} are never spoken.`));
     }
+    // The question's own text, then each option's: a person reads both.
+    const questionLabel = container ? (container.querySelector('legend') || labelElement(container)) : null;
+    barriers.push(...visualBarriers(`each of the "${question}" options`, opts, opts.map((o) => optionLabelElement(o) ?? questionLabel), targets));
 
     const anchor = container || opts[0];
     entries.push({
