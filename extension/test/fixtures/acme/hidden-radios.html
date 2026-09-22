@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Acme Careers — Resume</title>
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; }
+    dialog { position: static; width: 520px; border: 1px solid #888; border-radius: 8px; padding: 20px; }
+    fieldset { border: 0; padding: 0; margin: 0; }
+    .card { position: relative; display: flex; justify-content: space-between; align-items: center;
+            border: 1px solid #888; border-radius: 8px; padding: 12px; margin: 8px 0; }
+    /* The real radio is drawn by nothing: 0 by 0 and transparent. The empty label is the circle. */
+    .card input { position: absolute; width: 0; height: 0; margin: 0; opacity: 0; appearance: none; }
+    .card label { width: 24px; height: 24px; border: 2px solid #333; border-radius: 50%; cursor: pointer; }
+    .card input:checked + label { background: radial-gradient(#333 40%, transparent 45%); }
+  </style>
+</head>
+<body>
+  <!-- LinkedIn Easy Apply step 2 (the resume list), copied from the DOM on 2026-09-22:
+       the group is a fieldset with role=radiogroup and no name; each radio is 0 by 0 at
+       opacity 0, named only by its aria-label, followed by an EMPTY <label for> styled as
+       the circle. Each card shows the file's date, and an icon-only download button. Nothing is sent anywhere. -->
+  <dialog open aria-labelledby="t">
+    <h2 id="t">Apply to Acme Corp</h2>
+    <p>2/4 pages</p>
+    <h3>Resume*</h3>
+    <p>Select or upload a resume in DOC, DOCX, or PDF format that is less than 2MB</p>
+    <fieldset role="radiogroup">
+      <div class="card" aria-label="resume_swe.pdf"><span>resume_swe.pdf<br>9/19/2026</span><button type="button" aria-label="Download resume_swe.pdf"><svg width="16" height="16" aria-hidden="true"><path d="M8 2v9M4 7l4 4 4-4M3 14h10" stroke="#333" fill="none"/></svg></button>
+        <input id="r1" aria-label="resume_swe.pdf" tabindex="0" type="radio" checked name="radio-group-r"><label for="r1"></label></div>
+      <div class="card" aria-label="resume_ai.pdf"><span>resume_ai.pdf<br>9/19/2026</span><button type="button" aria-label="Download resume_ai.pdf"><svg width="16" height="16" aria-hidden="true"><path d="M8 2v9M4 7l4 4 4-4M3 14h10" stroke="#333" fill="none"/></svg></button>
+        <input id="r2" aria-label="resume_ai.pdf" tabindex="0" type="radio" name="radio-group-r"><label for="r2"></label></div>
+      <div class="card" aria-label="resume_backend.pdf"><span>resume_backend.pdf<br>8/23/2026</span><button type="button" aria-label="Download resume_backend.pdf"><svg width="16" height="16" aria-hidden="true"><path d="M8 2v9M4 7l4 4 4-4M3 14h10" stroke="#333" fill="none"/></svg></button>
+        <input id="r3" aria-label="resume_backend.pdf" tabindex="0" type="radio" name="radio-group-r"><label for="r3"></label></div>
+    </fieldset>
+    <!-- The same pattern in a section nobody can see: not a question. -->
+    <div hidden>
+      <fieldset role="radiogroup">
+        <div class="card" aria-label="old_resume.pdf"><span>old_resume.pdf<br>3/12/2026</span><button type="button" aria-label="Download old_resume.pdf"><svg width="16" height="16" aria-hidden="true"><path d="M8 2v9M4 7l4 4 4-4M3 14h10" stroke="#333" fill="none"/></svg></button>
+          <input id="h1" aria-label="old_resume.pdf" tabindex="0" type="radio" name="radio-group-h"><label for="h1"></label></div>
+        <div class="card" aria-label="older_resume.pdf"><span>older_resume.pdf<br>3/12/2026</span><button type="button" aria-label="Download older_resume.pdf"><svg width="16" height="16" aria-hidden="true"><path d="M8 2v9M4 7l4 4 4-4M3 14h10" stroke="#333" fill="none"/></svg></button>
+          <input id="h2" aria-label="older_resume.pdf" tabindex="0" type="radio" name="radio-group-h"><label for="h2"></label></div>
+      </fieldset>
+    </div>
+    <button type="button">Next</button>
+  </dialog>
+</body>
+</html>

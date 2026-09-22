@@ -58,6 +58,12 @@ function candidates(scope: Element): Element[] {
       if (['hidden', 'submit', 'button', 'reset', 'image'].includes(el.type)) return false;
       // File inputs are usually visually hidden on purpose; include them regardless.
       if (el.type === 'file') return true;
+      // A styled radio or checkbox is 0 by 0 and transparent; the page draws the option
+      // around it (LinkedIn's resume list, §11). The option is what must be visible.
+      if (el.type === 'radio' || el.type === 'checkbox') {
+        const s = getComputedStyle(el);
+        return visible(el) || (s.display !== 'none' && s.visibility !== 'hidden' && !!el.parentElement && visible(el.parentElement));
+      }
     }
     return visible(el);
   });
@@ -80,8 +86,9 @@ function kindOf(el: Element): ControlKind {
   return 'unknown';
 }
 
-/** The visible text of one option: what a sighted user reads as its label. */
-function optionText(el: Element): string {
+/** The visible text of one option: what a sighted user reads as its label. SCAN offers
+ *  options by it and ACT matches and reads them back by it, so the two cannot disagree. */
+export function optionText(el: Element): string {
   const native = el instanceof HTMLInputElement ? el : el.querySelector('input');
   if (native?.id) {
     const l = (native.getRootNode() as Document | ShadowRoot).querySelector(`label[for="${CSS.escape(native.id)}"]`);
@@ -91,7 +98,18 @@ function optionText(el: Element): string {
   if (own) return own;
   const wrap = el.closest('label');
   if (wrap && clean(wrap.textContent)) return clean(wrap.textContent);
-  return accName(el).name;
+  // Visible text before the accessible name: LinkedIn puts the QUESTION in every option's
+  // aria-label (§11), so the aria-label is the last resort, not the answer.
+  return rowText(el) || accName(el).name;
+}
+
+/** The text of the option's own row: its widest ancestor that holds no other control.
+ *  LinkedIn's options have an empty <label for> and their text beside it. */
+function rowText(el: Element): string {
+  let row = el;
+  while (row.parentElement && row.parentElement.querySelectorAll(CONTROLS).length <= 1) row = row.parentElement;
+  // Rendered text, so a name and a date on separate lines stay separate words.
+  return clean(row instanceof HTMLElement ? row.innerText : row.textContent);
 }
 
 /**
@@ -195,12 +213,23 @@ export function scanPage(): { result: ScanResult; handles: Map<string, FieldHand
   const all = candidates(scope);
   const targets = pointerTargets();
 
-  // Checkboxes sharing a name are one question (Lever's 33-box "Language Skill(s)", §11).
-  const checkboxNames = new Map<string, number>();
+  // Checkboxes are one question when their nearest fieldset or group holds two or more
+  // (LinkedIn's ethnicity list: 23 boxes, no name attribute, §11), else when they share a
+  // name (Lever's 33-box "Language Skill(s)", §11).
+  const checkboxKeys = new Map<Element, Element | string>();
+  const perKey = new Map<Element | string, number>();
+  const count = (k: Element | string) => perKey.set(k, (perKey.get(k) || 0) + 1);
   for (const el of all) {
-    if (el instanceof HTMLInputElement && el.type === 'checkbox' && el.name) {
-      checkboxNames.set(el.name, (checkboxNames.get(el.name) || 0) + 1);
-    }
+    if (!(el instanceof HTMLInputElement) || el.type !== 'checkbox') continue;
+    const box = el.closest('fieldset,[role=group]');
+    if (box) count(box);
+    if (el.name) count(`checkbox:${el.name}`);
+  }
+  for (const el of all) {
+    if (!(el instanceof HTMLInputElement) || el.type !== 'checkbox') continue;
+    const box = el.closest('fieldset,[role=group]');
+    if (box && perKey.get(box)! >= 2) checkboxKeys.set(el, box);
+    else if (el.name && perKey.get(`checkbox:${el.name}`)! >= 2) checkboxKeys.set(el, `checkbox:${el.name}`);
   }
 
   for (const el of all) {
@@ -213,8 +242,8 @@ export function scanPage(): { result: ScanResult; handles: Map<string, FieldHand
       groups.get(key)!.opts.push(el);
       continue;
     }
-    if (el instanceof HTMLInputElement && el.type === 'checkbox' && (checkboxNames.get(el.name) || 0) >= 2) {
-      const key = `checkbox:${el.name}`;
+    const key = checkboxKeys.get(el);
+    if (key) {
       if (!groups.has(key)) groups.set(key, { kind: 'checkbox-group', opts: [] });
       groups.get(key)!.opts.push(el);
       continue;

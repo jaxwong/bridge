@@ -1,8 +1,8 @@
 // ACT + VERIFY: spec §4.3, §4.4, §6.3. Every strategy here passed against a live portal
 // in probe/ (§11). Every write is followed by a read-back FROM THE DOM.
 
-import { accName, clean, sleep } from './dom';
-import { refind, refindOptions, type FieldHandle } from './scan';
+import { clean, sleep } from './dom';
+import { optionText, refind, refindOptions, type FieldHandle } from './scan';
 import type { FillResult } from './types';
 
 const OPTION_SEL = '[role=option],[class*=option],li';
@@ -14,10 +14,17 @@ function mouse(el: Element, types: string[]) {
   for (const t of types) el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, button: 0 }));
 }
 
-const matches = (text: string, value: string) => {
-  const a = text.toLowerCase(), b = value.toLowerCase();
-  return a === b || a.startsWith(b) || a.includes(b);
-};
+/** The option the user asked for: exact text first, so "Man" never lands on "Woman"; then
+ *  a prefix, then a substring, for a page whose option text carries extras. */
+function bestMatch<T>(items: T[], text: (item: T) => string, value: string): T | undefined {
+  const v = value.toLowerCase();
+  const texts = items.map((item) => text(item).toLowerCase());
+  for (const ok of [(a: string) => a === v, (a: string) => a.startsWith(v), (a: string) => a.includes(v)]) {
+    const i = texts.findIndex(ok);
+    if (i >= 0) return items[i];
+  }
+  return undefined;
+}
 
 // --- custom dropdowns ---------------------------------------------------------------
 // Options usually do not exist until the widget is opened (every react-select on
@@ -98,10 +105,6 @@ function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: strin
 
 // --- read-back ---------------------------------------------------------------------
 
-function optionLabel(o: Element): string {
-  return clean(o.textContent) || clean(o.closest('label')?.textContent) || accName(o).name;
-}
-
 export function readValue(h: FieldHandle): string {
   const el = refind(h);
   if (!el) return '';
@@ -114,10 +117,10 @@ export function readValue(h: FieldHandle): string {
       const checked = refindOptions(h).find((o) => o && isOn(o));
       if (!checked) return '';
       // Visible text, not aria-label: the aria-label may be the question (LinkedIn).
-      return optionLabel(checked);
+      return optionText(checked);
     }
     case 'checkbox-group':
-      return refindOptions(h).filter((o): o is Element => !!o && isOn(o)).map(optionLabel).join(', ');
+      return refindOptions(h).filter((o): o is Element => !!o && isOn(o)).map(optionText).join(', ');
     case 'slider':
       return sliderValue(el);
     case 'checkbox': {
@@ -152,7 +155,7 @@ export async function fill(fieldId: string, h: FieldHandle, value: string): Prom
       case 'select': {
         strategy = 'native select';
         const s = el as HTMLSelectElement;
-        const opt = [...s.options].find((o) => matches(clean(o.text), value));
+        const opt = bestMatch([...s.options], (o) => clean(o.text), value);
         if (!opt) return { fieldId, ok: false, strategy, readBack: readValue(h), error: `No option matching "${value}".` };
         s.value = opt.value;
         s.dispatchEvent(new Event('input', { bubbles: true }));
@@ -162,16 +165,14 @@ export async function fill(fieldId: string, h: FieldHandle, value: string): Prom
       }
       case 'radio-group': {
         strategy = 'click';
-        const opts = refindOptions(h);
-        const i = opts.findIndex((o) => o && matches(optionLabel(o), value));
-        if (i < 0) return { fieldId, ok: false, strategy, readBack: readValue(h), error: `No option matching "${value}".` };
-        const target = opts[i]!;
+        const target = bestMatch(refindOptions(h).filter((o): o is Element => !!o), optionText, value);
+        if (!target) return { fieldId, ok: false, strategy, readBack: readValue(h), error: `No option matching "${value}".` };
         // Prefer the native input inside an ARIA wrapper: that is what the page's own
         // handler listens to (LinkedIn's div[role=radio] > input[type=radio]).
         const native = target instanceof HTMLInputElement ? target : target.querySelector('input[type=radio]');
         (native as HTMLElement || target as HTMLElement).click();
         if (native) strategy = 'click (native input inside ARIA wrapper)';
-        expected = optionLabel(target);
+        expected = optionText(target);
         break;
       }
       case 'checkbox-group': {
@@ -180,12 +181,12 @@ export async function fill(fieldId: string, h: FieldHandle, value: string): Prom
         const wanted = JSON.parse(value) as string[];
         const opts = refindOptions(h);
         if (opts.some((o) => !o)) return { fieldId, ok: false, strategy, readBack: readValue(h), error: 'An option is no longer on the page.' };
-        const unknown = wanted.filter((w) => !opts.some((o) => optionLabel(o!) === w));
+        const unknown = wanted.filter((w) => !opts.some((o) => optionText(o!) === w));
         if (unknown.length) return { fieldId, ok: false, strategy, readBack: readValue(h), error: `No option matching "${unknown.join('", "')}".` };
         for (const o of opts as Element[]) {
-          if (isOn(o) !== wanted.includes(optionLabel(o))) ((nativeInput(o) || o) as HTMLElement).click();
+          if (isOn(o) !== wanted.includes(optionText(o))) ((nativeInput(o) || o) as HTMLElement).click();
         }
-        expected = (opts as Element[]).map(optionLabel).filter((t) => wanted.includes(t)).join(', ');
+        expected = (opts as Element[]).map(optionText).filter((t) => wanted.includes(t)).join(', ');
         break;
       }
       case 'slider': {
@@ -256,7 +257,7 @@ export async function fill(fieldId: string, h: FieldHandle, value: string): Prom
         // Synthetic mouse only: synthetic keyboard does not open react-select (§6.3).
         strategy = 'synthetic mouse (open, pick option)';
         const { options, close } = await openAndCollect(el);
-        const target = options.find((o) => matches(clean(o.textContent), value));
+        const target = bestMatch(options, (o) => clean(o.textContent), value);
         if (!target) {
           await close();
           return { fieldId, ok: false, strategy, readBack: readValue(h), error: `No option matching "${value}".` };
