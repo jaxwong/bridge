@@ -201,6 +201,17 @@ function wcagSummarySection(newest: BarrierReport): HTMLElement {
     el('h3', { text: 'Automated WCAG 2.2 findings in the newest scan' }),
   ]);
 
+  // The producer says which criteria it can fail. Naming them is what stops "no finding"
+  // from reading as "passed": every other criterion was simply never tested.
+  if (newest.standard) {
+    const { name, version, level, checked } = newest.standard;
+    section.append(el('p', { class: 'wcag-checked' }, [
+      `Measured against ${name} ${version}, Level ${level}. The scanner can fail ${checked.length} criteria: `,
+      el('span', { text: checked.join(', ') }),
+      '. Any other criterion was not checked.',
+    ]));
+  }
+
   if (s.total === 0) {
     section.append(el('p', { class: 'empty', text: 'This scan found no barriers, so there is nothing to map.' }));
     return section;

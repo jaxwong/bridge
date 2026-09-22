@@ -248,6 +248,20 @@ rejects('rejects a non-boolean reviewRequired flag', withBarrier({ reviewRequire
 check('a barrier with no WCAG fields at all is still accepted',
   parseReport(withBarrier({}), 'ok.json').barriers[0].wcag === undefined);
 
+// `standard`: which WCAG the numbers refer to, and which criteria the producer can fail.
+check('a legacy report carries no standard', v1.standard === undefined);
+check('an enriched report names WCAG 2.2 AA and the criteria the scanner checks',
+  enriched.every((w) => w.standard?.name === 'WCAG' && w.standard.version === '2.2' && w.standard.level === 'AA') &&
+  w1.standard!.checked.join(',') === '1.3.1,2.1.1,2.5.3,3.3.2,4.1.2', JSON.stringify(w1.standard));
+check('every criterion a finding cites is one the standard says was checked',
+  enriched.every((w) => findingsOf(w).every((b) => (b.wcag ?? []).every((c) => w.standard!.checked.includes(c)))));
+const withStandard = (standard: unknown) => ({ ...withBarrier({}), standard });
+rejects('rejects a standard that is not an object', withStandard('WCAG 2.2'), /"standard" is string/);
+rejects('rejects a standard with no version', withStandard({ name: 'WCAG', level: 'AA', checked: ['4.1.2'] }), /"standard.version" is missing/);
+rejects('rejects a standard at an unknown level', withStandard({ name: 'WCAG', version: '2.2', level: 'AAA', checked: ['4.1.2'] }), /expected "A" or "AA"/);
+rejects('rejects a standard that checks nothing', withStandard({ name: 'WCAG', version: '2.2', level: 'AA', checked: [] }), /not a non-empty array/);
+rejects('rejects a checked list holding a guideline number', withStandard({ name: 'WCAG', version: '2.2', level: 'AA', checked: ['4.1'] }), /expected a number like "4\.1\.2"/);
+
 const failed = results.filter((r) => !r.ok).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);
 process.exit(failed ? 1 : 0);

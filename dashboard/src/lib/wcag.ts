@@ -1,7 +1,7 @@
 // Summarising automated WCAG 2.2 A/AA findings for one scan.
 //
 // This file counts what a report already says. It does not decide which criterion a rule
-// maps to — that belongs to the producer (extension/lib/wcag.ts), which reads the rule's
+// maps to — that belongs to the producer (extension/lib/rules.ts), which reads the rule's
 // implementation. A finding that arrives with no mapping is reported as unmapped here and
 // shown as "No WCAG mapping recorded", never guessed at.
 //

@@ -194,6 +194,9 @@ try {
     /options-identically-named/.test(await page.locator('.wcag-table').textContent()));
   check('the summary repeats that this is not a conformance decision',
     /Human review is required for a WCAG conformance claim/.test(summary));
+  check('the summary names the standard and the criteria the scanner can fail, so silence is not a pass',
+    /Measured against WCAG 2\.2, Level AA\. The scanner can fail 5 criteria: 1\.3\.1, 2\.1\.1, 2\.5\.3, 3\.3\.2, 4\.1\.2\. Any other criterion was not checked\./.test(summary),
+    summary.slice(0, 220));
 
   const still = await page.locator('.bucket', { hasText: 'Still open' }).textContent();
   check('a mapped finding shows its level and criteria beside it',

@@ -212,7 +212,7 @@ type ControlKind =
 type Severity = "blocking" | "usability" | "ok";
 
 interface Barrier {
-  rule: string;
+  rule: RuleId;             // the §6.2 catalogue, extension/lib/rules.ts, which owns severity
   severity: Severity;
   message: string;          // spoken to the user as-is
 }
@@ -249,21 +249,33 @@ shift when a conditional field appears.
 
 ### 6.2 SCAN: barrier rules
 
-| Rule | Severity | Detection |
-|---|---|---|
-| `missing-label` | usability | axe-core `label`, `aria-input-field-name` |
-| `not-keyboard-operable` | blocking | Element looks interactive (`cursor: pointer`, known widget class patterns, custom slider thumb) but has no focusable descendant and no ARIA role |
-| `drag-drop-only` | blocking | File input is **out of the tab order** — `tabindex=-1`, `disabled`, `display:none`, `visibility:hidden` or `inert` — and has no keyboard trigger. A `<label for>` names the input but is not a tab stop, so it only counts as a trigger when the label itself (or a button inside it) is focusable. Visually hidden is *not* out of the tab order; that is the standard accessible pattern. Known limit: a separate button that opens the input from script cannot be recognised statically |
-| `upload-unnamed` | usability | File input is keyboard-reachable but has no accessible name, so it is heard only as a generic file button |
-| `focus-trap` | blocking | **Not detectable by SCAN.** Scripted Tab presses do not move focus, so tab order can only be observed from real keypresses. Checked manually with `bridge.watchTab()` in `probe/`. Note that focus looping from a dialog's last control back to its first is *correct* modal behaviour, not a trap |
-| `custom-dropdown-no-role` | blocking | Div/ul-based option list with no `listbox` / `combobox` roles |
-| `captcha` | blocking (page) | Known CAPTCHA iframes / widgets. BRIDGE cannot solve these; it tells the user in advance |
-| ~~`closed-shadow-root`~~ | retired | Content scripts can open closed roots with `chrome.dom.openOrClosedShadowRoot`. SCAN and ACT pierce every shadow root, so a field inside one is offered like any other. Verified on the fixture's closed root |
-| `cross-origin-frame-unreachable` | blocking (page) | A visible cross-origin iframe whose origin is not among the frames Chrome lets BRIDGE run in. Derived in the side panel: the top frame lists iframe origins, the service worker lists reachable frames |
-| `modal-without-dialog-role` | blocking (page) | A visible popup containing form controls, with no `role="dialog"` / `role="alertdialog"` / `aria-modal` on it or any ancestor. Nothing announces it opened |
-| `group-not-labelled` | blocking | Radios in one group, or two or more checkboxes sharing a `name`, with no `fieldset`+`legend` and no `role="group"`/`radiogroup"` carrying a name. The question itself is unreachable |
-| `label-placeholder-only` | usability | The only name comes from `placeholder`. It vanishes on input and several screen readers skip it |
-| `options-identically-named` | blocking | Two or more options in one group compute to the **same** accessible name. `aria-label` overrides element contents, so a question stamped onto every option erases "Yes" and "No" |
+| Rule | Severity | WCAG 2.2 | Detection |
+|---|---|---|---|
+| `missing-label` | usability | 4.1.2 | axe-core `label`, `aria-input-field-name` |
+| `not-keyboard-operable` | blocking | 2.1.1, review | Element looks interactive (`cursor: pointer`, known widget class patterns, custom slider thumb) but has no focusable descendant and no ARIA role |
+| `drag-drop-only` | blocking | 2.1.1 | File input is **out of the tab order** — `tabindex=-1`, `disabled`, `display:none`, `visibility:hidden` or `inert` — and has no keyboard trigger. A `<label for>` names the input but is not a tab stop, so it only counts as a trigger when the label itself (or a button inside it) is focusable. Visually hidden is *not* out of the tab order; that is the standard accessible pattern. Known limit: a separate button that opens the input from script cannot be recognised statically |
+| `upload-unnamed` | usability | 4.1.2 | File input is keyboard-reachable but has no accessible name, so it is heard only as a generic file button |
+| `focus-trap` | blocking | never emitted | **Not detectable by SCAN.** Scripted Tab presses do not move focus, so tab order can only be observed from real keypresses. Checked manually with `bridge.watchTab()` in `probe/`. Note that focus looping from a dialog's last control back to its first is *correct* modal behaviour, not a trap |
+| `custom-dropdown-no-role` | blocking | 4.1.2, review | Div/ul-based option list with no `listbox` / `combobox` roles |
+| `captcha` | blocking (page) | unmapped | Known CAPTCHA iframes / widgets. BRIDGE cannot solve these; it tells the user in advance. Presence is not a WCAG failure: 1.1.1 allows a CAPTCHA with an alternative form, and SCAN does not check for one |
+| ~~`closed-shadow-root`~~ | retired | — | Content scripts can open closed roots with `chrome.dom.openOrClosedShadowRoot`. SCAN and ACT pierce every shadow root, so a field inside one is offered like any other. Verified on the fixture's closed root |
+| `cross-origin-frame-unreachable` | blocking (page) | unmapped | A visible cross-origin iframe whose origin is not among the frames Chrome lets BRIDGE run in. Derived in the side panel: the top frame lists iframe origins, the service worker lists reachable frames. A limit of the scan, not a defect of the page |
+| `modal-without-dialog-role` | blocking (page) | unmapped | A visible popup containing form controls, with no `role="dialog"` / `role="alertdialog"` / `aria-modal` on it or any ancestor. Nothing announces it opened. Detected by class name, and the criterion is contested (4.1.2, 1.3.1 or 2.4.3), so none is claimed |
+| `group-not-labelled` | blocking | 1.3.1 | Radios in one group, or two or more checkboxes sharing a `name`, with no `fieldset`+`legend` and no `role="group"`/`radiogroup"` carrying a name. The question itself is unreachable |
+| `label-placeholder-only` | usability | 3.3.2 | The only name comes from `placeholder`. It vanishes on input and several screen readers skip it |
+| `options-identically-named` | blocking | 4.1.2, 2.5.3 | Two or more options in one group compute to the **same** accessible name. `aria-label` overrides element contents, so a question stamped onto every option erases "Yes" and "No" |
+
+**The Severity and WCAG columns are owned by `extension/lib/rules.ts`**, the rule catalogue;
+this table is a reading copy. `barrier(rule, message)` there is the only way a `Barrier` is
+made, so severity is decided once per rule, never at the call site, and `Barrier.rule` is
+the typed `RuleId`: a renamed rule fails the typecheck instead of silently losing its
+mapping. Each mapping in the catalogue names the `scan.ts` line it was read from and carries
+a rationale; a rule is mapped only where the criterion fails *every* time it fires, and
+"review" marks a heuristic detection (`reviewRequired`) a person should confirm. Every
+mapped criterion is Level A. 2.5.7 Dragging Movements (AA) is not claimed for
+`drag-drop-only` because the rule tests only for a keyboard trigger, and a drop zone that
+also opens a picker on click satisfies 2.5.7. Whether to claim any AA criterion is a product
+decision that needs a person to confirm the detection, not more code.
 
 Heuristics run first. The LLM is only used to **infer labels and options** for fields where heuristics produce nothing useful.
 
@@ -607,23 +619,28 @@ found in VoiceOver is real; passing VoiceOver does not discharge the NVDA pass.
 
 ### 6.7 Barrier report (employer side, MVP)
 
-"Export barrier report" in the side panel produces Markdown + JSON. The monitor in
-[`bridge-business.md`](bridge-business.md) §6.2 writes the same JSON, so one scanned page
-produces one report whichever side produced it:
+"Export barrier report" in the side panel produces Markdown + JSON. It is the only producer:
+the employer-side monitor that once wrote the same JSON was removed on 2026-09-22
+([`bridge-business.md`](bridge-business.md), status note), so a report reaches the dashboard
+only when an applicant exports one.
 
 ```json
 {
   "portal": "boards.greenhouse.io",
   "pagePath": "/acme/jobs/12345",
   "generatedAt": "2026-09-24T10:00:00Z",
+  "standard": { "name": "WCAG", "version": "2.2", "level": "AA",
+                "checked": ["1.3.1", "2.1.1", "2.5.3", "3.3.2", "4.1.2"] },
   "barriers": [
     { "rule": "drag-drop-only", "severity": "blocking",
       "label": "CV upload",
-      "impact": "A screen reader user cannot attach a CV." }
+      "impact": "A screen reader user cannot attach a CV.",
+      "wcag": ["2.1.1"], "wcagLevel": "A", "automated": true, "reviewRequired": false }
   ],
   "pageBarriers": [
     { "rule": "captcha", "severity": "blocking",
-      "impact": "A screen reader user cannot verify they are not a bot." }
+      "impact": "A screen reader user cannot verify they are not a bot.",
+      "automated": true }
   ]
 }
 ```
@@ -638,9 +655,21 @@ It is a projection of one `ScanResult` (§6.1), flattened:
 | `barriers[]` | Every `FieldDescriptor.barriers` entry, in page order, each carrying its field's `label` |
 | `barriers[].impact` | `Barrier.message`. The same sentence, renamed at the boundary: it is spoken to the applicant and read by the employer |
 | `pageBarriers[]` | `ScanResult.pageBarriers`, which belong to no field and so carry no `label` |
+| `standard` | `STANDARD` in `extension/lib/rules.ts`: `name` "WCAG", `version` "2.2", `level` "AA", and `checked`, every criterion a rule in the catalogue can cite |
+| `barriers[].wcag`, `.wcagLevel`, `.reviewRequired` | The rule's mapping in the catalogue (§6.2). **Absent when the rule is unmapped**, never a guess. `wcagLevel` is the most stringent level among `wcag` |
+| `barriers[].automated` | Always `true`: everything this producer writes came from the scanner. A person's finding would carry `false` |
 
 Fields with no barriers do not appear. The report carries no field values, no applicant
 identity, and no `stepHint`.
+
+**Automated WCAG 2.2 A/AA findings, never a conformance result.** The criterion numbers say
+what a finding fails, and `standard.checked` says which criteria the scanner could have
+failed at all. A criterion outside `checked` was never tested, so a report with no findings
+is not a pass: it is silence about most of WCAG. Human review is required for a WCAG
+conformance claim, and the Markdown twin, the dashboard and this spec all say so in those
+words. The four per-finding fields and `standard` are optional to the consumer, so a report
+exported before they existed still loads (`fixtures/reports/` is that corpus;
+`fixtures/reports-wcag/` carries them).
 
 **`label` is required on every `barriers[]` entry, and there is no `selector`.** The
 dashboard compares two scans of the same form by `rule` + `label` for field-level barriers
@@ -657,9 +686,8 @@ portals in §11 put the job in the path. It also lets the Acme fixture's `?v=2` 
 the employer demo.
 
 **One step or many.** The table above is `toReport()` in `extension/lib/report.ts`, the one
-conversion both producers use. The side panel's export is `buildReport()`: for an
-application with a single step it is exactly `toReport()` of that step, so it is the same
-JSON the monitor writes for the same page. When the applicant reached more than one step
+conversion. The side panel's export is `buildReport()`: for an application with a single
+step it is exactly `toReport()` of that step. When the applicant reached more than one step
 (§6.5), the two flat lists hold every step's barriers, each with a `step` number; the form
 is identified by its **first** step's `pagePath`; `generatedAt` is the most recent step's
 scan; and `steps: [{ index, label, pagePath, barriers, pageBarriers }]` keeps the grouping.
@@ -668,17 +696,12 @@ A consumer that does not know `steps` or `step` ignores them, and the dashboard 
 **`label` is always the name the page itself yields**, never one from label inference
 (§6.4): a model may word it differently on the next run, and the compare key must not move.
 
-**Two known differences between the producers**, both because the monitor runs in an
-ordinary page with no extension API: it cannot see inside a *closed* shadow root, and it
-cannot know which cross-origin frames the extension may reach, so
-`cross-origin-frame-unreachable` appears only in the side panel's export.
-
 The side panel also writes the Markdown twin, for a person to paste into an email. Both
-files are named like the monitor's: `<portal-and-path-slug>-<timestamp>`.
+files are named `<portal-and-path-slug>-<timestamp>`.
 
 Sending the report anywhere is a manual user action in the MVP. This format is the contract
-with the employer dashboard and monitor in [`bridge-business.md`](bridge-business.md) §6;
-change it here, not there.
+with the employer dashboard in [`bridge-business.md`](bridge-business.md) §6; change it
+here, not there.
 
 ## 7. Test fixtures
 

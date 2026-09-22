@@ -28,12 +28,25 @@ export interface ReportBarrier {
   reviewRequired?: boolean;
 }
 
+/**
+ * What a report's criterion numbers refer to, and the criteria its producer can fail. A
+ * criterion not in `checked` was never tested, so its absence from the findings is not a
+ * pass. Optional: reports exported before it existed carry none.
+ */
+export interface Standard {
+  name: string;
+  version: string;
+  level: WcagLevel;
+  checked: string[];
+}
+
 export interface BarrierReport {
   /** Host of the scanned page, port included. */
   portal: string;
   /** Pathname only — no query string. §6.7 explains why. */
   pagePath: string;
   generatedAt: string;
+  standard?: Standard;
   barriers: ReportBarrier[];
   pageBarriers: ReportBarrier[];
 }
@@ -128,13 +141,34 @@ export function parseReport(raw: unknown, source: string): BarrierReport {
     if (!Array.isArray(r[k])) fail(source, `"${k}" is ${r[k] === undefined ? 'missing' : 'not an array'}`);
   }
 
-  return {
+  const report: BarrierReport = {
     portal: r.portal as string,
     pagePath: r.pagePath as string,
     generatedAt: r.generatedAt as string,
     barriers: (r.barriers as unknown[]).map((b, i) => parseBarrier(b, source, `barriers[${i}]`, true)),
     pageBarriers: (r.pageBarriers as unknown[]).map((b, i) => parseBarrier(b, source, `pageBarriers[${i}]`, false)),
   };
+  if (r.standard !== undefined) report.standard = parseStandard(r.standard, source);
+  return report;
+}
+
+/** Optional, so absence is never an error. Present-but-malformed is: it is what the page quotes as the standard. */
+function parseStandard(raw: unknown, source: string): Standard {
+  if (typeof raw !== 'object' || raw === null) fail(source, `"standard" is ${raw === null ? 'null' : typeof raw}, expected an object`);
+  const s = raw as Record<string, unknown>;
+  for (const k of ['name', 'version'] as const) {
+    if (typeof s[k] !== 'string' || !s[k]) fail(source, `"standard.${k}" is missing`);
+  }
+  if (!WCAG_LEVELS.includes(s.level as WcagLevel)) {
+    fail(source, `"standard.level" is ${JSON.stringify(s.level)}, expected "A" or "AA"`);
+  }
+  if (!Array.isArray(s.checked) || s.checked.length === 0) fail(source, '"standard.checked" is not a non-empty array');
+  for (const c of s.checked) {
+    if (typeof c !== 'string' || !CRITERION.test(c)) {
+      fail(source, `"standard.checked" holds ${JSON.stringify(c)}, expected a number like "4.1.2"`);
+    }
+  }
+  return { name: s.name as string, version: s.version as string, level: s.level as WcagLevel, checked: s.checked as string[] };
 }
 
 /**
