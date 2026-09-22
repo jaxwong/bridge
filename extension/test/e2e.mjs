@@ -194,11 +194,14 @@ try {
 
   // Filling "Full name" made the page replace the phone field with a new node at a new
   // path. BRIDGE has to find it again by kind and name (§8.1).
-  await panel.getByLabel('Phone').fill('+65 8000 0000');
+  await panel.getByLabel('Phone').fill('96759836');
   await panel.getByRole('button', { name: 'Write Phone to page' }).click();
   await status('Phone').filter({ hasText: /On the page|Could not/ }).waitFor();
-  check('re-rendered field: found again by name and written', await page.inputValue('.rerendered input[name=phone]') === '+65 8000 0000',
+  check('re-rendered field: found again by name and written', await page.inputValue('.rerendered input[name=phone]') === '96759836',
     await status('Phone').textContent());
+  check('phone: spoken digit by digit, never as a quantity; the page and the visible status keep the real value',
+    /Phone: 9 6 7 5 9 8 3 6\. Confirmed on the page/.test(await spoken(panel, /Phone: 9 6 7 5 9 8 3 6/)) &&
+    /On the page: 96759836/.test(await status('Phone').textContent()));
 
   check('slider: the range is a description, never min/max (VoiceOver speaks those as a percentage)',
     await panel.locator('#questions input[type=number][max]').count() === 0 &&
@@ -268,7 +271,7 @@ try {
   await panel.waitForFunction(() => /Zheng Wei/.test(document.getElementById('verify-results').textContent));
   const verified = await panel.locator('#verify-results').textContent();
   check('VERIFY reads every answer back from the page',
-    ['Zheng Wei', '+65 8000 0000', "Bachelor's", 'Years of experience: 2', ': No', 'Language skills: English', '01/10/2026', 'resume.pdf', 'privacy notice: checked', 'Referral code: ACME-42']
+    ['Zheng Wei', '96759836', "Bachelor's", 'Years of experience: 2', ': No', 'Language skills: English', '01/10/2026', 'resume.pdf', 'privacy notice: checked', 'Referral code: ACME-42']
       .every((t) => verified.includes(t)), verified.replace(/\s+/g, ' '));
   check('VERIFY reports the discarded field as empty', /Notice period: empty/.test(verified));
   await panel.waitForTimeout(150);
@@ -291,7 +294,7 @@ try {
     (await panel.locator('#diag').textContent()).includes('not sent (nothing to infer from)') &&
     await panel.locator('#questions label', { hasText: 'Unlabelled text (label inferred)' }).count() === 1);
   check('inference: the request carries structure only, none of the answers on the page',
-    !/Zheng|8000 0000|Bachelor|resume\.pdf|ACME-42|01\/10\/2026/.test(JSON.stringify(proxyRequests)));
+    !/Zheng|96759836|Bachelor|resume\.pdf|ACME-42|01\/10\/2026/.test(JSON.stringify(proxyRequests)));
   // The privacy rule itself (§6.4): a control may be photographed only while it is empty.
   const rect = (fieldId) => sw.evaluate(({ id, fieldId }) => chrome.tabs.sendMessage(id, { type: 'bridge/rect', fieldId }, { frameId: 0 }), { id: tabId, fieldId });
   const before = await rect('f3');

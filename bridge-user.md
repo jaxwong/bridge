@@ -570,6 +570,9 @@ BRIDGE is useless if BRIDGE itself is inaccessible.
   three times, 2026-09-22). The known cost: if a scan outlives VoiceOver's read of the
   summary line, the user hears "Scanning the page…" and must re-read or rescan; on the
   fixtures the scan wins by a wide margin.
+- Spoken values are shaped for the ear: a run of seven or more digits (a phone number, an
+  id — never a quantity) is spaced out so the reader speaks each digit instead of
+  "ninety-six million…". Visible text and everything written to the page keep the real value.
 - Visible and programmatic focus management: focus moves into the panel on open. It never
   moves on a write: a screen reader speaks whatever receives focus before a polite
   announcement, so auto-advancing introduced the next question before confirming the one
