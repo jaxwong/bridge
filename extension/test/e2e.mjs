@@ -480,6 +480,12 @@ try {
     said = await spoken(panel, /Step 2 of 3/);
     check('full-nav: the new page is announced without reopening the panel', /Step 2 of 3: My Experience\. Next: Review\./.test(said), said);
     check('full-nav: the unwritten answer from the destroyed step is reported lost', /before First name was written/.test(said), said);
+    // Alt+Shift+B reloads the panel; a draft from a step the page has left must not come back.
+    await panel.reload();
+    await panel.waitForFunction(() => !document.getElementById('summary').textContent.startsWith('Scanning'), null, { timeout: 15000 });
+    check('drafts: an answer typed on step 1 does not haunt step 2 after a panel reload',
+      await panel.evaluate(() => [...document.querySelectorAll('#questions input, #questions textarea')]
+        .filter((i) => i.type === 'text' || i.tagName === 'TEXTAREA').every((i) => i.value === '')));
     await panel.getByLabel('Full list').check();
     await panel.getByLabel('Job title').fill('Analyst');
     await panel.getByRole('button', { name: 'Write Job title to page' }).click();
@@ -523,6 +529,25 @@ try {
     check('export: a one-step form has pageBarriers, no steps, and no step numbers',
       report.pageBarriers.length === 1 && report.pageBarriers[0].rule === 'drag-drop-only' && !('steps' in report) && !('step' in report.pageBarriers[0]),
       JSON.stringify(report).slice(0, 300));
+  });
+
+  // =====================================================================================
+  // Drafts: Alt+Shift+B reopens (and so reloads) the panel; typed answers must survive.
+  // =====================================================================================
+  await section('drafts survive a panel reload', async () => {
+    const { panel } = await open('apply.html');
+    await panel.getByLabel('One question at a time').check();
+    await panel.getByRole('button', { name: 'Next question' }).click();
+    await panel.getByLabel('Phone').fill('96759836');
+    await new Promise((r) => setTimeout(r, 500)); // the debounced draft save (300 ms)
+    await panel.reload();
+    await panel.waitForFunction(() => !document.getElementById('summary').textContent.startsWith('Scanning'), null, { timeout: 15000 });
+    const said = await spoken(panel, /Back in BRIDGE/);
+    check('reopen: says the answers are kept and where the user was',
+      /^Back in BRIDGE\. Your answers are kept\. You were on question 2 of 13\.$/.test(said), said);
+    check('reopen: the typed, unwritten answer is back in its box', await panel.getByLabel('Phone').inputValue() === '96759836');
+    check('reopen: one-question mode shows the question the user was on',
+      (await panel.locator('#questions .q:visible h3').textContent()) === 'Question 2 of 13');
   });
 
   // =====================================================================================

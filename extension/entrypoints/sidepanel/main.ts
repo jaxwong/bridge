@@ -300,6 +300,7 @@ function goTo(key: string) {
   if (i < 0) return;
   current = i;
   applyMode();
+  saveDraftsSoon();
   firstControl(key)?.focus();
 }
 
@@ -308,6 +309,76 @@ function goTo(key: string) {
 interface StoredCv { name: string; type: string; data: string }
 let storedCv: StoredCv | null = null;
 const cvKey = () => `cv:${tabId}`;
+
+// --- drafts -----------------------------------------------------------------------------
+// What the user has chosen in the panel but not yet written, plus where they were. Kept in
+// storage.session so Alt+Shift+B — which reloads the panel because an open panel cannot
+// take focus back from the page — costs nothing. Scoped to tab, origin and step: a draft
+// never survives onto a different step (the page moved on; saying so is existing behavior).
+
+interface DraftStore { stepIndex: number; current: number; values: Record<string, string> }
+const draftsKey = (origin: string) => `drafts:${tabId}:${origin}`;
+let draftSaveTimer: number | undefined;
+
+/** Control values straight from the DOM, same shapes readAnswer() sends. Files are left
+ *  out: the CV already has its own store and reuse button. */
+function collectDrafts(): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const f of fields) {
+    if (f.kind === 'file') continue;
+    const q = questionEl(f.key);
+    if (!q) continue;
+    if (f.kind === 'radio-group') {
+      const c = q.querySelector<HTMLInputElement>('input[type=radio]:checked');
+      if (c) values[f.key] = c.value;
+    } else if (f.kind === 'checkbox-group') {
+      const on = [...q.querySelectorAll<HTMLInputElement>('input[type=checkbox]:checked')].map((c) => c.value);
+      if (on.length) values[f.key] = JSON.stringify(on);
+    } else if (f.kind === 'checkbox') {
+      if (q.querySelector<HTMLInputElement>('input')!.checked) values[f.key] = 'checked';
+    } else {
+      const ctl = q.querySelector<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input, select, textarea');
+      if (ctl?.value.trim()) values[f.key] = ctl.value;
+    }
+  }
+  return values;
+}
+
+function saveDraftsSoon() {
+  clearTimeout(draftSaveTimer);
+  draftSaveTimer = window.setTimeout(() => {
+    if (!session || !step) return;
+    const store: DraftStore = { stepIndex: session.currentStepIndex, current, values: collectDrafts() };
+    browser.storage.session.set({ [draftsKey(step.origin)]: store })
+      .catch((e) => diag('Drafts', `not saved: ${String(e)}`));
+  }, 300);
+}
+
+/** Puts stored values back into freshly built controls; returns how many. A single
+ *  unreadable entry is skipped and logged, never allowed to break the scan. */
+function applyDrafts(values: Record<string, string>): number {
+  let restored = 0;
+  for (const f of fields) {
+    const v = values[f.key];
+    if (v == null || f.kind === 'file') continue;
+    const q = questionEl(f.key);
+    if (!q) continue;
+    try {
+      if (f.kind === 'radio-group' || f.kind === 'checkbox-group') {
+        const wanted = f.kind === 'radio-group' ? [v] : (JSON.parse(v) as string[]);
+        q.querySelectorAll<HTMLInputElement>('input[type=radio], input[type=checkbox]').forEach((c) => { c.checked = wanted.includes(c.value); });
+      } else if (f.kind === 'checkbox') {
+        q.querySelector<HTMLInputElement>('input')!.checked = v === 'checked';
+      } else {
+        q.querySelector<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input, select, textarea')!.value = v;
+      }
+      restored++;
+    } catch (e) {
+      diag('Drafts', `unreadable draft for ${f.key}: ${String(e)}`);
+    }
+  }
+  return restored;
+}
 
 async function readAnswer(f: PanelField): Promise<string | null> {
   const q = questionEl(f.key)!;
@@ -676,10 +747,20 @@ async function scanOnce(reason: Reason) {
   if (verdict !== 'fields-changed') { setVerified(false); current = 0; inferred.clear(); }
 
   await recordStep(now, topScan.scannedAt, verdict === 'new-step');
+
+  // A reopened panel (or a tab switched back to) picks up the drafts for this same step.
+  // Anything else — a new step, another origin — fails the stepIndex match and starts
+  // clean, which is the existing "the page moved on" rule for unwritten answers.
+  const dkey = draftsKey(now.origin);
+  const storedDrafts = (await browser.storage.session.get(dkey))[dkey] as DraftStore | undefined;
+  const draftsApply = verdict === 'first' && storedDrafts?.stepIndex === session!.currentStepIndex;
+  if (draftsApply) current = storedDrafts!.current;
+
   const journey = journeyText(now);
   $('journey').textContent = journey;
   $('summary').textContent = summaryText();
   renderQuestions(verdict !== 'fields-changed');
+  const restored = draftsApply ? applyDrafts(storedDrafts!.values) : 0;
   // Same step, new document: the page reloaded. What the user typed here is kept, but
   // every "On the page" confirmation describes a document that no longer exists.
   const reloaded = verdict === 'fields-changed' && prev!.pageId !== now.pageId;
@@ -694,9 +775,14 @@ async function scanOnce(reason: Reason) {
     // On open, announce nothing: the panel is a freshly loaded document, so a screen
     // reader reads it once, top to bottom — heading, journey, this same summary, the
     // questions. Announcing on top of that made VoiceOver interrupt the pass and speak
-    // the summary again (heard three times with the live region's own text).
-    if (reason !== 'open') announce(`${journey ? `${journey} ` : ''}${summaryText()}`);
-    if (mode === 'one' && fields.length && reason !== 'open') firstControl(fields[0].key)?.focus();
+    // the summary again (heard three times with the live region's own text). The one
+    // exception is restored work, which the reading order cannot tell the user about.
+    if (reason === 'open') {
+      if (restored) announce(`Back in BRIDGE. Your answers are kept. You were on question ${current + 1} of ${fields.length}.`);
+    } else {
+      announce(`${journey ? `${journey} ` : ''}${summaryText()}`);
+      if (mode === 'one' && fields.length) firstControl(fields[current].key)?.focus();
+    }
   } else if (verdict === 'new-step') {
     const where = journey || (now.total === 1 ? `New page: ${now.heading}.` : `New step: ${now.heading}. Total number of steps unknown.`);
     const lost = unwritten.length ? ` The page moved on before ${unwritten.join(', ')} was written; that answer was not saved.` : '';
@@ -784,6 +870,10 @@ function focusHeading() {
 }
 
 // --- boot -----------------------------------------------------------------------------
+
+// Every keystroke and choice becomes a draft (debounced), so a panel reload loses nothing.
+$('questions').addEventListener('input', saveDraftsSoon);
+$('questions').addEventListener('change', saveDraftsSoon);
 
 $('rescan').addEventListener('click', () => void runScan('manual'));
 $('verify').addEventListener('click', () => void verifyAll());

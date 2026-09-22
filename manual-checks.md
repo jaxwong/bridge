@@ -101,8 +101,12 @@ What was found, by hand:
 | Can the page take focus from the panel? | **No.** See check 2, which changed the design because of it |
 | Chrome's own pane key | F6 does nothing on macOS. Cmd+Option+Down arrow, or Up, reaches the other pane in four presses. Nothing in BRIDGE depends on it |
 
-The cost of the reopen: the panel reloads and rescans. An answer typed in the panel but not
-yet written to the page is lost. Everything written is on the page and is read back from there.
+The reopen reloads and rescans the panel, but it costs no answers (since 2026-09-22):
+everything typed in the panel is kept as a draft in session storage and put back if the
+page is still on the same step, and BRIDGE says "Back in BRIDGE. Your answers are kept.
+You were on question N of M." Everything written is on the page and is read back from
+there. Only a draft from a step the page has since left is dropped, which was always
+the rule for unwritten answers.
 
 **To repeat the check after any change to the shortcuts**
 
@@ -110,8 +114,10 @@ yet written to the page is lost. Everything written is on the page and is read b
 2. Click in the page's **Full name** field. Press **Alt+Shift+B**, wait for the scan, then
    press **Tab**. *Expect:* the focus ring is on the panel's "Scan the page again" button.
    If `abc` typed now lands in the page's Phone field, focus stayed in the page: tell Claude.
-3. Leave the panel open. Click in **Full name** again. Press **Alt+Shift+B**, then **Tab**.
-   *Expect:* the panel closes, reopens and rescans, and the focus ring is inside it.
+3. Leave the panel open. Type into a panel question box without writing it. Click in the
+   page's **Full name** again. Press **Alt+Shift+B**, then **Tab**.
+   *Expect:* the panel closes, reopens and rescans; the focus ring is inside it; what you
+   typed is back in its box; VoiceOver users hear "Back in BRIDGE. Your answers are kept…".
 
 **Still to do**
 
@@ -368,8 +374,8 @@ caption panel.
    *Expect:* "Scan the page again" comes right after the summary. No barrier sentence is
    ever spoken in the panel; the barriers exist only in the exported report (2026-09-22).
 6. **"How to answer".**
-   *Expect:* a group named "How to answer" with two radio buttons, "One question at a
-   time" selected.
+   *Expect:* the text "How to answer", then two radio buttons, "One question at a time"
+   selected. No "group" wrapper is announced, and nothing is spoken twice.
 7. **One question at a time.** Tab from the mode group onward.
    *Expect:* only **one** question is reachable. The other twelve must not be spoken at all.
 8. **Full name.** Type a name. Tab to **"Write Full name to page"**. Press Space.
