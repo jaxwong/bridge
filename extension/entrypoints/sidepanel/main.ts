@@ -101,6 +101,10 @@ const inferred = new Map<string, string>();
 const nameOf = (f: PanelField) => inferred.get(f.key) ?? f.label;
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+/** For spoken sentences only: a run of seven or more digits is a phone number or an id,
+ *  never a quantity, but a screen reader says "96759836" as ninety-six million odd.
+ *  Spacing the digits makes it read them one by one. Visible text keeps the real value. */
+const speakDigits = (text: string) => text.replace(/\d{7,}/g, (run) => run.split('').join(' '));
 
 const fieldByKey = (key: string) => fields.find((f) => f.key === key);
 const questionEl = (key: string) => [...$('questions').children].find((q) => (q as HTMLElement).dataset.key === key) as HTMLElement | undefined;
@@ -361,7 +365,7 @@ async function write(key: string, given: string | null) {
     status.className = 'status fail';
     const detail = res.error || `The page shows "${res.readBack || 'nothing'}".`;
     status.textContent = `Could not fill: may need sighted help. ${detail}`;
-    announce(`Could not fill ${nameOf(f)}. ${detail}`);
+    announce(`Could not fill ${nameOf(f)}. ${speakDigits(detail)}`);
     return;
   }
 
@@ -380,7 +384,7 @@ async function write(key: string, given: string | null) {
   const onward = next
     ? (mode === 'one' ? ` Press Next question for ${nameOf(next)}.` : ` Next: ${nameOf(next)}.`)
     : ' That was the last question.';
-  announce(`${nameOf(f)}: ${res.readBack}. Confirmed on the page.${remembered}${onward}`);
+  announce(`${nameOf(f)}: ${speakDigits(res.readBack)}. Confirmed on the page.${remembered}${onward}`);
 }
 
 async function rememberCv(cv: StoredCv): Promise<string> {
@@ -416,7 +420,7 @@ async function verifyAll(): Promise<boolean> {
     const value = r?.found ? (r.value || 'empty') : 'no longer on the page';
     li.textContent = `${nameOf(f)}: ${value}`;
     ul.append(li);
-    if (r?.found && r.value && r.value !== 'not checked') filled.push(`${nameOf(f)}, ${r.value}`);
+    if (r?.found && r.value && r.value !== 'not checked') filled.push(`${nameOf(f)}, ${speakDigits(r.value)}`);
     else empty.push(nameOf(f));
   }
   let forward = null;
