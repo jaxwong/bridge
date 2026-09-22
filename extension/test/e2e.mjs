@@ -687,6 +687,44 @@ try {
       /cannot read this page/.test(said) && await panel.locator('#questions .q').count() === 0, said);
   });
 
+  await section('always enable: the prompt outcome reaches the user', async () => {
+    // Chrome's permission prompt is browser UI and cannot be answered headlessly, which is
+    // why manual check 4 exists. What IS testable is everything after it closes — and that
+    // is where Deny was silent: the sentence went to #live while focus was still outside
+    // this document, so nothing spoke it.
+    const page = await ctx.newPage();
+    await page.goto('http://localhost:8765/apply.html');
+    const tabId = await sw.evaluate(async (u) => (await chrome.tabs.query({})).find((t) => t.url === u)?.id, page.url());
+
+    const panel = await ctx.newPage();
+    await panel.addInitScript(() => {
+      const install = () => {
+        if (!globalThis.chrome?.permissions) return false;
+        globalThis.chrome.permissions.request = () => Promise.resolve(false);
+        return true;
+      };
+      if (!install()) document.addEventListener('DOMContentLoaded', install);
+    });
+    await panel.goto(`chrome-extension://${extId}/sidepanel.html?tabId=${tabId}`);
+    await panel.waitForFunction(() => !document.getElementById('summary').textContent.startsWith('Scanning'), null, { timeout: 15000 });
+
+    // The button is offered on https only, and the fixture is http, so it is revealed here
+    // rather than waited for. The handler under test is the same one either way.
+    await panel.evaluate(() => { document.getElementById('always-enable').hidden = false; });
+    await panel.getByRole('button', { name: 'Always enable BRIDGE on this site' }).click();
+
+    const said = await spoken(panel, /was not enabled on this site/);
+    check('deny: the outcome is announced, not silent',
+      /BRIDGE was not enabled on this site\. Nothing changed\./.test(said), said);
+    check('deny: focus is back in the panel, on the button that was pressed, so the live region is heard',
+      await panel.evaluate(() => document.activeElement?.id) === 'always-enable',
+      await panel.evaluate(() => document.activeElement?.id));
+    check('deny: the button stays, because nothing changed',
+      await panel.locator('#always-enable').isVisible());
+    check('deny: the outcome is also written to Diagnostics, so a silent run can still be diagnosed',
+      /denied/.test(await panel.textContent('#diag')));
+  });
+
   await section('user-added site registration', async () => {
     const panel = await ctx.newPage();
     await panel.goto(`chrome-extension://${extId}/sidepanel.html?tabId=0`);
