@@ -19,7 +19,7 @@ export type Response<T extends Request['type']> =
   T extends 'bridge/ping' ? { ok: true; pageId: number } :
   T extends 'bridge/scan' ? ScanResult :
   T extends 'bridge/fill' ? FillResult :
-  T extends 'bridge/read-back' ? ReadBackResult[] :
+  T extends 'bridge/read-back' ? ReadBack :
   T extends 'bridge/forward-action' ? ForwardAction | null :
   T extends 'bridge/submit' ? ForwardAction | null :
   T extends 'bridge/back-action' ? ForwardAction | null :
@@ -38,6 +38,12 @@ export async function send<R extends Request>(tabId: number, frameId: number, re
   }
   return res as Response<R['type']>;
 }
+
+/** VERIFY's answer. `changed` means fields have appeared or gone since the last scan, so
+ *  `fields` describes a form the page no longer shows: the panel rescans once, then reads
+ *  again. (A conditional question revealed by a write is on the page well before the
+ *  watcher's debounced rescan lands, and a read-back in between must not miss it.) */
+export interface ReadBack { changed: boolean; fields: ReadBackResult[] }
 
 /** The step's primary forward control: Continue on steps 1..n-1, Submit on the last (§6.5). */
 /** `pressed` is true only when the page side clicked the button. `bridge/forward-action` never

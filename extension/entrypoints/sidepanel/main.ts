@@ -38,15 +38,22 @@ async function worker<T>(req: WorkerRequest): Promise<T> {
   return res;
 }
 
-// --- the one live region (§6.6) -------------------------------------------------------
-let announceTimer: number | undefined;
-function announce(text: string) {
-  const live = $('live');
+// --- the two live regions (§6.6) ------------------------------------------------------
+// reply() answers the user's own command (Alt+Shift+S, Write, Read back, Go back…) and is
+// assertive: it interrupts whatever the screen reader is saying, because they pressed a
+// key and want the answer now, not after the panel has been read to the end. announce()
+// is news from the page (a step changed, questions appeared, nothing moved on) and is
+// polite: it waits for a pause, so it never cuts off the field the user has just reached.
+const speakTimers = new Map<'live' | 'live-now', number>();
+function speak(region: 'live' | 'live-now', text: string) {
+  const el = $(region);
   // Clear first so repeating the same sentence is still spoken.
-  live.textContent = '';
-  clearTimeout(announceTimer);
-  announceTimer = window.setTimeout(() => { live.textContent = text; }, 60);
+  el.textContent = '';
+  clearTimeout(speakTimers.get(region));
+  speakTimers.set(region, window.setTimeout(() => { el.textContent = text; }, 60));
 }
+const announce = (text: string) => speak('live', text);
+const reply = (text: string) => speak('live-now', text);
 
 function diag(label: string, text: string) {
   const dt = document.createElement('dt');
@@ -79,16 +86,21 @@ let step: StepState | null = null;
 let session: ApplicationSession | null = null;
 /** True once VERIFY has run since the last write on this step: the gate on Alt+Shift+S. */
 let verified = false;
-/** Set only while the gate is open on a step whose forward button submits (§6.5).
+/** Set only while the gate is open (§6.5): what this step's forward button does.
  *  `empty` holds the names, so the confirmation can say which, not just how many. */
-let submitOffer: { name: string; empty: string[] } | null = null;
+let forwardOffer: { name: string; submits: boolean; empty: string[] } | null = null;
 
-/** The one place the VERIFY gate opens or closes. The panel's submit button exists only
- *  while the gate is open, so anything that changes the page withdraws it. */
-function setVerified(open: boolean, submit: typeof submitOffer = null) {
+/** The one place the VERIFY gate opens or closes. The panel's forward and submit buttons
+ *  exist only while the gate is open, so anything that changes the page withdraws them.
+ *  Buttons are the primary interface (discoverable, and immune to Chrome leaving the
+ *  shortcut unbound); Alt+Shift+S is the accelerator over the same gate. */
+function setVerified(open: boolean, offer: typeof forwardOffer = null) {
   verified = open;
-  submitOffer = open ? submit : null;
-  $('submit-app').hidden = !submitOffer;
+  forwardOffer = open ? offer : null;
+  $('submit-app').hidden = !forwardOffer?.submits;
+  const press = $('press-forward');
+  press.hidden = !forwardOffer || forwardOffer.submits;
+  if (!press.hidden) press.textContent = `Press the ${forwardOffer!.name} button on the page`;
   $('submit-confirm').hidden = true;
 }
 let mode: 'one' | 'list' = 'one';
@@ -276,8 +288,11 @@ function paintNames() {
  *  adds the new ones, drops the rest. `fresh` starts over: a new step. */
 function renderQuestions(fresh: boolean) {
   const box = $('questions');
-  const focusedKey = (document.activeElement?.closest('.q') as HTMLElement | null)?.dataset.key;
-  const focusedId = document.activeElement?.id;
+  // Re-appending kept nodes blurs whichever one held focus. Track the element itself, not
+  // an id: a Write button has no id, and losing it dropped focus to the panel body — the
+  // next Tab then restarted from the top instead of reaching the next question.
+  const active = document.activeElement as HTMLElement | null;
+  const focusedKey = (active?.closest('.q') as HTMLElement | null)?.dataset.key;
   if (fresh) box.replaceChildren();
   box.replaceChildren(...fields.map((f) => {
     const kept = questionEl(f.key);
@@ -285,8 +300,12 @@ function renderQuestions(fresh: boolean) {
   }));
   paintNames();
   applyMode();
-  // Moving a node blurs it; put focus back where the user was.
-  if (focusedKey && focusedId && questionEl(focusedKey)) document.getElementById(focusedId)?.focus();
+  if (!fresh && focusedKey) {
+    // The kept node survived the move: focus the very element the user was on. A rebuilt
+    // question keeps them at least on the same question's first control.
+    if (active?.isConnected) active.focus();
+    else if (questionEl(focusedKey)) firstControl(focusedKey)?.focus();
+  }
 }
 
 function applyMode() {
@@ -313,12 +332,16 @@ let storedCv: StoredCv | null = null;
 const cvKey = () => `cv:${tabId}`;
 
 // --- drafts -----------------------------------------------------------------------------
-// What the user has chosen in the panel but not yet written, plus where they were. Kept in
-// storage.session so Alt+Shift+B — which reloads the panel because an open panel cannot
-// take focus back from the page — costs nothing. Scoped to tab, origin and step: a draft
-// never survives onto a different step (the page moved on; saying so is existing behavior).
+// What the user has chosen in the panel, plus where they were, one record per step. Kept
+// in storage.session so Alt+Shift+B — which reloads the panel because an open panel cannot
+// take focus back from the page — costs nothing, and so that going back to a step shows
+// what was typed there. A draft is only ever put back on its own step, by the session's
+// step index, so a page with no step index (a revisit there is a new index) starts clean.
 
-interface DraftStore { stepIndex: number; current: number; values: Record<string, string> }
+interface StepDraft { current: number; values: Record<string, string> }
+/** By step index. `drafts` is the working copy; storage holds it across a panel reload. */
+type DraftStore = Record<string, StepDraft>;
+let drafts: DraftStore = {};
 const draftsKey = (origin: string) => `drafts:${tabId}:${origin}`;
 let draftSaveTimer: number | undefined;
 
@@ -348,12 +371,17 @@ function collectDrafts(): Record<string, string> {
 
 function saveDraftsSoon() {
   clearTimeout(draftSaveTimer);
-  draftSaveTimer = window.setTimeout(() => {
-    if (!session || !step) return;
-    const store: DraftStore = { stepIndex: session.currentStepIndex, current, values: collectDrafts() };
-    browser.storage.session.set({ [draftsKey(step.origin)]: store })
-      .catch((e) => diag('Drafts', `not saved: ${String(e)}`));
-  }, 300);
+  draftSaveTimer = window.setTimeout(saveDraftsNow, 300);
+}
+
+/** Also called before the panel turns to a new step, so a keystroke typed just before
+ *  Next was pressed is not lost to the debounce. */
+function saveDraftsNow() {
+  clearTimeout(draftSaveTimer);
+  if (!session || !step) return;
+  drafts[session.currentStepIndex] = { current, values: collectDrafts() };
+  browser.storage.session.set({ [draftsKey(step.origin)]: drafts })
+    .catch((e) => diag('Drafts', `not saved: ${String(e)}`));
 }
 
 /** Puts stored values back into freshly built controls; returns how many. A single
@@ -412,14 +440,14 @@ async function write(key: string, given: string | null) {
   const status = questionEl(key)!.querySelector('.status')!;
   const answer = given ?? await readAnswer(f);
   if (answer == null) {
-    announce(`Choose an answer for ${nameOf(f)} first.`);
+    reply(`Choose an answer for ${nameOf(f)} first.`);
     firstControl(key)?.focus();
     return;
   }
   // The boundary check for the plain-text date control above: the page-side fill expects
   // exactly this shape, so a wrong format fails here, named, instead of on the page.
   if (f.kind === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(answer)) {
-    announce(`Type ${nameOf(f)} as year-month-day, like 2026-10-31.`);
+    reply(`Type ${nameOf(f)} as year-month-day, like 2026-10-31.`);
     firstControl(key)?.focus();
     return;
   }
@@ -438,7 +466,7 @@ async function write(key: string, given: string | null) {
     status.className = 'status fail';
     const detail = res.error || `The page shows "${res.readBack || 'nothing'}".`;
     status.textContent = `Could not fill: may need sighted help. ${detail}`;
-    announce(`Could not fill ${nameOf(f)}. ${speakDigits(detail)}`);
+    reply(`Could not fill ${nameOf(f)}. ${speakDigits(detail)}`);
     return;
   }
 
@@ -457,7 +485,7 @@ async function write(key: string, given: string | null) {
   const onward = next
     ? (mode === 'one' ? ` Press Next question for ${nameOf(next)}.` : ` Next: ${nameOf(next)}.`)
     : ' That was the last question.';
-  announce(`${nameOf(f)}: ${speakDigits(res.readBack)}. Confirmed on the page.${remembered}${onward}`);
+  reply(`${nameOf(f)}: ${speakDigits(res.readBack)}. Confirmed on the page.${remembered}${onward}`);
 }
 
 async function rememberCv(cv: StoredCv): Promise<string> {
@@ -473,14 +501,25 @@ async function rememberCv(cv: StoredCv): Promise<string> {
   }
 }
 
+async function readBackFrames(id: number) {
+  const frameIds = [...new Set(fields.map((f) => f.frameId))];
+  return Promise.all(frameIds.map(async (frameId) => ({ frameId, ...await send(id, frameId, { type: 'bridge/read-back' }) })));
+}
+
 async function verifyAll(): Promise<boolean> {
   const id = await targetTab();
-  const frameIds = [...new Set(fields.map((f) => f.frameId))];
   let byFrame;
   try {
-    byFrame = await Promise.all(frameIds.map(async (frameId) => ({ frameId, results: await send(id, frameId, { type: 'bridge/read-back' }) })));
+    byFrame = await readBackFrames(id);
+    // Questions have appeared or gone since the last scan (a Yes that reveals more, read
+    // back before the page's watcher fires): look at the page once more, then read what
+    // is there now. At most one rescan; the second read-back is taken as it comes.
+    if (byFrame.some((x) => x.changed)) {
+      await runScan('form-changed');
+      byFrame = await readBackFrames(id);
+    }
   } catch (e) {
-    announce(`Could not read the page. ${String(e)}`);
+    reply(`Could not read the page. ${String(e)}`);
     return false;
   }
   const ul = $('verify-results');
@@ -488,7 +527,7 @@ async function verifyAll(): Promise<boolean> {
   const filled: string[] = [];
   const empty: string[] = [];
   for (const f of fields) {
-    const r = byFrame.find((x) => x.frameId === f.frameId)?.results.find((x) => x.fieldId === f.localId);
+    const r = byFrame.find((x) => x.frameId === f.frameId)?.fields.find((x) => x.fieldId === f.localId);
     const li = document.createElement('li');
     const value = r?.found ? (r.value || 'empty') : 'no longer on the page';
     li.textContent = `${nameOf(f)}: ${value}`;
@@ -503,14 +542,14 @@ async function verifyAll(): Promise<boolean> {
     // The read-back above is still true and still worth hearing; only the button's name is missing.
     diag('Forward action', String(e));
   }
-  setVerified(true, forward?.submits ? { name: forward.name, empty } : null);
-  announce(
+  setVerified(true, forward ? { name: forward.name, submits: forward.submits, empty } : null);
+  reply(
     (filled.length ? `Your application contains: ${filled.join('. ')}.` : 'Nothing has been filled yet.') +
     (empty.length ? ` ${empty.length} ${empty.length === 1 ? 'question' : 'questions'}${stepScope()} ${empty.length === 1 ? 'is' : 'are'} empty: ${empty.join(', ')}.` : '') +
     (forward
       ? (forward.submits
           ? ' BRIDGE submits only when you tell it to. Press Alt+Shift+S again to move to the Submit my application button in BRIDGE.'
-          : ` Press Alt+Shift+S again and BRIDGE presses the ${forward.name} button, which moves to the next step.`)
+          : ` Press Alt+Shift+S again and BRIDGE presses the ${forward.name} button, which moves to the next step. The same press is a button after this read-back.`)
       : ' BRIDGE found no Continue or Submit button on this step.'),
   );
   return true;
@@ -538,11 +577,17 @@ async function reportIfPageStays(pressed: string, from: { session: ApplicationSe
 async function forwardCommand() {
   if (!step) return;
   if (!verified) { await verifyAll(); return; }
-  if (submitOffer) {
+  if (forwardOffer?.submits) {
     $('submit-app').focus();
-    announce('Focus is on the Submit my application button in BRIDGE. Pressing it asks you to confirm before anything is sent.');
+    reply('Focus is on the Submit my application button in BRIDGE. Pressing it asks you to confirm before anything is sent.');
     return;
   }
+  await pressForwardButton();
+}
+
+/** Shared by the shortcut's second press and the panel's own forward button. */
+async function pressForwardButton() {
+  if (!step) return;
   // The gate closes before anything is pressed, so an impatient second press reads back
   // again instead of pressing Next twice and skipping a step.
   setVerified(false);
@@ -551,14 +596,14 @@ async function forwardCommand() {
   try {
     forward = await send(await targetTab(), step.mainFrame, { type: 'bridge/forward-action', act: true });
   } catch (e) {
-    announce(`BRIDGE could not reach the page. ${String(e)}`);
+    reply(`BRIDGE could not reach the page. ${String(e)}`);
     return;
   }
-  if (!forward) { announce('BRIDGE could not find a Continue or Submit button on this step.'); return; }
+  if (!forward) { reply('BRIDGE could not find a Continue or Submit button on this step.'); return; }
   diag('Forward action', `${forward.name}: ${forward.pressed ? 'pressed' : 'not pressed, it submits'}`);
   // The button became a submitting one since the read-back: read the step back again.
   if (!forward.pressed) { await verifyAll(); return; }
-  announce(`BRIDGE pressed the ${forward.name} button on the page.`);
+  reply(`BRIDGE pressed the ${forward.name} button on the page.`);
   await reportIfPageStays(forward.name, from);
 }
 
@@ -575,25 +620,25 @@ function stepScope() {
 }
 
 function askBeforeSubmitting() {
-  if (!submitOffer || !step) return;
-  const n = submitOffer.empty.length;
-  const empty = n ? `${n} ${n === 1 ? 'question' : 'questions'}${stepScope()} ${n === 1 ? 'is' : 'are'} empty: ${submitOffer.empty.join(', ')}. ` : '';
+  if (!forwardOffer?.submits || !step) return;
+  const n = forwardOffer.empty.length;
+  const empty = n ? `${n} ${n === 1 ? 'question' : 'questions'}${stepScope()} ${n === 1 ? 'is' : 'are'} empty: ${forwardOffer.empty.join(', ')}. ` : '';
   const question = `Submit your application to ${new URL(step.origin).host}? ${empty}This cannot be undone.`;
   $('submit-question').textContent = question;
   $('submit-confirm').hidden = false;
   $('submit-cancel').focus();
-  announce(`${question} Choose Yes, submit now, or Cancel.`);
+  reply(`${question} Choose Yes, submit now, or Cancel.`);
 }
 
 function cancelSubmitting() {
   $('submit-confirm').hidden = true;
   $('submit-app').focus();
-  announce('Nothing was submitted.');
+  reply('Nothing was submitted.');
 }
 
 async function submitConfirmed() {
-  if (!verified || !submitOffer || !step) {
-    announce('The page changed after it was read back, so nothing was submitted. Read it back again first.');
+  if (!verified || !forwardOffer?.submits || !step) {
+    reply('The page changed after it was read back, so nothing was submitted. Read it back again first.');
     return;
   }
   setVerified(false);
@@ -602,12 +647,12 @@ async function submitConfirmed() {
   try {
     done = await send(await targetTab(), step.mainFrame, { type: 'bridge/submit' });
   } catch (e) {
-    announce(`BRIDGE could not reach the page, so nothing was submitted. ${String(e)}`);
+    reply(`BRIDGE could not reach the page, so nothing was submitted. ${String(e)}`);
     return;
   }
-  if (!done) { announce('BRIDGE could not find the submit button any more, so nothing was submitted.'); return; }
+  if (!done) { reply('BRIDGE could not find the submit button any more, so nothing was submitted.'); return; }
   diag('Submit', `${done.name}: pressed after the user confirmed`);
-  announce(`BRIDGE pressed the ${done.name} button on the page, as you confirmed.`);
+  reply(`BRIDGE pressed the ${done.name} button on the page, as you confirmed.`);
   await reportIfPageStays(done.name, from);
 }
 
@@ -622,6 +667,7 @@ async function loadSession(origin: string) {
   // untouched, and coming back resumes it.
   session = stored ?? { tabId: tabId!, origin, steps: [], currentStepIndex: 0, startedAt: new Date().toISOString() };
   storedCv = ((await browser.storage.session.get(cvKey()))[cvKey()] as StoredCv | undefined) ?? null;
+  drafts = ((await browser.storage.session.get(draftsKey(origin)))[draftsKey(origin)] as DraftStore | undefined) ?? {};
 }
 
 async function recordStep(s: StepState, scannedAt: string, newStep: boolean) {
@@ -650,17 +696,18 @@ async function recordFilled(key: string) {
 const jaccard = (a: Set<string>, b: Set<string>) =>
   [...a].filter((k) => b.has(k)).length / (new Set([...a, ...b]).size || 1);
 
-let scanning = false;
+let scanning: Promise<void> | null = null;
 let queued: Reason | null = null;
 
-async function runScan(reason: Reason) {
-  // A change that arrives mid-scan is not lost: one more scan runs after this one.
-  if (scanning) { queued = reason; return; }
-  scanning = true;
-  try { await scanOnce(reason); } finally {
-    scanning = false;
+/** Scans run one at a time. A change that arrives mid-scan is not lost: one more scan
+ *  runs after this one. The promise settles once the scan this call asked for has run. */
+function runScan(reason: Reason): Promise<void> {
+  if (scanning) { queued = reason; return scanning.then(() => scanning ?? undefined); }
+  scanning = scanOnce(reason).finally(() => {
+    scanning = null;
     if (queued) { const r = queued; queued = null; void runScan(r); }
-  }
+  });
+  return scanning;
 }
 
 async function scanOnce(reason: Reason) {
@@ -749,27 +796,33 @@ async function scanOnce(reason: Reason) {
       }).map(nameOf)
     : [];
   const before = new Set(fields.map((f) => f.key));
+  // The step being left keeps what was typed on it, for when the user comes back.
+  if (verdict !== 'fields-changed') saveDraftsNow();
 
   fields = merged;
   pageBarriers = barriers;
   step = now;
-  if (verdict !== 'fields-changed') { setVerified(false); current = 0; inferred.clear(); }
+  // The gate (§6.5) is "read back since the page last changed". Questions appearing or
+  // going within a step is such a change: a Yes that reveals two more questions must not
+  // leave a Next press armed over a read-back that never saw them.
+  const sameQuestions = verdict === 'fields-changed' && fields.length === before.size && fields.every((f) => before.has(f.key));
+  if (!sameQuestions) setVerified(false);
+  if (verdict !== 'fields-changed') { current = 0; inferred.clear(); }
 
   await recordStep(now, topScan.scannedAt, verdict === 'new-step');
 
-  // A reopened panel (or a tab switched back to) picks up the drafts for this same step.
-  // Anything else — a new step, another origin — fails the stepIndex match and starts
-  // clean, which is the existing "the page moved on" rule for unwritten answers.
-  const dkey = draftsKey(now.origin);
-  const storedDrafts = (await browser.storage.session.get(dkey))[dkey] as DraftStore | undefined;
-  const draftsApply = verdict === 'first' && storedDrafts?.stepIndex === session!.currentStepIndex;
-  if (draftsApply) current = storedDrafts!.current;
+  // The drafts for this step come back: to a reopened panel (or a tab switched back to)
+  // with the question the user was on, and to a step returned to by Back with what was
+  // typed there. A step the session has not numbered before has none, which is the
+  // existing "the page moved on" rule for unwritten answers.
+  const draft = verdict === 'fields-changed' ? undefined : drafts[session!.currentStepIndex];
+  if (verdict === 'first' && draft) current = draft.current;
 
   const journey = journeyText(now);
   $('journey').textContent = journey;
   $('summary').textContent = summaryText();
   renderQuestions(verdict !== 'fields-changed');
-  const restored = draftsApply ? applyDrafts(storedDrafts!.values) : 0;
+  const restored = draft ? applyDrafts(draft.values) : 0;
   // Same step, new document: the page reloaded. What the user typed here is kept, but
   // every "On the page" confirmation describes a document that no longer exists.
   const reloaded = verdict === 'fields-changed' && prev!.pageId !== now.pageId;
@@ -794,14 +847,15 @@ async function scanOnce(reason: Reason) {
     }
   } else if (verdict === 'new-step') {
     const where = journey || (now.total === 1 ? `New page: ${now.heading}.` : `New step: ${now.heading}. Total number of steps unknown.`);
-    const lost = unwritten.length ? ` The page moved on before ${unwritten.join(', ')} was written; that answer was not saved.` : '';
-    announce(`${where} ${summaryText()}${lost}`);
+    const lost = unwritten.length ? ` The page moved on before ${unwritten.join(', ')} was written; that answer is not on the page.` : '';
+    const kept = restored ? ' What you typed here before is back in the panel.' : '';
+    announce(`${where} ${summaryText()}${lost}${kept}`);
     if (fields.length) firstControl(fields[0].key)?.focus();
   } else {
     const added = fields.filter((f) => !before.has(f.key));
     if (reloaded) announce(`The page reloaded, so answers written before may be gone. ${summaryText()}`);
     else if (added.length) announce(`${plural(added.length, 'new question')} appeared: ${added.map(nameOf).join(', ')}.`);
-    else if (reason === 'manual') announce(summaryText());
+    else if (reason === 'manual') reply(summaryText());
   }
 
   nameUnlabelled().catch((e) => { diag('Label inference', `failed: ${String(e)}`); announce(`Label inference failed. ${String(e)}`); });
@@ -853,7 +907,7 @@ async function offerAlwaysEnable(origin: string) {
 function settleAfterPrompt(el: HTMLElement, message: string) {
   window.focus();
   el.focus();
-  announce(message);
+  reply(message);
 }
 
 $('always-enable').addEventListener('click', () => {
@@ -889,12 +943,12 @@ function download(name: string, type: string, text: string) {
 }
 
 function exportReport(format: 'json' | 'md') {
-  if (!session?.steps.length) { announce('There is nothing to export yet. Scan an application page first.'); return; }
+  if (!session?.steps.length) { reply('There is nothing to export yet. Scan an application page first.'); return; }
   const report = buildReport(session);
   const name = `${reportFileStem(report)}.${format}`;
   if (format === 'json') download(name, 'application/json', JSON.stringify(report, null, 2));
   else download(name, 'text/markdown', reportMarkdown(report));
-  announce(`Barrier report saved as ${name}. ${plural(report.barriers.length + report.pageBarriers.length, 'barrier')}. It contains none of your answers and nothing about you.`);
+  reply(`Barrier report saved as ${name}. ${plural(report.barriers.length + report.pageBarriers.length, 'barrier')}. It contains none of your answers and nothing about you.`);
 }
 
 // --- keyboard focus ------------------------------------------------------------------
@@ -925,6 +979,7 @@ $('questions').addEventListener('focusin', (e) => {
 
 $('rescan').addEventListener('click', () => void runScan('manual'));
 $('verify').addEventListener('click', () => void verifyAll());
+$('press-forward').addEventListener('click', () => void pressForwardButton());
 $('submit-app').addEventListener('click', askBeforeSubmitting);
 $('submit-cancel').addEventListener('click', cancelSubmitting);
 $('submit-yes').addEventListener('click', () => void submitConfirmed());
@@ -940,12 +995,12 @@ $('step-back').addEventListener('click', () => void (async () => {
   try {
     back = await send(await targetTab(), step.mainFrame, { type: 'bridge/back-action' });
   } catch (e) {
-    announce(`BRIDGE could not reach the page. ${String(e)}`);
+    reply(`BRIDGE could not reach the page. ${String(e)}`);
     return;
   }
-  if (!back) { announce('BRIDGE could not find a Back or Previous button on this step.'); return; }
+  if (!back) { reply('BRIDGE could not find a Back or Previous button on this step.'); return; }
   diag('Back action', `${back.name}: pressed`);
-  announce(`BRIDGE pressed the ${back.name} button on the page.`);
+  reply(`BRIDGE pressed the ${back.name} button on the page.`);
   await reportIfPageStays(back.name, from);
 })());
 
@@ -957,7 +1012,7 @@ document.querySelectorAll<HTMLInputElement>('input[name=mode]').forEach((r) => {
     mode = r.value as 'one' | 'list';
     localStorage.setItem('bridge-mode', mode);
     applyMode();
-    announce(mode === 'one' ? `One question at a time. Question ${current + 1} of ${fields.length}.` : `Full list. ${plural(fields.length, 'question')}.`);
+    reply(mode === 'one' ? `One question at a time. Question ${current + 1} of ${fields.length}.` : `Full list. ${plural(fields.length, 'question')}.`);
   });
 });
 
